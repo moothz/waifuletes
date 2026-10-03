@@ -1,0 +1,15 @@
+{
+  "name": "waifuletes-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Utilitários e scripts de importação e processamento de catálogo para Waifuletes",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "import:mudae": "node scripts/importFromMudae.js",
+    "download:images": "node scripts/downloadCharacterImages.js"
+  },
+  "dependencies": {
+    "google-translate-api-x": "^10.7.3"
+  }
+}

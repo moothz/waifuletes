@@ -1,0 +1,31 @@
+# Dependências e Builds
+node_modules/
+dist/
+coverage/
+.prisma/
+
+# Variáveis de Ambiente e Logs
+.env
+api/.env
+*.env
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+.DS_Store
+
+# Mídias e Arquivos Oficiais Locais
+media/characters
+media/characters/*
+media/manifests/*
+!media/manifests/.gitkeep
+!media/manifests/*.example.json
+
+# Diretórios e Arquivos de Trabalho Local / Backups
+scratch/
+local/
+*.dump
+*.bundle
+*.bak

@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Platform {
+  WHATSAPP
+  TELEGRAM
+  DISCORD
+}
+
+enum Rarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+}
+
+enum KakeraReason {
+  DAILY_REWARD
+  DIVORCE
+  ROLL_CRYSTAL
+  ADMIN_GRANT
+  EVENT_REWARD
+  WISHLIST_BONUS
+  SOULMATE_BONUS
+}
+
+model User {
+  id          String       @id
+  name        String
+  platform    Platform     @default(WHATSAPP)
+  kakera      Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  groups        UserGroup[]
+  harem         HaremEntry[]
+  soulmates     Soulmate[]
+  wishlist      WishlistEntry[]
+  kakeraHistory KakeraTransaction[]
+
+  @@index([kakera(sort: Desc)])
+  @@map("users")
+}
+
+model Group {
+  id          String       @id
+  name        String
+  platform    Platform     @default(WHATSAPP)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  members        UserGroup[]
+  admins         GroupAdmin[]
+  disabledSeries GroupDisabledSeries[]
+
+  @@map("groups")
+}
+
+model UserGroup {
+  userId    String
+  groupId   String
+  joinedAt  DateTime   @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+  @@map("user_groups")
+}
+
+model GroupAdmin {
+  userId    String
+  groupId   String
+  grantedAt DateTime   @default(now())
+
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+  @@map("group_admins")
+}
+
+model Character {
+  id          String       @id
+  name        String
+  series      String
+  description String?
+  baseRarity  Rarity       @default(COMMON)
+  rank        Int?
+  gender      Gender       @default(FEMALE)
+  tags        String[]     @default([])
+  imageUrls   String[]     @default([])
+  claimCount  Int          @default(0)
+  likeCount   Int          @default(0)
+  isActive    Boolean      @default(true)
+  addedAt     DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  haremEntries   HaremEntry[]
+  soulmates      Soulmate[]
+  wishlists      WishlistEntry[]
+  disabledGroups GroupDisabledSeries[]
+
+  @@index([claimCount(sort: Desc), likeCount(sort: Desc)])
+  @@index([baseRarity, claimCount(sort: Desc)])
+  @@map("characters")
+}
+
+model HaremEntry {
+  id             String    @id @default(cuid())
+  userId         String
+  characterId    String
+  claimedAt      DateTime  @default(now())
+  claimedInGroup String
+  keys           Int       @default(0)
+  isFavorite     Boolean   @default(false)
+  note           String?
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId])
+  @@unique([userId, characterId])
+  @@index([userId])
+  @@map("harem_entries")
+}
+
+model Soulmate {
+  id               String    @id @default(cuid())
+  userId           String
+  characterId      String
+  becameSoulmateAt DateTime  @default(now())
+  alias            String?
+  note             String?
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character        Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, characterId])
+  @@map("soulmates")
+}
+
+model WishlistEntry {
+  id          String    @id @default(cuid())
+  userId      String
+  characterId String
+  isStarWish  Boolean   @default(false)
+  addedAt     DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, characterId])
+  @@index([userId])
+  @@index([characterId])
+  @@map("wishlist_entries")
+}
+
+model KakeraTransaction {
+  id        String       @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    KakeraReason
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("kakera_transactions")
+}
+
+model GroupDisabledSeries {
+  groupId     String
+  characterId String
+
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, characterId])
+  @@map("group_disabled_series")
+}

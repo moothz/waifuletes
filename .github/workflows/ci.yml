@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waifu_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: waifuletes_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'api/package-lock.json'
+
+      - name: Install API dependencies
+        run: npm --prefix api ci
+
+      - name: Generate Prisma Client
+        run: npx --prefix api prisma generate
+
+      - name: Build TypeScript
+        run: npm --prefix api run build
+
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgresql://waifu_user:test_password@localhost:5433/waifuletes_db?schema=public
+        run: npx --prefix api prisma migrate deploy
+
+      - name: Run Test Suite
+        env:
+          TEST_API_URL: http://127.0.0.1:3030
+          API_KEY: test_api_key_0123456789abcdef0123456789abcdef
+          API_KEYS: test_api_key_0123456789abcdef0123456789abcdef
+          DATABASE_URL: postgresql://waifu_user:test_password@localhost:5433/waifuletes_db?schema=public
+          REDIS_URL: redis://localhost:6380
+        run: |
+          npm --prefix api run dev &
+          sleep 5
+          npm --prefix api test
