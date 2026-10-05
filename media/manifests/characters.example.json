@@ -1,0 +1,101 @@
+{
+  "version": "1.0",
+  "characters": [
+    {
+      "id": "rem-re-zero",
+      "name": "Rem",
+      "series": "Re:Zero kara Hajimeru Isekai Seikatsu",
+      "description": "Uma das empregadas gêmeas que trabalham na mansão de Roswaal L Mathers. Especialista em magia de água e leal ao clã oni.",
+      "gender": "FEMALE",
+      "baseRarity": "LEGENDARY",
+      "tags": ["anime", "maid", "demon", "oni", "magic"],
+      "images": [
+        "characters/rem-re-zero/default.jpg"
+      ]
+    },
+    {
+      "id": "emilia-re-zero",
+      "name": "Emilia",
+      "series": "Re:Zero kara Hajimeru Isekai Seikatsu",
+      "description": "Meio-elfa candidata a se tornar a 42ª Rainha de Lugnica. Tem um contrato espiritual com o Grande Espírito Puck.",
+      "gender": "FEMALE",
+      "baseRarity": "EPIC",
+      "tags": ["anime", "half-elf", "magic", "spirit-user"],
+      "images": [
+        "characters/emilia-re-zero/default.jpg"
+      ]
+    },
+    {
+      "id": "goku-dragon-ball",
+      "name": "Son Goku",
+      "series": "Dragon Ball Z",
+      "description": "Saiyajin criado na Terra, determinado a sempre quebrar seus limites em busca de novos desafios e proteger seus amigos.",
+      "gender": "MALE",
+      "baseRarity": "LEGENDARY",
+      "tags": ["anime", "saiyan", "martial-arts", "shonen"],
+      "images": [
+        "characters/goku-dragon-ball/default.jpg"
+      ]
+    },
+    {
+      "id": "megumin-konosuba",
+      "name": "Megumin",
+      "series": "KonoSuba: God's Blessing on this Wonderful World!",
+      "description": "Arquimaga do clã dos Demônios Carmesins que gasta todos os seus pontos de habilidade na mais gloriosa de todas as magias: Explosion!",
+      "gender": "FEMALE",
+      "baseRarity": "EPIC",
+      "tags": ["anime", "arch-mage", "explosion", "crimson-demon"],
+      "images": [
+        "characters/megumin-konosuba/default.jpg"
+      ]
+    },
+    {
+      "id": "aqua-konosuba",
+      "name": "Aqua",
+      "series": "KonoSuba: God's Blessing on this Wonderful World!",
+      "description": "Deusa da água que guiava almas humanas para a vida após a morte antes de ser arrastada para um mundo de fantasia por Kazuma.",
+      "gender": "FEMALE",
+      "baseRarity": "RARE",
+      "tags": ["anime", "goddess", "water", "priest"],
+      "images": [
+        "characters/aqua-konosuba/default.jpg"
+      ]
+    },
+    {
+      "id": "kakashi-hatake-naruto",
+      "name": "Kakashi Hatake",
+      "series": "Naruto",
+      "description": "O Ninja Copiador de Konoha, líder do Time 7 e Sexto Hokage. Famoso por sua maestria com o Sharingan.",
+      "gender": "MALE",
+      "baseRarity": "RARE",
+      "tags": ["anime", "ninja", "sharingan", "hokage"],
+      "images": [
+        "characters/kakashi-hatake-naruto/default.jpg"
+      ]
+    },
+    {
+      "id": "astolfo-fate",
+      "name": "Astolfo",
+      "series": "Fate/Apocrypha",
+      "description": "Rider of Black, um dos Doze Pares de Carlos Magno. Eternamente otimista e despreocupado.",
+      "gender": "OTHER",
+      "baseRarity": "UNCOMMON",
+      "tags": ["anime", "rider", "servant", "paladin"],
+      "images": [
+        "characters/astolfo-fate/default.jpg"
+      ]
+    },
+    {
+      "id": "marian-nikke",
+      "name": "Marian",
+      "series": "Goddess of Victory: Nikke",
+      "description": "A primeira Nikke que você encontra na superfície. Doce, leal e com um forte vínculo com o Comandante.",
+      "gender": "FEMALE",
+      "baseRarity": "COMMON",
+      "tags": ["game", "nikke", "soldier"],
+      "images": [
+        "characters/marian-nikke/default.jpg"
+      ]
+    }
+  ]
+}

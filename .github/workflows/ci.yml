@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waifu_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: waifuletes_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'api/package-lock.json'
+
+      - name: Install API dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgresql://waifu_user:test_password@localhost:5433/waifuletes_db?schema=public
+        run: npx prisma migrate deploy
+
+      - name: Seed Database
+        env:
+          DATABASE_URL: postgresql://waifu_user:test_password@localhost:5433/waifuletes_db?schema=public
+        run: npm run seed
+
+      - name: Run Test Suite
+        env:
+          PORT: 3030
+          TEST_API_URL: http://127.0.0.1:3030
+          API_KEY: test_api_key_0123456789abcdef0123456789abcdef
+          API_KEYS: test_api_key_0123456789abcdef0123456789abcdef
+          DATABASE_URL: postgresql://waifu_user:test_password@localhost:5433/waifuletes_db?schema=public
+          REDIS_URL: redis://localhost:6380
+        run: |
+          npm run dev &
+          sleep 5
+          npm test
