@@ -40,6 +40,10 @@ jobs:
       matrix:
         node-version: [20.x, 22.x]
 
+    defaults:
+      run:
+        working-directory: api
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,18 +56,18 @@ jobs:
           cache-dependency-path: 'api/package-lock.json'
 
       - name: Install API dependencies
-        run: npm --prefix api ci
+        run: npm ci
 
       - name: Generate Prisma Client
-        run: npx --prefix api prisma generate
+        run: npx prisma generate
 
       - name: Build TypeScript
-        run: npm --prefix api run build
+        run: npm run build
 
       - name: Run Database Migrations
         env:
           DATABASE_URL: postgresql://waifu_user:test_password@localhost:5433/waifuletes_db?schema=public
-        run: npx --prefix api prisma migrate deploy
+        run: npx prisma migrate deploy
 
       - name: Run Test Suite
         env:
@@ -73,6 +77,6 @@ jobs:
           DATABASE_URL: postgresql://waifu_user:test_password@localhost:5433/waifuletes_db?schema=public
           REDIS_URL: redis://localhost:6380
         run: |
-          npm --prefix api run dev &
+          npm run dev &
           sleep 5
-          npm --prefix api test
+          npm test
