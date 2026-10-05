@@ -23,7 +23,7 @@
     "@fastify/static": "^7.0.4",
     "@fastify/swagger": "^8.15.0",
     "@fastify/swagger-ui": "^4.0.1",
-    "@prisma/client": "^5.19.1",
+    "@prisma/client": "^7.10.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "fastify-plugin": "^6.0.0",
