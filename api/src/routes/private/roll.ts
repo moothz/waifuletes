@@ -40,7 +40,7 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
             description: 'Bônus e modificadores dinâmicos de sorteio (ex: doadores de outros projetos, eventos)',
             properties: {
               donorBadge: { type: 'string', maxLength: 64, description: 'Badge ou título do doador para exibição (ex: VIP_OURO, Apoiador 💎)' },
-              wishlistMultiplier: { type: 'number', minimum: 0.1, maximum: 10, description: 'Multiplicador de probabilidade para wishlist (padrão: 1.5, teto: 10)' },
+              wishlistMultiplier: { type: 'number', minimum: 0.1, maximum: 100, description: 'Multiplicador de probabilidade para wishlist (padrão: 1.5, teto: 100)' },
               starWishMultiplier: { type: 'number', minimum: 0.1, maximum: 10, description: 'Multiplicador para starwish (padrão: 2.0, teto: 10)' },
               rarityMultipliers: {
                 type: 'object',
@@ -63,7 +63,7 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
             description: 'Alias para bonuses',
             properties: {
               donorBadge: { type: 'string', maxLength: 64 },
-              wishlistMultiplier: { type: 'number', minimum: 0.1, maximum: 10 },
+              wishlistMultiplier: { type: 'number', minimum: 0.1, maximum: 100 },
               starWishMultiplier: { type: 'number', minimum: 0.1, maximum: 10 },
               rarityMultipliers: {
                 type: 'object',

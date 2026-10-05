@@ -96,7 +96,7 @@ describe('🛡️ Validações de Entrada e Limites de Paginação', () => {
         userId: 'test_validation_user',
         groupId: 'test_validation_group',
         bonuses: {
-          wishlistMultiplier: 999, // Acima do teto de 10
+          wishlistMultiplier: 999, // Acima do teto de 100
         },
       }),
     });
