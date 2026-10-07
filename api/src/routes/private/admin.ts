@@ -3,6 +3,7 @@ import { KakeraService } from '../../services/KakeraService.js';
 import { CharacterService } from '../../services/CharacterService.js';
 import { CooldownService } from '../../services/CooldownService.js';
 import { DivorceService } from '../../services/DivorceService.js';
+import { MarryService } from '../../services/MarryService.js';
 import { parseManifestString } from '../../utils/manifestLoader.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { KakeraReason } from '@prisma/client';
@@ -12,6 +13,7 @@ export const privateAdminRoutes: FastifyPluginAsync = async (fastify) => {
   const kakeraService = new KakeraService(fastify.prisma, cooldownService);
   const characterService = new CharacterService(fastify.prisma);
   const divorceService = new DivorceService(fastify.prisma);
+  const marryService = new MarryService(fastify.prisma, cooldownService, characterService);
 
   fastify.addHook('preHandler', verifyApiKey);
 
@@ -306,6 +308,40 @@ export const privateAdminRoutes: FastifyPluginAsync = async (fastify) => {
       if (!result.success) {
         return reply.status(404).send(result);
       }
+      return reply.send(result);
+    },
+  });
+
+  // Casamento administrativo direto (SuperAdmin)
+  fastify.post('/admin/marry', {
+    schema: {
+      description: 'Efetua o casamento/claim administrativo de um personagem para um usuário sem restrições de roll ou lock',
+      tags: ['Administração (Privado)'],
+      body: {
+        type: 'object',
+        required: ['userId', 'characterId'],
+        properties: {
+          userId: { type: 'string' },
+          characterId: { type: 'string' },
+          groupId: { type: 'string' },
+          name: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId, characterId, groupId = 'admin', name } = request.body as any;
+
+      const result = await marryService.adminMarry({
+        userId,
+        characterId,
+        groupId,
+        name,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send(result);
+      }
+
       return reply.send(result);
     },
   });

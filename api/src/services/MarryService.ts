@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { CooldownService } from './CooldownService.js';
 import { CharacterService } from './CharacterService.js';
+import { UserService } from './UserService.js';
 import { config } from '../config.js';
 
 export interface MarryParams {
@@ -30,7 +31,7 @@ export class MarryService {
       return {
         success: false,
         error: {
-          code: 'COOLDOWN_ACTIVE',
+          code: 'CLAIM_COOLDOWN_ACTIVE',
           message: `Você precisa aguardar ${hours > 0 ? `${hours}h ` : ''}${mins}min para realizar outro casamento.`,
           remainingSeconds: cooldown.remainingSeconds,
           retryAfter: cooldown.retryAfter,
@@ -206,6 +207,126 @@ export class MarryService {
         isSoulmate: false,
         kakeraBalance: user?.kakera ?? 0,
         nextClaimAt,
+      },
+    };
+  }
+
+  async adminMarry(params: { userId: string; characterId: string; groupId?: string; name?: string }) {
+    const { userId, characterId } = params;
+    const groupId = params.groupId || 'admin';
+
+    // 1. Localizar personagem (ID, slug ou nome)
+    const resolvedChar = await this.characterService.findCharacter(characterId);
+    if (!resolvedChar) {
+      return {
+        success: false,
+        error: {
+          code: 'CHARACTER_NOT_FOUND',
+          message: 'Personagem não encontrado.',
+        },
+      };
+    }
+    const targetCharId = resolvedChar.id;
+
+    // 2. Garantir que usuário e grupo existam
+    const userService = new UserService(this.prisma);
+    await userService.ensureUserAndGroup({
+      userId,
+      groupId,
+      name: params.name || userId,
+      platform: 'WHATSAPP',
+    });
+
+    // 3. Verificar se já pertence a alguém
+    const character = await this.prisma.character.findUnique({
+      where: { id: targetCharId },
+      include: {
+        haremEntries: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+      },
+    });
+
+    if (!character) {
+      return {
+        success: false,
+        error: {
+          code: 'CHARACTER_NOT_FOUND',
+          message: 'Personagem não encontrado.',
+        },
+      };
+    }
+
+    if (character.haremEntries.length > 0) {
+      const owner = character.haremEntries[0].user;
+      if (owner.id === userId) {
+        return {
+          success: false,
+          error: {
+            code: 'CHARACTER_ALREADY_OWNED',
+            message: `Este personagem já pertence a este usuário (${owner.name || owner.id})!`,
+            owner,
+          },
+        };
+      }
+      return {
+        success: false,
+        error: {
+          code: 'CHARACTER_ALREADY_CLAIMED',
+          message: `Este personagem já pertence a ${owner.name || owner.id}!`,
+          owner,
+        },
+      };
+    }
+
+    // 4. Inserir casamento no banco
+    const transactionResult = await this.prisma.$transaction(async (tx) => {
+      const entry = await tx.haremEntry.create({
+        data: {
+          userId,
+          characterId: targetCharId,
+          claimedInGroup: groupId,
+          keys: 1,
+        },
+      });
+
+      await tx.character.update({
+        where: { id: targetCharId },
+        data: {
+          claimCount: { increment: 1 },
+        },
+      });
+
+      return { entry, character };
+    });
+
+    // 5. Liberar qualquer lock existente para o grupo/personagem
+    await this.cooldownService.releaseClaimLock(groupId, targetCharId);
+    if (characterId !== targetCharId) {
+      await this.cooldownService.releaseClaimLock(groupId, characterId);
+    }
+
+    const { entry: haremEntry, character: claimedCharacter } = transactionResult;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { kakera: true, name: true },
+    });
+
+    return {
+      success: true,
+      data: {
+        message: `Casamento administrativo realizado com sucesso com ${claimedCharacter.name}! 💍`,
+        character: {
+          id: claimedCharacter.id,
+          name: claimedCharacter.name,
+          series: claimedCharacter.series,
+          rarity: claimedCharacter.baseRarity,
+          imageUrl: this.characterService.getRandomImageUrl(claimedCharacter.id, claimedCharacter.imageUrls),
+          imageUrls: claimedCharacter.imageUrls.map((img) => this.characterService.formatImageUrl(claimedCharacter.id, img)),
+        },
+        keys: haremEntry.keys,
+        user: { id: userId, name: user?.name || params.name || userId },
       },
     };
   }

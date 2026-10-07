@@ -19,7 +19,7 @@ export class KakeraService {
       return {
         success: false,
         error: {
-          code: 'COOLDOWN_ACTIVE',
+          code: 'DAILY_COOLDOWN_ACTIVE',
           message: `Você já resgatou sua recompensa diária! Volte em ${hours > 0 ? `${hours}h ` : ''}${mins}min.`,
           remainingSeconds: cooldown.remainingSeconds,
           retryAfter: cooldown.retryAfter,
