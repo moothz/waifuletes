@@ -27,9 +27,44 @@ export class KakeraService {
       };
     }
 
-    // Calcula recompensa diária com variância
+    // 2. Consulta última transação de recompensa diária para calcular streak
+    const lastDailyTx = await this.prisma.kakeraTransaction.findFirst({
+      where: { userId, reason: 'DAILY_REWARD' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let currentStreak = 1;
+    if (lastDailyTx) {
+      const msSinceLast = Date.now() - new Date(lastDailyTx.createdAt).getTime();
+      const hoursSinceLast = msSinceLast / (1000 * 3600);
+      // Janela de combo: entre 20h e 40h desde o último resgate
+      if (hoursSinceLast >= 20 && hoursSinceLast <= 40) {
+        const prevMetadata = lastDailyTx.metadata as any;
+        const prevStreak = typeof prevMetadata?.streak === 'number' ? prevMetadata.streak : 1;
+        currentStreak = Math.min(7, prevStreak + 1);
+      } else {
+        currentStreak = 1;
+      }
+    }
+
+    // Bônus percentual por dia de sequência:
+    // Dia 1: 0%, Dia 2: 10%, Dia 3: 20%, Dia 4: 30%, Dia 5: 40%, Dia 6: 50%, Dia 7: 100%
+    const streakBonusMap: Record<number, number> = {
+      1: 0,
+      2: 10,
+      3: 20,
+      4: 30,
+      5: 40,
+      6: 50,
+      7: 100,
+    };
+    const bonusPercent = streakBonusMap[currentStreak] ?? 0;
+
+    // Calcula recompensa diária com variância e bônus de streak
     const variance = (Math.random() * 2 - 1) * config.DAILY_KAKERA_VARIANCE;
-    const amount = Math.max(100, Math.round(config.DAILY_KAKERA_AMOUNT + variance));
+    const baseAmount = Math.max(100, Math.round(config.DAILY_KAKERA_AMOUNT + variance));
+    const streakBonusAmount = Math.round(baseAmount * (bonusPercent / 100));
+    const amount = baseAmount + streakBonusAmount;
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -45,6 +80,12 @@ export class KakeraService {
             userId,
             amount,
             reason: 'DAILY_REWARD',
+            metadata: {
+              streak: currentStreak,
+              baseAmount,
+              streakBonusAmount,
+              bonusPercent,
+            },
           },
         });
 
@@ -57,11 +98,20 @@ export class KakeraService {
         success: true,
         data: {
           amount,
+          baseAmount,
+          streak: {
+            current: currentStreak,
+            bonusPercent,
+            bonusAmount: streakBonusAmount,
+            maxStreak: 7,
+          },
           currency: config.CURRENCY_NAME,
           currencyEmoji: config.CURRENCY_EMOJI,
           newBalance: result.kakera,
           nextDailyAt,
-          message: `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! Volte amanhã para mais!`,
+          message: currentStreak > 1
+            ? `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! 🔥 Sequência Diária: Dia ${currentStreak}/7 (+${bonusPercent}% bônus)!`
+            : `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! Volte amanhã para manter sua sequência!`,
         },
       };
     } catch (err) {

@@ -5,6 +5,7 @@ import { CooldownService } from '../../services/CooldownService.js';
 import { DivorceService } from '../../services/DivorceService.js';
 import { MarryService } from '../../services/MarryService.js';
 import { parseManifestString } from '../../utils/manifestLoader.js';
+import { calculateDivorceRefund } from '../../utils/rarityCalculator.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { KakeraReason } from '@prisma/client';
 
@@ -371,6 +372,102 @@ export const privateAdminRoutes: FastifyPluginAsync = async (fastify) => {
           totalClaims,
           totalSoulmates,
           totalKakeraCirculating: totalKakera._sum.kakera ?? 0,
+        },
+      });
+    },
+  });
+
+  // Remoção administrativa de personagem problemático (SuperAdmin)
+  fastify.post('/admin/characters/purge-character', {
+    schema: {
+      description: 'Remove um personagem problemático do catálogo, desfaz casamentos ativos e reembolsa donos com base na raridade',
+      tags: ['Administração (Privado)'],
+      body: {
+        type: 'object',
+        required: ['characterId'],
+        properties: {
+          characterId: { type: 'string' },
+          reason: { type: 'string', default: 'Denúncia / Personagem problemático' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { characterId, reason = 'Denúncia / Personagem problemático' } = request.body as any;
+
+      const cleanId = String(characterId).trim();
+      const character = await fastify.prisma.character.findFirst({
+        where: {
+          OR: [
+            { id: cleanId },
+            { id: cleanId.toLowerCase() },
+            { name: { equals: cleanId, mode: 'insensitive' } },
+          ],
+        },
+        include: {
+          haremEntries: true,
+        },
+      });
+
+      if (!character) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'CHARACTER_NOT_FOUND',
+            message: `Personagem '${characterId}' não encontrado.`,
+          },
+        });
+      }
+
+      const refunds: Array<{ userId: string; refundedKakera: number }> = [];
+
+      await fastify.prisma.$transaction(async (tx) => {
+        for (const entry of character.haremEntries) {
+          const refund = calculateDivorceRefund(character.baseRarity, entry.keys);
+          await tx.user.update({
+            where: { id: entry.userId },
+            data: { kakera: { increment: refund.netKakera } },
+          });
+
+          await tx.kakeraTransaction.create({
+            data: {
+              userId: entry.userId,
+              amount: refund.netKakera,
+              reason: 'DIVORCE',
+              metadata: {
+                characterId: character.id,
+                characterName: character.name,
+                rarity: character.baseRarity,
+                keys: entry.keys,
+                forced: true,
+                reason,
+              },
+            },
+          });
+
+          refunds.push({ userId: entry.userId, refundedKakera: refund.netKakera });
+        }
+
+        await tx.haremEntry.deleteMany({ where: { characterId: character.id } });
+        await tx.soulmate.deleteMany({ where: { characterId: character.id } });
+        await tx.wishlistEntry.deleteMany({ where: { characterId: character.id } });
+        await tx.groupDisabledSeries.deleteMany({ where: { characterId: character.id } });
+
+        await tx.character.delete({ where: { id: character.id } });
+      });
+
+      return reply.send({
+        success: true,
+        data: {
+          character: {
+            id: character.id,
+            name: character.name,
+            series: character.series,
+            rarity: character.baseRarity,
+          },
+          marriagesUndone: character.haremEntries.length,
+          totalKakeraRefunded: refunds.reduce((acc, r) => acc + r.refundedKakera, 0),
+          refunds,
+          message: `Personagem '${character.name}' (${character.id}) removido com sucesso. ${character.haremEntries.length} casamento(s) desfeito(s).`,
         },
       });
     },

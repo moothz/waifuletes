@@ -313,6 +313,39 @@ export class RollService {
         await this.cooldownService.setClaimLock(groupId, chosen.id, userId);
       }
 
+      // 8. Recompensa de Fragmentos de Zinthos por Roll
+      const scrapRandom = Math.floor(Math.random() * (25 - 10 + 1)) + 10;
+      const scrapRollBonus = rollsState.availableRolls * 2;
+      let rarityBonus = 0;
+      if (chosen.baseRarity === 'RARE') rarityBonus = 35;
+      else if (chosen.baseRarity === 'EPIC') rarityBonus = 100;
+      else if (chosen.baseRarity === 'LEGENDARY') rarityBonus = 250;
+
+      const totalScrap = scrapRandom + scrapRollBonus + rarityBonus;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: userId },
+          data: { kakera: { increment: totalScrap } },
+        });
+
+        await tx.kakeraTransaction.create({
+          data: {
+            userId,
+            amount: totalScrap,
+            reason: 'ROLL_CRYSTAL',
+            metadata: {
+              characterId: chosen.id,
+              rarity: chosen.baseRarity,
+              scrapRandom,
+              scrapRollBonus,
+              rarityBonus,
+              availableRolls: rollsState.availableRolls,
+            },
+          },
+        });
+      });
+
       const now = Date.now();
       const lockExpiresAt = !isClaimed ? new Date(now + config.CLAIM_LOCK_SECONDS * 1000) : null;
       const nextRollAt = new Date(now + config.COOLDOWN_ROLL_SECONDS * 1000);
@@ -343,6 +376,12 @@ export class RollService {
             : null,
           keyProgress,
           kakeraValue: kakeraCrystalValue,
+          rollReward: {
+            totalScrap,
+            scrapRandom,
+            scrapRollBonus,
+            rarityBonus,
+          },
           lockExpiresAt,
           nextRollAt,
           appliedBonuses: bonuses

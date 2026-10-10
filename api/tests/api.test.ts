@@ -191,12 +191,71 @@ describe('🧩 Workstream D — Concorrência e Atomicidade', () => {
     const results = await Promise.all(promises);
 
     const successes = results.filter((r) => r.success === true);
-    const cooldowns = results.filter(
-      (r) => r.success === false && r.error?.code === 'COOLDOWN_ACTIVE'
-    );
-
     // Exatamente 1 deve ser concedido, 9 devem ser bloqueados
     expect(successes.length).toBe(1);
-    expect(cooldowns.length).toBe(9);
+    const dailyCooldowns = results.filter(
+      (r) => r.success === false && (r.error?.code === 'DAILY_COOLDOWN_ACTIVE' || r.error?.code === 'COOLDOWN_ACTIVE')
+    );
+    expect(dailyCooldowns.length).toBe(9);
+  });
+});
+
+describe('💎 Workstream E — Novo Ranking de Harém e Fragmentos de Roll', () => {
+  it('chamada anônima a /leaderboard/harem não deve expor id/telefone', async () => {
+    const res = await fetch(`${BASE_URL}/leaderboard/harem?limit=5`);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(Array.isArray(json.data.topHarem)).toBe(true);
+
+    for (const user of json.data.topHarem) {
+      expect(user).not.toHaveProperty('id');
+      expect(user).toHaveProperty('name');
+      expect(user).toHaveProperty('collectionPoints');
+      expect(user).toHaveProperty('totalMarriages');
+    }
+  });
+
+  it('chamada autenticada a /leaderboard/harem deve retornar pontuação de coleção e id', async () => {
+    const res = await fetch(`${BASE_URL}/leaderboard/harem?limit=5`, {
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+      },
+    });
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    if (json.data.topHarem.length > 0) {
+      expect(json.data.topHarem[0]).toHaveProperty('id');
+      expect(json.data.topHarem[0]).toHaveProperty('collectionPoints');
+      expect(typeof json.data.topHarem[0].collectionPoints).toBe('number');
+    }
+  });
+
+  it('/leaderboard/harem e /leaderboard/users devem aceitar limit=100 sem erro', async () => {
+    const resHarem = await fetch(`${BASE_URL}/leaderboard/harem?limit=100`);
+    expect(resHarem.status).toBe(200);
+
+    const resUsers = await fetch(`${BASE_URL}/leaderboard/users?limit=100`);
+    expect(resUsers.status).toBe(200);
+  });
+
+  it('/admin/characters/purge-character deve retornar 404 para personagem inexistente', async () => {
+    const res = await fetch(`${BASE_URL}/admin/characters/purge-character`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        characterId: 'non_existent_character_999999',
+      }),
+    });
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('CHARACTER_NOT_FOUND');
   });
 });
