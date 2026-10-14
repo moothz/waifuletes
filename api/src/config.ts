@@ -26,7 +26,7 @@ const envSchema = z.object({
   COOLDOWN_DAILY_SECONDS: z.coerce.number().default(72000), // 20 horas
   CLAIM_LOCK_SECONDS: z.coerce.number().default(300), // 5 min
 
-  ROLL_MAX_BASE: z.coerce.number().default(10),
+  ROLL_MAX_BASE: z.coerce.number().default(9),
   ROLL_REGEN_SECONDS: z.coerce.number().default(300), // 5 min
 
   SOULMATE_KEYS_REQUIRED: z.coerce.number().default(10),
