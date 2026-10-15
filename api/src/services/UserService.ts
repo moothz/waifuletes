@@ -1,5 +1,6 @@
 import { PrismaClient, Platform } from '@prisma/client';
 import { Redis } from 'ioredis';
+import { config } from '../config.js';
 
 export interface EnsureUserParams {
   userId: string;
@@ -110,6 +111,8 @@ export class UserService {
 
     return {
       id: user.id,
+      publicId: user.publicId,
+      publicUrl: `${config.PUBLIC_BASE_URL}/user/${user.publicId}`,
       name: user.name,
       platform: user.platform,
       kakera: user.kakera,

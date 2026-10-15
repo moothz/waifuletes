@@ -7,6 +7,7 @@ import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import path from 'path';
+import fs from 'fs';
 
 import { config } from './config.js';
 import prismaPlugin from './plugins/prisma.js';
@@ -17,6 +18,10 @@ import { DomainError } from './errors/DomainError.js';
 // Rotas públicas
 import { publicCharacterRoutes } from './routes/public/characters.js';
 import { publicLeaderboardRoutes } from './routes/public/leaderboard.js';
+
+// Rotas web públicas e administrativas
+import { userWebRoutes } from './routes/web/userWebRoutes.js';
+import { adminWebRoutes } from './routes/web/adminWebRoutes.js';
 
 // Rotas privadas
 import { privateUserRoutes } from './routes/private/user.js';
@@ -48,7 +53,7 @@ async function buildServer() {
   // Proteção HTTP com Helmet
   await fastify.register(helmet, {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-    contentSecurityPolicy: config.ENABLE_SWAGGER ? false : undefined,
+    contentSecurityPolicy: false,
   });
 
   // Rate Limiting (120 req/min geral para anônimos; chamadas autenticadas do bot são isentas)
@@ -105,6 +110,28 @@ async function buildServer() {
     root: path.resolve(config.MEDIA_DIR),
     prefix: '/media/',
     decorateReply: false,
+  });
+
+  // Servir arquivos de frontend estáticos em /
+  const publicDir = fs.existsSync(path.resolve(process.cwd(), 'public'))
+    ? path.resolve(process.cwd(), 'public')
+    : fs.existsSync(path.resolve(process.cwd(), 'api/public'))
+      ? path.resolve(process.cwd(), 'api/public')
+      : path.resolve(process.cwd(), '../api/public');
+
+  await fastify.register(fastifyStatic, {
+    root: publicDir,
+    prefix: '/',
+    decorateReply: true,
+  });
+
+  // Rotas diretas para páginas HTML
+  fastify.get('/', async (req, reply) => {
+    return reply.sendFile('index.html');
+  });
+
+  fastify.get('/admin', async (req, reply) => {
+    return reply.sendFile('admin.html');
   });
 
   // Plugins de infraestrutura
@@ -202,7 +229,11 @@ async function buildServer() {
   await fastify.register(publicCharacterRoutes);
   await fastify.register(publicLeaderboardRoutes);
 
-  // Registro de rotas privadas
+  // Registro de rotas web do usuário e moderação de admin
+  await fastify.register(userWebRoutes);
+  await fastify.register(adminWebRoutes);
+
+  // Registro de rotas privadas do bot
   await fastify.register(privateUserRoutes);
   await fastify.register(privateRollRoutes);
   await fastify.register(privateMarryRoutes);

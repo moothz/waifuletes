@@ -12,10 +12,13 @@ services:
     environment:
       - NODE_ENV=production
       - MEDIA_DIR=/app/media
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./media:/app/media
-      - ${CHARACTERS_DIR:-./media/characters}:/app/media/characters:ro
+      - ${CHARACTERS_DIR:-./media/characters}:/app/media/characters
       - ./api/prisma:/app/prisma
+      - ./api/public:/app/public
     depends_on:
       postgres:
         condition: service_healthy

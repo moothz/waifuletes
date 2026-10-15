@@ -55,6 +55,7 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
                 },
               },
               extraMaxRolls: { type: 'number', minimum: 0, maximum: 50, description: 'Rolls extras concedidos (teto: 50)' },
+              isFreeRoll: { type: 'boolean', description: 'Roll gratuito (não consome cooldown de rolls)' },
             },
           },
           bonus: {
@@ -77,6 +78,7 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
                 },
               },
               extraMaxRolls: { type: 'number', minimum: 0, maximum: 50 },
+              isFreeRoll: { type: 'boolean' },
             },
           },
         },

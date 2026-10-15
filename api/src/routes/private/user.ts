@@ -8,10 +8,8 @@ export const privateUserRoutes: FastifyPluginAsync = async (fastify) => {
   const userService = new UserService(fastify.prisma);
   const cooldownService = new CooldownService(fastify.redis);
 
-  // Exige autenticação Bearer em todas as rotas deste plugin
-  fastify.addHook('preHandler', verifyApiKey);
-
   fastify.post('/user/ensure', {
+    preHandler: verifyApiKey,
     schema: {
       description: 'Garante o cadastro do usuário e grupo na primeira interação com a API',
       tags: ['Usuários (Privado)'],
@@ -45,7 +43,7 @@ export const privateUserRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get('/user/:userId', {
     schema: {
-      description: 'Obtém o perfil do usuário, contadores de harém, soulmate e favorito',
+      description: 'Obtém o perfil do usuário (ou entrega página HTML user.html se acessado via navegador)',
       tags: ['Usuários (Privado)'],
       params: {
         type: 'object',
@@ -56,24 +54,34 @@ export const privateUserRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (request, reply) => {
-      const { userId } = request.params as { userId: string };
-      const user = await userService.getUserProfile(userId);
+      // Se for requisição com API Key do bot, autentica e entrega o perfil JSON
+      if (request.headers.authorization) {
+        await verifyApiKey(request, reply);
+        if (reply.sent) return;
 
-      if (!user) {
-        return reply.status(404).send({
-          success: false,
-          error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' },
+        const { userId } = request.params as { userId: string };
+        const user = await userService.getUserProfile(userId);
+
+        if (!user) {
+          return reply.status(404).send({
+            success: false,
+            error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' },
+          });
+        }
+
+        return reply.send({
+          success: true,
+          data: user,
         });
       }
 
-      return reply.send({
-        success: true,
-        data: user,
-      });
+      // Caso contrário (acesso do navegador à página pública/privada), serve user.html
+      return reply.sendFile('user.html');
     },
   });
 
   fastify.patch('/user/:userId/name', {
+    preHandler: verifyApiKey,
     schema: {
       description: 'Atualiza o nome de exibição do usuário',
       tags: ['Usuários (Privado)'],
@@ -108,6 +116,7 @@ export const privateUserRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get('/user/:userId/cooldowns', {
+    preHandler: verifyApiKey,
     schema: {
       description: 'Consulta o status de todos os cooldowns ativos do usuário (roll, claim, daily)',
       tags: ['Usuários (Privado)'],
@@ -136,6 +145,7 @@ export const privateUserRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get('/user/:userId/groups', {
+    preHandler: verifyApiKey,
     schema: {
       description: 'Lista todos os grupos dos quais o usuário participa',
       tags: ['Usuários (Privado)'],

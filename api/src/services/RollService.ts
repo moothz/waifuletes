@@ -1,5 +1,5 @@
 import { PrismaClient, Gender, Rarity } from '@prisma/client';
-import { CooldownService } from './CooldownService.js';
+import { CooldownService, UserRollsState } from './CooldownService.js';
 import { CharacterService } from './CharacterService.js';
 import {
   calculateCharacterWeight,
@@ -91,12 +91,20 @@ export class RollService {
   async roll(options: RollOptions) {
     const { userId, groupId, genderFilter, bonuses } = options;
     const extraMaxRolls = bonuses?.extraMaxRolls ?? 0;
+    const isFreeRoll = Boolean(bonuses?.isFreeRoll);
 
-    // 1. Débito atômico de 1 roll no Redis antes de processar
-    const { success: rollAvailable, rollsState } = await this.cooldownService.consumeRoll(
-      userId,
-      extraMaxRolls
-    );
+    let rollAvailable = true;
+    let rollsState: UserRollsState;
+
+    if (isFreeRoll) {
+      // Roll gratuito (ex: bônus de colheita da fazenda) - não debita do cooldown/banco de rolls
+      rollsState = await this.cooldownService.getUserRolls(userId, extraMaxRolls);
+    } else {
+      // 1. Débito atômico de 1 roll no Redis antes de processar
+      const consumeRes = await this.cooldownService.consumeRoll(userId, extraMaxRolls);
+      rollAvailable = consumeRes.success;
+      rollsState = consumeRes.rollsState;
+    }
 
     if (!rollAvailable) {
       return {
@@ -401,8 +409,10 @@ export class RollService {
         },
       };
     } catch (err: any) {
-      // Estorna a tentativa caso haja falha não recuperável
-      await this.cooldownService.refundRoll(userId, extraMaxRolls);
+      // Estorna a tentativa caso haja falha não recuperável (apenas se não for free roll)
+      if (!isFreeRoll) {
+        await this.cooldownService.refundRoll(userId, extraMaxRolls);
+      }
       if (err.message === 'NO_CHARACTERS_AVAILABLE') {
         return {
           success: false,

@@ -25,6 +25,7 @@ export interface RollBonuses {
   starWishMultiplier?: number;
   rarityMultipliers?: Partial<Record<Rarity, number>>;
   extraMaxRolls?: number;
+  isFreeRoll?: boolean;
 }
 
 export interface WeightCalculationParams {

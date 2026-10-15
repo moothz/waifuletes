@@ -39,6 +39,7 @@ enum KakeraReason {
 
 model User {
   id          String       @id
+  publicId    String       @unique @default(dbgenerated("gen_random_uuid()"))
   name        String
   platform    Platform     @default(WHATSAPP)
   kakera      Int          @default(0)
@@ -50,6 +51,7 @@ model User {
   soulmates     Soulmate[]
   wishlist      WishlistEntry[]
   kakeraHistory KakeraTransaction[]
+  suggestions   CharacterSuggestion[]
 
   @@index([kakera(sort: Desc)])
   @@map("users")
@@ -113,6 +115,7 @@ model Character {
   soulmates      Soulmate[]
   wishlists      WishlistEntry[]
   disabledGroups GroupDisabledSeries[]
+  suggestions    CharacterSuggestion[]
 
   @@index([claimCount(sort: Desc), likeCount(sort: Desc)])
   @@index([baseRarity, claimCount(sort: Desc)])
@@ -192,4 +195,40 @@ model GroupDisabledSeries {
 
   @@id([groupId, characterId])
   @@map("group_disabled_series")
+}
+
+enum SuggestionType {
+  RARITY
+  IMAGE
+}
+
+enum SuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model CharacterSuggestion {
+  id              String           @id @default(cuid())
+  characterId     String
+  userId          String
+  type            SuggestionType
+  status          SuggestionStatus @default(PENDING)
+  currentRarity   Rarity?
+  suggestedRarity Rarity?
+  reason          String?
+  imageUrl        String?
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  character       Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([characterId])
+  @@index([userId])
+  @@map("character_suggestions")
 }

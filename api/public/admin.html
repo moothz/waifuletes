@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel de Administração • Waifuletes ✨</title>
+  <link rel="stylesheet" href="/css/retro-theme.css">
+  <link rel="stylesheet" href="/vendor/cropper.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header Retrô do Admin -->
+    <header class="retro-header">
+      <a href="/admin" class="logo-area">
+        <div class="logo-icon">🛠️</div>
+        <div class="logo-text">
+          <h1>Waifuletes Admin</h1>
+          <span>Painel de Moderação & Catálogo</span>
+        </div>
+      </a>
+      <div class="header-actions">
+        <a href="/" class="btn-retro btn-sm">
+          <i class="fas fa-eye"></i> Ver Site
+        </a>
+        <button id="btn-admin-logout" class="btn-retro btn-sm btn-danger hidden">
+          <i class="fas fa-sign-out-alt"></i> Sair
+        </button>
+      </div>
+    </header>
+
+    <!-- Tela de Login do Admin (Exibida quando não autenticado) -->
+    <section id="admin-login-section" class="search-panel" style="max-width: 420px; margin: 40px auto; text-align: center;">
+      <div style="font-size: 38px; margin-bottom: 10px;">🔐</div>
+      <h2 style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">Acesso Administrativo</h2>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">Digite a senha de administrador configurada no servidor (.env):</p>
+      
+      <form id="admin-login-form">
+        <div style="margin-bottom: 16px;">
+          <input type="password" id="admin-password-input" class="retro-input" placeholder="Senha do Administrador..." style="padding-left: 14px;" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-retro btn-primary" style="width: 100%;">
+          <i class="fas fa-key"></i> Entrar no Painel
+        </button>
+      </form>
+    </section>
+
+    <!-- Conteúdo Principal do Admin (Exibido após login) -->
+    <main id="admin-main-section" class="hidden">
+      <!-- Abas Administrativas -->
+      <div class="retro-tabs">
+        <button class="retro-tab active" data-tab="tab-catalog">
+          <i class="fas fa-book"></i> Catálogo de Personagens
+        </button>
+        <button class="retro-tab" data-tab="tab-suggestions">
+          <i class="fas fa-lightbulb"></i> Moderação de Sugestões <span id="pending-badge" class="badge-rarity" style="position: static; font-size: 11px; margin-left: 6px;">0</span>
+        </button>
+      </div>
+
+      <!-- Aba 1: Catálogo com Botão Editar -->
+      <div class="tab-content" id="tab-catalog">
+        <div class="search-panel" style="margin-bottom: 20px;">
+          <div class="search-input-group">
+            <i class="fas fa-search"></i>
+            <input type="text" id="admin-search-input" class="retro-input" placeholder="Pesquisar personagem para editar...">
+          </div>
+          <div class="filters-row">
+            <div class="filter-group">
+              <span>Raridade:</span>
+              <select id="admin-rarity-select" class="retro-select">
+                <option value="">Todas</option>
+                <option value="LEGENDARY">⭐ Lendário</option>
+                <option value="EPIC">🟣 Épico</option>
+                <option value="RARE">🔵 Raro</option>
+                <option value="UNCOMMON">🟢 Incomum</option>
+                <option value="COMMON">⚪ Comum</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <span>Gênero:</span>
+              <div class="pill-group" id="admin-gender-pills">
+                <button class="retro-pill active" data-gender="">Todos</button>
+                <button class="retro-pill" data-gender="FEMALE">Feminino</button>
+                <button class="retro-pill" data-gender="MALE">Masculino</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-catalog-grid" class="waifu-grid"></div>
+
+        <!-- Paginação do Catálogo Admin -->
+        <div class="pagination-bar">
+          <div class="page-info"><span id="admin-total-count">0 personagens</span></div>
+          <div class="page-controls">
+            <button class="btn-retro btn-sm" id="admin-btn-prev" disabled><i class="fas fa-angle-left"></i> Anterior</button>
+            <span class="page-indicator" id="admin-page-indicator">1 / 1</span>
+            <button class="btn-retro btn-sm" id="admin-btn-next" disabled>Próxima <i class="fas fa-angle-right"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aba 2: Moderação de Sugestões -->
+      <div class="tab-content hidden" id="tab-suggestions">
+        <div style="margin-bottom: 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <span style="font-weight: 700; font-size: 14px;">Filtrar por Status:</span>
+          <div class="pill-group" id="suggestion-filter-pills">
+            <button class="retro-pill active" data-status="PENDING">Pendentes</button>
+            <button class="retro-pill" data-status="APPROVED">Aprovadas</button>
+            <button class="retro-pill" data-status="REJECTED">Recusadas</button>
+            <button class="retro-pill" data-status="all">Todas</button>
+          </div>
+        </div>
+
+        <div id="suggestions-list" style="display: flex; flex-direction: column; gap: 14px;"></div>
+      </div>
+    </main>
+
+    <!-- Rodapé -->
+    <footer class="retro-footer">
+      Painel Administrativo Waifuletes • Senha única configurada no arquivo de ambiente
+    </footer>
+  </div>
+
+  <!-- Modal de Edição de Personagem -->
+  <div class="modal-overlay hidden" id="modal-edit-char">
+    <div class="modal-box" style="max-width: 620px;">
+      <div class="modal-header">
+        <span class="modal-title">✏️ Editar Personagem</span>
+        <button class="modal-close" onclick="closeModal('modal-edit-char')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-char-form">
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Nome:</label>
+            <input type="text" id="edit-name" class="retro-input" style="padding-left: 12px;" required>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Raridade Base:</label>
+            <select id="edit-rarity" class="retro-select" style="width: 100%;">
+              <option value="COMMON">⚪ Comum</option>
+              <option value="UNCOMMON">🟢 Incomum</option>
+              <option value="RARE">🔵 Raro</option>
+              <option value="EPIC">🟣 Épico</option>
+              <option value="LEGENDARY">⭐ Lendário</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Descrição / Biografia:</label>
+            <textarea id="edit-description" class="retro-input" rows="3" style="padding-left: 12px;"></textarea>
+          </div>
+
+          <!-- Troca de Foto com Cropper -->
+          <div style="margin-bottom: 14px; border-top: 1px dashed #cbd5e1; padding-top: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Alterar Foto Oficial (Opcional):</label>
+            <input type="file" id="edit-file-input" accept="image/*" class="retro-input" style="padding-left: 12px;">
+
+            <div id="admin-cropper-container" class="hidden" style="margin-top: 12px;">
+              <div class="cropper-img-box">
+                <img id="admin-cropper-img" src="" alt="Recorte Admin" style="max-width: 100%;">
+              </div>
+              <div class="cropper-preview-container">
+                <div>
+                  <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Pré-visualização (225x350):</span>
+                  <div class="crop-preview-box" id="admin-crop-preview"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer" style="padding: 12px 0 0 0; background: transparent;">
+            <button type="button" class="btn-retro btn-sm" onclick="closeModal('modal-edit-char')">Cancelar</button>
+            <button type="submit" class="btn-retro btn-primary btn-sm" id="btn-save-edit">
+              <i class="fas fa-save"></i> Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="retro-toast" class="retro-toast hidden"></div>
+
+  <script src="/vendor/cropper.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+import { FastifyPluginAsync } from 'fastify';
+import { WebSessionService } from '../../services/WebSessionService.js';
+import { HaremService } from '../../services/HaremService.js';
+import { WishlistService } from '../../services/WishlistService.js';
+import { DivorceService } from '../../services/DivorceService.js';
+import { CharacterService } from '../../services/CharacterService.js';
+import { SuggestionService } from '../../services/SuggestionService.js';
+import { verifyApiKey } from '../../plugins/auth.js';
+import { DomainError } from '../../errors/DomainError.js';
+import { Rarity } from '@prisma/client';
+
+interface RavenaBotHealth {
+  id: string;
+  phoneNumber: string;
+  connected: boolean;
+  semPV?: boolean;
+  vip?: boolean;
+}
+
+let cachedRavenaNumbers: string[] = [];
+let lastRavenaHealthFetch = 0;
+
+async function getActiveRavenaNumber(): Promise<string | null> {
+  const now = Date.now();
+  if (now - lastRavenaHealthFetch > 2 * 60 * 1000) {
+    const urlsToTry = [
+      process.env.BOT_HEALTH_URL,
+      'http://172.22.0.1:5001/health',
+      'http://host.docker.internal:5001/health',
+      'https://ravena.moothz.win/health',
+    ].filter(Boolean) as string[];
+
+    for (const url of urlsToTry) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = (await res.json()) as { bots?: RavenaBotHealth[] };
+          if (data && Array.isArray(data.bots)) {
+            const targetIds = ['ravena2', 'ravena5', 'ravena10'];
+            const matched = data.bots.filter(
+              (b) => targetIds.includes(b.id) && b.connected && !b.semPV && b.phoneNumber
+            );
+            if (matched.length > 0) {
+              cachedRavenaNumbers = matched.map((b) => b.phoneNumber.replace(/\D/g, ''));
+            } else {
+              const fallbackBots = data.bots.filter(
+                (b) => b.connected && !b.semPV && !b.vip && b.phoneNumber
+              );
+              if (fallbackBots.length > 0) {
+                cachedRavenaNumbers = fallbackBots.map((b) => b.phoneNumber.replace(/\D/g, ''));
+              }
+            }
+            lastRavenaHealthFetch = now;
+            break;
+          }
+        }
+      } catch {
+        // Falha nesta URL, tenta a próxima
+      }
+    }
+  }
+
+  if (cachedRavenaNumbers.length === 0) return null;
+  const randomIndex = Math.floor(Math.random() * cachedRavenaNumbers.length);
+  return cachedRavenaNumbers[randomIndex] || null;
+}
+
+export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
+  const characterService = new CharacterService(fastify.prisma, fastify.redis);
+  const haremService = new HaremService(fastify.prisma, characterService);
+  const wishlistService = new WishlistService(fastify.prisma, characterService);
+  const divorceService = new DivorceService(fastify.prisma);
+  const webSessionService = new WebSessionService(fastify.redis, fastify.prisma);
+  const suggestionService = new SuggestionService(fastify.prisma, fastify.redis, characterService);
+
+  /**
+   * Retorna um número de WhatsApp ativo da Ravena para redirecionamento com !mu-adm
+   */
+  fastify.get('/api/web/ravena-contact', {
+    schema: {
+      description: 'Retorna um número ativo de Ravena para iniciar o comando !mu-adm via WhatsApp',
+      tags: ['Usuário (Web)'],
+    },
+    handler: async (_request, reply) => {
+      const phoneNumber = await getActiveRavenaNumber();
+      const text = '!mu-adm';
+      const waLink = phoneNumber ? `https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}` : null;
+      return reply.send({
+        success: true,
+        data: {
+          phoneNumber,
+          text,
+          waLink,
+        },
+      });
+    },
+  });
+
+  /**
+   * Endpoint chamado pelo Bot Ravena para criar sessão de 30 minutos
+   * Requer API_KEY do bot
+   */
+  fastify.post('/user/session', {
+    preHandler: verifyApiKey,
+    schema: {
+      description: 'Gera link de acesso web temporário (30 minutos) para o usuário',
+      tags: ['Usuário (Web)'],
+      body: {
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.body as { userId: string };
+      const session = await webSessionService.createUserSession(userId);
+      return reply.send({
+        success: true,
+        data: session,
+      });
+    },
+  });
+
+  /**
+   * Consulta pública/privada do usuário pelo publicId
+   */
+  fastify.get('/api/web/user/:publicId', {
+    schema: {
+      description: 'Consulta perfil do usuário e seu harém (público ou administrativo se token fornecido)',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: {
+          publicId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          token: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token } = request.query as { token?: string };
+
+      const user = await fastify.prisma.user.findUnique({
+        where: { publicId },
+        select: { id: true, publicId: true, name: true, kakera: true },
+      });
+
+      if (!user) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' },
+        });
+      }
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      const isOwner = session.valid && session.userId === user.id;
+
+      // Busca o harém completo do usuário
+      const haremResult = await haremService.getUserHarem(user.id, 1, 200, 'keys');
+
+      if (isOwner) {
+        const wishlistResult = await wishlistService.getWishlist(user.id);
+
+        return reply.send({
+          success: true,
+          data: {
+            isAdmin: true,
+            publicId: user.publicId,
+            name: user.name,
+            kakera: user.kakera,
+            expiresIn: session.expiresIn,
+            harem: haremResult.data,
+            wishlist: wishlistResult,
+          },
+        });
+      }
+
+      // Visualização pública: proteção estrita de PII (omite claimedInGroup, notas privadas e IDs internos)
+      const publicHarem = haremResult.data.map((item) => ({
+        id: item.id,
+        character: {
+          id: item.character.id,
+          name: item.character.name,
+          series: item.character.series,
+          baseRarity: item.character.baseRarity,
+          imageUrl: item.character.imageUrl,
+          imageUrls: item.character.imageUrls,
+        },
+        keys: item.keys,
+        isFavorite: item.isFavorite,
+        claimedAt: item.claimedAt,
+      }));
+
+      return reply.send({
+        success: true,
+        data: {
+          isAdmin: false,
+          publicId: user.publicId,
+          name: user.name,
+          harem: publicHarem,
+        },
+      });
+    },
+  });
+
+  /**
+   * Divórcio via sessão web do usuário
+   */
+  fastify.post('/api/web/user/:publicId/divorce', {
+    schema: {
+      description: 'Executa divórcio de um personagem pertencente ao harém do usuário autenticado por token',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'characterId'],
+        properties: {
+          token: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, characterId } = request.body as { token: string; characterId: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida. Gere um novo link no WhatsApp.' },
+        });
+      }
+
+      const result = await divorceService.divorce(session.userId, characterId);
+      if (!result.success) {
+        return reply.status(400).send(result);
+      }
+
+      return reply.send(result);
+    },
+  });
+
+  /**
+   * Adiciona personagem à wishlist via sessão web
+   */
+  fastify.post('/api/web/user/:publicId/wishlist', {
+    schema: {
+      description: 'Adiciona um personagem à lista de desejos do usuário autenticado por token',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'characterId'],
+        properties: {
+          token: { type: 'string' },
+          characterId: { type: 'string' },
+          isStarWish: { type: 'boolean', default: false },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, characterId, isStarWish = false } = request.body as {
+        token: string;
+        characterId: string;
+        isStarWish?: boolean;
+      };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await wishlistService.addToWishlist(session.userId, characterId, isStarWish);
+      if (!result.success) {
+        return reply.status(400).send(result);
+      }
+
+      return reply.send(result);
+    },
+  });
+
+  /**
+   * Remove personagem da wishlist via sessão web
+   */
+  fastify.delete('/api/web/user/:publicId/wishlist/:characterId', {
+    schema: {
+      description: 'Remove um personagem da lista de desejos do usuário autenticado por token',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'characterId'],
+        properties: {
+          publicId: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: {
+          token: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, characterId } = request.params as { publicId: string; characterId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await wishlistService.removeFromWishlist(session.userId, characterId);
+      if (!result.success) {
+        return reply.status(400).send(result);
+      }
+
+      return reply.send(result);
+    },
+  });
+
+  /**
+   * Envia sugestão de raridade ou nova foto para o personagem
+   */
+  fastify.post('/api/web/user/:publicId/suggestions', {
+    schema: {
+      description: 'Envia sugestão de nova raridade ou nova imagem para avaliação de um moderador',
+      tags: ['Usuário (Web)'],
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+
+      if (request.isMultipart()) {
+        const parts = request.parts();
+        let token = '';
+        let characterId = '';
+        let type = '';
+        let suggestedRarity = '';
+        let reason = '';
+        let imageBuffer: Buffer | null = null;
+
+        for await (const part of parts) {
+          if (part.type === 'field') {
+            if (part.fieldname === 'token') token = String(part.value);
+            if (part.fieldname === 'characterId') characterId = String(part.value);
+            if (part.fieldname === 'type') type = String(part.value);
+            if (part.fieldname === 'suggestedRarity') suggestedRarity = String(part.value);
+            if (part.fieldname === 'reason') reason = String(part.value);
+          } else if (part.type === 'file' && part.fieldname === 'image') {
+            imageBuffer = await part.toBuffer();
+          }
+        }
+
+        const session = await webSessionService.validateUserSession(publicId, token);
+        if (!session.valid || !session.userId) {
+          return reply.status(401).send({
+            success: false,
+            error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+          });
+        }
+
+        if (type === 'IMAGE') {
+          if (!imageBuffer) {
+            return reply.status(400).send({
+              success: false,
+              error: { code: 'IMAGE_REQUIRED', message: 'Arquivo de imagem recortada não enviado.' },
+            });
+          }
+          const suggestion = await suggestionService.submitImageSuggestion(session.userId, characterId, imageBuffer, reason);
+          return reply.send({
+            success: true,
+            data: {
+              message: 'Sugestão de foto enviada com sucesso! A moderação irá analisar.',
+              suggestion,
+            },
+          });
+        } else if (type === 'RARITY') {
+          const suggestion = await suggestionService.submitRaritySuggestion(
+            session.userId,
+            characterId,
+            suggestedRarity as Rarity,
+            reason
+          );
+          return reply.send({
+            success: true,
+            data: {
+              message: 'Sugestão de raridade enviada com sucesso! A moderação irá analisar.',
+              suggestion,
+            },
+          });
+        }
+
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_SUGGESTION_TYPE', message: 'Tipo de sugestão inválido.' },
+        });
+      }
+
+      // JSON direto
+      const { token, type, characterId, suggestedRarity, reason, imageBase64 } = (request.body as any) || {};
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      if (type === 'RARITY') {
+        const suggestion = await suggestionService.submitRaritySuggestion(
+          session.userId,
+          characterId,
+          suggestedRarity as Rarity,
+          reason
+        );
+        return reply.send({
+          success: true,
+          data: {
+            message: 'Sugestão de raridade enviada com sucesso! A moderação irá analisar.',
+            suggestion,
+          },
+        });
+      } else if (type === 'IMAGE' && imageBase64) {
+        const buffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+        const suggestion = await suggestionService.submitImageSuggestion(session.userId, characterId, buffer, reason);
+        return reply.send({
+          success: true,
+          data: {
+            message: 'Sugestão de foto enviada com sucesso! A moderação irá analisar.',
+            suggestion,
+          },
+        });
+      }
+
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'Formato ou parâmetros de sugestão inválidos.' },
+      });
+    },
+  });
+};

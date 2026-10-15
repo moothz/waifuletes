@@ -12,6 +12,7 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   API_KEY: z.string().optional(),
   API_KEYS: z.string().optional(),
+  ADMIN_PASSWORD: z.string().default('admin123456'),
 
   DATABASE_URL: z.string().default('postgresql://waifu_user:change_me@localhost:5432/waifuletes_db'),
   REDIS_URL: z.string().default('redis://localhost:6379'),

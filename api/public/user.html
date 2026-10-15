@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harém do Usuário • Waifuletes ✨</title>
+  <link rel="stylesheet" href="/css/retro-theme.css">
+  <link rel="stylesheet" href="/vendor/cropper.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header Retrô -->
+    <header class="retro-header">
+      <a href="/" class="logo-area">
+        <div class="logo-icon">✨</div>
+        <div class="logo-text">
+          <h1>Waifuletes</h1>
+          <span>Coleções & Harém</span>
+        </div>
+      </a>
+      <div class="header-actions">
+        <button id="btn-share-public" class="btn-retro btn-sm btn-gold" title="Copiar link público para amigos">
+          <i class="fas fa-share-alt"></i> Compartilhar Harém
+        </button>
+        <a href="/" class="btn-retro btn-sm">
+          <i class="fas fa-home"></i> Catálogo Geral
+        </a>
+      </div>
+    </header>
+
+    <!-- Cabeçalho do Perfil / Painel -->
+    <section class="hero-section" id="user-header">
+      <h2 class="hero-title" id="user-title">Carregando perfil...</h2>
+      <p class="hero-subtitle" id="user-subtitle">Buscando informações do harém...</p>
+      <div id="session-badge-container" style="margin-top: 8px;"></div>
+    </section>
+
+    <!-- Container do Painel Privado (Abas) -->
+    <div id="private-panel" class="hidden">
+      <div class="retro-tabs">
+        <button class="retro-tab active" data-tab="tab-harem"><i class="fas fa-ring"></i> Meu Harém (<span id="harem-count">0</span>)</button>
+        <button class="retro-tab" data-tab="tab-wishlist"><i class="fas fa-star"></i> Minha Wishlist (<span id="wishlist-count">0</span>)</button>
+        <button class="retro-tab" data-tab="tab-search"><i class="fas fa-search"></i> Buscar & Adicionar</button>
+      </div>
+
+      <!-- Aba 1: Harém -->
+      <div class="tab-content" id="tab-harem">
+        <div id="harem-grid" class="waifu-grid"></div>
+      </div>
+
+      <!-- Aba 2: Wishlist -->
+      <div class="tab-content hidden" id="tab-wishlist">
+        <div id="wishlist-grid" class="waifu-grid"></div>
+      </div>
+
+      <!-- Aba 3: Buscar & Adicionar -->
+      <div class="tab-content hidden" id="tab-search">
+        <div class="search-panel" style="margin-bottom: 16px;">
+          <div class="search-input-group">
+            <i class="fas fa-search"></i>
+            <input type="text" id="panel-search-input" class="retro-input" placeholder="Buscar personagens para adicionar à sua Wishlist...">
+          </div>
+          <div class="filters-row">
+            <div class="filter-group">
+              <span>Raridade:</span>
+              <select id="panel-rarity-select" class="retro-select">
+                <option value="">Todas</option>
+                <option value="LEGENDARY">⭐ Lendário</option>
+                <option value="EPIC">🟣 Épico</option>
+                <option value="RARE">🔵 Raro</option>
+                <option value="UNCOMMON">🟢 Incomum</option>
+                <option value="COMMON">⚪ Comum</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <span>Gênero:</span>
+              <div class="pill-group" id="panel-gender-pills">
+                <button class="retro-pill active" data-gender="">Todos</button>
+                <button class="retro-pill" data-gender="FEMALE">Feminino</button>
+                <button class="retro-pill" data-gender="MALE">Masculino</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="panel-search-grid" class="waifu-grid"></div>
+      </div>
+    </div>
+
+    <!-- Container do Painel Público (Apenas leitura) -->
+    <div id="public-panel" class="hidden">
+      <div id="public-harem-grid" class="waifu-grid"></div>
+    </div>
+
+    <!-- Rodapé -->
+    <footer class="retro-footer">
+      Waifuletes ✨ • Gerencie seu harém via WhatsApp com o comando <code>!mu-admin</code>
+    </footer>
+  </div>
+
+  <!-- Modal de Confirmação de Divórcio -->
+  <div class="modal-overlay hidden" id="modal-divorce">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">💔 Confirmar Divórcio</span>
+        <button class="modal-close" onclick="closeModal('modal-divorce')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="divorce-modal-text" style="font-weight: 600; font-size: 15px;"></p>
+        <div style="background: #fef08a; border: 2px solid #2d241e; border-radius: 6px; padding: 12px; margin-top: 14px; font-size: 13px;">
+          ⚠️ <strong>Atenção:</strong> Ao divorciar, o personagem será removido do seu harém e voltará para o pool global de sorteios. Você receberá o valor proporcional de Zinthos/Kakera.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-divorce')">Cancelar</button>
+        <button class="btn-retro btn-sm btn-danger" id="btn-confirm-divorce">Divorciar Agora</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Sugestões de Personagem (Raridade com motivo ou Nova Foto com recorte) -->
+  <div class="modal-overlay hidden" id="modal-suggest">
+    <div class="modal-box" style="max-width: 600px;">
+      <div class="modal-header">
+        <span class="modal-title">💡 Sugerir Alteração</span>
+        <button class="modal-close" onclick="closeModal('modal-suggest')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <h4 id="suggest-char-name" style="font-weight: 800; font-size: 16px; margin-bottom: 12px;">Personagem</h4>
+        
+        <div class="retro-tabs" style="margin-bottom: 16px;">
+          <button class="retro-tab active" data-subtab="subtab-rarity">Sugerir Raridade</button>
+          <button class="retro-tab" data-subtab="subtab-image">Sugerir Nova Foto</button>
+        </div>
+
+        <!-- Subaba Raridade -->
+        <div class="subtab-content" id="subtab-rarity">
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Raridade Atual:</label>
+            <span id="suggest-current-rarity" class="badge-rarity" style="position: static; display: inline-block;">-</span>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Nova Raridade Sugerida:</label>
+            <select id="suggest-new-rarity" class="retro-select" style="width: 100%;">
+              <option value="COMMON">⚪ Comum</option>
+              <option value="UNCOMMON">🟢 Incomum</option>
+              <option value="RARE">🔵 Raro</option>
+              <option value="EPIC">🟣 Épico</option>
+              <option value="LEGENDARY">⭐ Lendário</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Justificativa / Motivo da Alteração: <span style="color: red;">*</span></label>
+            <textarea id="suggest-reason" class="retro-input" rows="3" style="padding-left: 12px;" placeholder="Explique por que esta waifu merece esta raridade (ex: poder no anime, popularidade da obra)..."></textarea>
+          </div>
+
+          <button class="btn-retro btn-primary" id="btn-submit-rarity" style="width: 100%;">Enviar Sugestão de Raridade</button>
+        </div>
+
+        <!-- Subaba Imagem com Recorte 225x350 (9:14) -->
+        <div class="subtab-content hidden" id="subtab-image">
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Escolha uma imagem do seu dispositivo:</label>
+            <input type="file" id="suggest-file-input" accept="image/*" class="retro-input" style="padding-left: 12px;">
+          </div>
+
+          <div id="cropper-container" class="hidden">
+            <div style="font-weight: 700; font-size: 13px; margin-bottom: 6px;">Ajuste o recorte (Proporção 225x350):</div>
+            <div class="cropper-img-box">
+              <img id="cropper-img" src="" alt="Recorte" style="max-width: 100%;">
+            </div>
+
+            <div class="cropper-preview-container">
+              <div>
+                <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Pré-visualização do Card:</span>
+                <div class="crop-preview-box" id="crop-preview"></div>
+              </div>
+              <div style="flex: 1;">
+                <label style="font-weight: 700; font-size: 12px; display: block; margin-bottom: 4px;">Comentário opcional:</label>
+                <input type="text" id="suggest-img-reason" class="retro-input" style="padding-left: 10px;" placeholder="Ex: Arte oficial de maior qualidade...">
+              </div>
+            </div>
+
+            <button class="btn-retro btn-primary" id="btn-submit-image" style="width: 100%; margin-top: 14px;">Recortar & Enviar Foto</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast de Notificação -->
+  <div id="retro-toast" class="retro-toast hidden"></div>
+
+  <script src="/vendor/cropper.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/user.js"></script>
+</body>
+</html>

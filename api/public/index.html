@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waifuletes ✨ Catálogo & Harém Retrô</title>
+  <link rel="stylesheet" href="/css/retro-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header Retrô -->
+    <header class="retro-header">
+      <a href="/" class="logo-area">
+        <div class="logo-icon">✨</div>
+        <div class="logo-text">
+          <h1>Waifuletes</h1>
+          <span>Catálogo de Coleções & Harém</span>
+        </div>
+      </a>
+      <div class="header-actions">
+        <a id="btn-whatsapp-ravena" href="#" target="_blank" rel="noopener noreferrer" class="btn-retro btn-sm btn-gold" title="Envie !mu-adm para uma Ravena">
+          <i class="fab fa-whatsapp"></i> Acesse seu painel pessoal enviando <b>!mu-adm</b> para uma ravena
+        </a>
+        <a href="https://github.com/moothz/waifuletes" target="_blank" rel="noopener noreferrer" class="btn-retro btn-sm" title="Repositório no GitHub">
+          <i class="fab fa-github"></i> GitHub
+        </a>
+      </div>
+    </header>
+
+    <!-- Hero Centralizado -->
+    <section class="hero-section">
+      <h2 class="hero-title">Coleção de Personagens</h2>
+      <p class="hero-subtitle">Pesquise suas waifus e husbandos favoritos!</p>
+      <p class="hero-subtitle" style="font-size: 13px; margin-top: 6px;">Você pode sugerir novos personagens, modificações, salvar seus favoritos e mais usando o comando <b>!mu-adm</b> na ravena</p>
+    </section>
+
+    <!-- Barra de Pesquisa & Filtros Centralizados -->
+    <section class="search-panel">
+      <div class="search-input-group">
+        <i class="fas fa-search"></i>
+        <input type="text" id="search-input" class="retro-input" placeholder="Pesquisar por nome de personagem ou série..." autocomplete="off">
+      </div>
+
+      <div class="filters-row">
+        <!-- Gênero -->
+        <div class="filter-group">
+          <span><i class="fas fa-venus-mars"></i> Gênero:</span>
+          <div class="pill-group" id="gender-pills">
+            <button class="retro-pill active" data-gender="">Todos</button>
+            <button class="retro-pill" data-gender="FEMALE">Feminino</button>
+            <button class="retro-pill" data-gender="MALE">Masculino</button>
+          </div>
+        </div>
+
+        <!-- Estado Civil -->
+        <div class="filter-group">
+          <span><i class="fas fa-ring"></i> Estado:</span>
+          <div class="pill-group" id="marital-pills">
+            <button class="retro-pill active" data-status="">Todos</button>
+            <button class="retro-pill" data-status="single">Solteiros</button>
+            <button class="retro-pill" data-status="married">💍 Casados</button>
+          </div>
+        </div>
+
+        <!-- Raridade -->
+        <div class="filter-group">
+          <span><i class="fas fa-gem"></i> Raridade:</span>
+          <select id="rarity-select" class="retro-select">
+            <option value="">Todas</option>
+            <option value="LEGENDARY">⭐ Lendário</option>
+            <option value="EPIC">🟣 Épico</option>
+            <option value="RARE">🔵 Raro</option>
+            <option value="UNCOMMON">🟢 Incomum</option>
+            <option value="COMMON">⚪ Comum</option>
+          </select>
+        </div>
+
+        <!-- Ordem -->
+        <div class="filter-group">
+          <span><i class="fas fa-sort"></i> Ordem:</span>
+          <select id="sort-select" class="retro-select">
+            <option value="ranking">Popularidade (Ranking)</option>
+            <option value="name">Nome (A-Z)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Grid de Personagens -->
+    <main>
+      <div id="waifu-grid" class="waifu-grid">
+        <!-- Preenchido via home.js -->
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; font-weight: bold;">
+          <i class="fas fa-spinner fa-spin"></i> Carregando catálogo retrô de waifus...
+        </div>
+      </div>
+
+      <!-- Barra de Paginação -->
+      <div class="pagination-bar" id="pagination-bar">
+        <div class="page-info">
+          <span id="total-count">0 personagens encontrados</span>
+        </div>
+        <div class="page-controls">
+          <button class="btn-retro btn-sm" id="btn-first" disabled><i class="fas fa-angle-double-left"></i></button>
+          <button class="btn-retro btn-sm" id="btn-prev" disabled><i class="fas fa-angle-left"></i> Anterior</button>
+          <span class="page-indicator" id="page-indicator">1 / 1</span>
+          <button class="btn-retro btn-sm" id="btn-next" disabled>Próxima <i class="fas fa-angle-right"></i></button>
+          <button class="btn-retro btn-sm" id="btn-last" disabled><i class="fas fa-angle-double-right"></i></button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Rodapé Retrô -->
+    <footer class="retro-footer">
+      Waifuletes ✨ Motor de Jogo & Coleções • Integrado com o bot Ravena AI
+    </footer>
+  </div>
+
+  <!-- Toast de Notificação -->
+  <div id="retro-toast" class="retro-toast hidden"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/home.js"></script>
+</body>
+</html>
