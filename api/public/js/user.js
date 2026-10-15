@@ -241,7 +241,7 @@ function renderPrivateHarem(harem) {
             <i class="fas fa-heart-crack"></i> Divorciar
           </button>
           <button class="btn-retro btn-sm" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
-            <i class="fas fa-lightbulb"></i> Sugerir
+            <i class="fas fa-lightbulb"></i> Sugerir Mudança
           </button>
         </div>
       </div>
@@ -255,7 +255,7 @@ function renderPrivateWishlist(wishlist) {
   document.getElementById('wishlist-count').textContent = wishlist.length;
 
   if (wishlist.length === 0) {
-    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Sua wishlist está vazia. Use a aba "Buscar & Adicionar" para desejar personagens!</div>';
+    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Sua wishlist está vazia. Use a aba "Buscar para Desejar" para desejar personagens!</div>';
     return;
   }
 
@@ -283,7 +283,7 @@ function renderPrivateWishlist(wishlist) {
             <i class="fas fa-times"></i> Remover
           </button>
           <button class="btn-retro btn-sm" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
-            <i class="fas fa-lightbulb"></i> Sugerir
+            <i class="fas fa-lightbulb"></i> Sugerir Mudança
           </button>
         </div>
       </div>
@@ -374,7 +374,7 @@ async function loadPanelSearchResults() {
               ${isAlreadyWish ? '<i class="fas fa-check"></i> Na Wishlist' : '<i class="fas fa-star"></i> Desejar'}
             </button>
             <button class="btn-retro btn-sm" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
-              <i class="fas fa-lightbulb"></i>
+              <i class="fas fa-lightbulb"></i> Sugerir Mudança
             </button>
           </div>
         </div>
@@ -490,6 +490,17 @@ function openSuggestModal(charId, charName, currentRarity) {
     cropperInstance.destroy();
     cropperInstance = null;
   }
+
+  // Reseta estado das subabas para Raridade
+  const subtabs = document.querySelectorAll('#modal-suggest .retro-tab[data-subtab]');
+  subtabs.forEach((t, i) => {
+    if (i === 0) t.classList.add('active');
+    else t.classList.remove('active');
+  });
+  document.querySelectorAll('#modal-suggest .subtab-content').forEach((c, i) => {
+    if (i === 0) c.classList.remove('hidden');
+    else c.classList.add('hidden');
+  });
 
   openModal('modal-suggest');
 }

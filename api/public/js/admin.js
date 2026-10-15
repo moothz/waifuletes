@@ -22,6 +22,15 @@ const catalogState = {
   totalPages: 1
 };
 
+const usersState = {
+  search: '',
+  page: 1,
+  limit: 20,
+  total: 0,
+  totalPages: 1
+};
+
+let selectedMarryTargetUser = null;
 let suggestionFilterStatus = 'PENDING';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -53,6 +62,8 @@ function setupAdminEvents() {
         loadSuggestions();
       } else if (targetId === 'tab-catalog') {
         loadAdminCatalog();
+      } else if (targetId === 'tab-users') {
+        loadAdminUsers();
       }
     });
   });
@@ -143,6 +154,47 @@ function setupAdminEvents() {
 
   // Salvar edição de personagem
   document.getElementById('edit-char-form').addEventListener('submit', handleSaveCharacterEdit);
+
+  // Busca de usuários
+  let userSearchTimer = null;
+  const adminUserSearchInput = document.getElementById('admin-user-search-input');
+  if (adminUserSearchInput) {
+    adminUserSearchInput.addEventListener('input', () => {
+      clearTimeout(userSearchTimer);
+      userSearchTimer = setTimeout(() => {
+        usersState.search = adminUserSearchInput.value.trim();
+        usersState.page = 1;
+        loadAdminUsers();
+      }, 300);
+    });
+  }
+
+  // Paginação de usuários
+  const usersBtnPrev = document.getElementById('admin-users-btn-prev');
+  if (usersBtnPrev) {
+    usersBtnPrev.addEventListener('click', () => {
+      if (usersState.page > 1) {
+        usersState.page--;
+        loadAdminUsers();
+      }
+    });
+  }
+
+  const usersBtnNext = document.getElementById('admin-users-btn-next');
+  if (usersBtnNext) {
+    usersBtnNext.addEventListener('click', () => {
+      if (usersState.page < usersState.totalPages) {
+        usersState.page++;
+        loadAdminUsers();
+      }
+    });
+  }
+
+  // Formulário de Casamento Administrativo
+  const adminMarryForm = document.getElementById('admin-marry-form');
+  if (adminMarryForm) {
+    adminMarryForm.addEventListener('submit', handleAdminMarrySubmit);
+  }
 }
 
 // ========================================================
@@ -530,6 +582,163 @@ async function rejectSuggestion(suggestionId) {
     loadSuggestions();
   } catch (err) {
     Api.showToast('Erro de comunicação ao recusar.', '❌');
+  }
+}
+
+// ========================================================
+// GESTÃO DE USUÁRIOS
+// ========================================================
+async function loadAdminUsers() {
+  const tbody = document.getElementById('admin-users-tbody');
+  const totalCountEl = document.getElementById('admin-users-total-count');
+  const pageIndicatorEl = document.getElementById('admin-users-page-indicator');
+  const btnPrev = document.getElementById('admin-users-btn-prev');
+  const btnNext = document.getElementById('admin-users-btn-next');
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px;"><i class="fas fa-spinner fa-spin"></i> Carregando lista de usuários...</td></tr>';
+
+  try {
+    const params = new URLSearchParams({
+      page: usersState.page,
+      limit: usersState.limit,
+    });
+    if (usersState.search) params.append('search', usersState.search);
+
+    const res = await Api.get(`/api/admin/users?${params.toString()}`, {
+      Authorization: `Bearer ${adminToken}`,
+    });
+
+    if (!res.success) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: red;">${res.error?.message || 'Erro ao carregar usuários.'}</td></tr>`;
+      return;
+    }
+
+    const { users, pagination } = res.data;
+    usersState.total = pagination.total;
+    usersState.totalPages = pagination.totalPages;
+
+    if (totalCountEl) totalCountEl.textContent = `${usersState.total.toLocaleString('pt-BR')} usuários`;
+    if (pageIndicatorEl) pageIndicatorEl.textContent = `${usersState.page} / ${usersState.totalPages}`;
+    if (btnPrev) btnPrev.disabled = usersState.page <= 1;
+    if (btnNext) btnNext.disabled = usersState.page >= usersState.totalPages;
+
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px;">Nenhum usuário encontrado com os filtros atuais.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    users.forEach((u) => {
+      const tr = document.createElement('tr');
+      const cleanNumber = (u.id || '').replace('@s.whatsapp.net', '').replace('@c.us', '');
+      const platformBadge = u.platform === 'WHATSAPP'
+        ? '<span style="color: #16a34a; font-weight: 700;"><i class="fab fa-whatsapp"></i> WhatsApp</span>'
+        : `<span style="font-weight: 700;">${u.platform}</span>`;
+
+      tr.innerHTML = `
+        <td style="font-weight: 800;">
+          ${escapeHtml(u.name)}
+        </td>
+        <td>
+          <div style="font-family: monospace; font-size: 13px; font-weight: 700;">${escapeHtml(cleanNumber)}</div>
+          <small style="font-size: 11px;">${platformBadge}</small>
+        </td>
+        <td style="text-align: center; font-weight: 800;">
+          <span class="badge-rarity" style="position: static; border-color: #2563eb; color: #2563eb; display: inline-block;">
+            💍 ${u.totalHarem}
+          </span>
+        </td>
+        <td style="text-align: center; font-weight: 800;">
+          <span class="badge-rarity" style="position: static; border-color: #f59e0b; color: #f59e0b; display: inline-block;">
+            ⭐ ${u.totalWishlist}
+          </span>
+        </td>
+        <td style="text-align: center; font-weight: 800;">
+          <span class="badge-rarity" style="position: static; border-color: #9333ea; color: #9333ea; display: inline-block;" title="Total Harém + Total Wishlist">
+            ✨ ${u.totalScore !== undefined ? u.totalScore : (u.totalHarem + u.totalWishlist)}
+          </span>
+        </td>
+        <td style="text-align: center;">
+          <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn-retro btn-sm" onclick="impersonateUser('${escapeHtml(u.id)}')" title="Acessar painel web deste usuário">
+              <i class="fas fa-external-link-alt"></i> Acessar Painel
+            </button>
+            <button class="btn-retro btn-sm btn-gold" onclick="openAdminMarryModal('${escapeHtml(u.id)}', '${escapeHtml(u.name)}')" title="Casar personagem com este usuário">
+              <i class="fas fa-ring"></i> Casar
+            </button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    console.error('Erro ao listar usuários:', err);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px; color: red;">Erro de comunicação ao carregar lista de usuários.</td></tr>';
+  }
+}
+
+async function impersonateUser(userId) {
+  try {
+    const res = await Api.post(`/api/admin/users/${encodeURIComponent(userId)}/session`, {}, {
+      Authorization: `Bearer ${adminToken}`,
+    });
+
+    if (!res.success) {
+      Api.showToast(res.error?.message || 'Falha ao gerar link de acesso.', '❌');
+      return;
+    }
+
+    Api.showToast('Link de acesso gerado com sucesso! Abrindo painel...', '🚀');
+    window.open(res.data.url, '_blank');
+  } catch (err) {
+    Api.showToast('Erro ao acessar painel do usuário.', '❌');
+  }
+}
+
+function openAdminMarryModal(userId, userName) {
+  selectedMarryTargetUser = { id: userId, name: userName };
+  const cleanNumber = (userId || '').replace('@s.whatsapp.net', '');
+  document.getElementById('marry-user-display-name').textContent = `${userName} (${cleanNumber})`;
+  document.getElementById('admin-marry-char-input').value = '';
+  openModal('modal-admin-marry');
+}
+
+async function handleAdminMarrySubmit(e) {
+  e.preventDefault();
+  if (!selectedMarryTargetUser) return;
+
+  const charInput = document.getElementById('admin-marry-char-input').value.trim();
+  if (!charInput) {
+    Api.showToast('Por favor, informe o ID ou nome da personagem.', '⚠️');
+    return;
+  }
+
+  const btnConfirm = document.getElementById('btn-confirm-admin-marry');
+  btnConfirm.disabled = true;
+  btnConfirm.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Casando...';
+
+  try {
+    const res = await Api.post(
+      `/api/admin/users/${encodeURIComponent(selectedMarryTargetUser.id)}/marry`,
+      { characterId: charInput },
+      { Authorization: `Bearer ${adminToken}` }
+    );
+
+    if (!res.success) {
+      Api.showToast(res.error?.message || 'Não foi possível casar este personagem.', '❌');
+      return;
+    }
+
+    const charName = res.data?.character?.name || charInput;
+    Api.showToast(`Casamento de ${charName} com ${selectedMarryTargetUser.name} realizado com sucesso!`, '💍');
+    closeModal('modal-admin-marry');
+    loadAdminUsers();
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao realizar casamento.', '❌');
+  } finally {
+    btnConfirm.disabled = false;
+    btnConfirm.innerHTML = '<i class="fas fa-ring"></i> Confirmar Casamento';
   }
 }
 

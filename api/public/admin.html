@@ -56,6 +56,9 @@
         <button class="retro-tab" data-tab="tab-suggestions">
           <i class="fas fa-lightbulb"></i> Moderação de Sugestões <span id="pending-badge" class="badge-rarity" style="position: static; font-size: 11px; margin-left: 6px;">0</span>
         </button>
+        <button class="retro-tab" data-tab="tab-users">
+          <i class="fas fa-users"></i> Usuários
+        </button>
       </div>
 
       <!-- Aba 1: Catálogo com Botão Editar -->
@@ -114,6 +117,46 @@
         </div>
 
         <div id="suggestions-list" style="display: flex; flex-direction: column; gap: 14px;"></div>
+      </div>
+
+      <!-- Aba 3: Gestão de Usuários -->
+      <div class="tab-content hidden" id="tab-users">
+        <div class="search-panel" style="margin-bottom: 20px;">
+          <div class="search-input-group" style="margin-bottom: 0;">
+            <i class="fas fa-search"></i>
+            <input type="text" id="admin-user-search-input" class="retro-input" placeholder="Pesquisar por nome ou número (telefone/ID)...">
+          </div>
+        </div>
+
+        <div style="overflow-x: auto; margin-bottom: 20px;">
+          <table class="retro-table" id="admin-users-table">
+            <thead>
+              <tr style="background: #fef08a;">
+                <th>Nome</th>
+                <th>Número / ID</th>
+                <th style="text-align: center;">Total Harém</th>
+                <th style="text-align: center;">Total Wishlist</th>
+                <th style="text-align: center;" title="Total Harém + Total Wishlist">Harém + Wish</th>
+                <th style="text-align: center;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="admin-users-tbody">
+              <tr>
+                <td colspan="6" style="text-align: center; padding: 24px;">Carregando usuários...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Paginação de Usuários -->
+        <div class="pagination-bar">
+          <div class="page-info"><span id="admin-users-total-count">0 usuários</span></div>
+          <div class="page-controls">
+            <button class="btn-retro btn-sm" id="admin-users-btn-prev" disabled><i class="fas fa-angle-left"></i> Anterior</button>
+            <span class="page-indicator" id="admin-users-page-indicator">1 / 1</span>
+            <button class="btn-retro btn-sm" id="admin-users-btn-next" disabled>Próxima <i class="fas fa-angle-right"></i></button>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -175,6 +218,36 @@
             <button type="button" class="btn-retro btn-sm" onclick="closeModal('modal-edit-char')">Cancelar</button>
             <button type="submit" class="btn-retro btn-primary btn-sm" id="btn-save-edit">
               <i class="fas fa-save"></i> Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Casamento Administrativo -->
+  <div class="modal-overlay hidden" id="modal-admin-marry">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <span class="modal-title">💍 Casar Personagem (Admin)</span>
+        <button class="modal-close" onclick="closeModal('modal-admin-marry')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; font-size: 14px;">
+          Casar personagem com o usuário: <strong id="marry-user-display-name"></strong>
+        </p>
+        <form id="admin-marry-form">
+          <div style="margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">ID ou Nome do Personagem:</label>
+            <input type="text" id="admin-marry-char-input" class="retro-input" placeholder="Ex: e61b4742 ou Rem ou Saber" style="padding-left: 12px;" required autocomplete="off">
+          </div>
+          <div style="background: #fef08a; border: 2px solid #2d241e; border-radius: 6px; padding: 10px; margin-bottom: 16px; font-size: 12px;">
+            ℹ️ O personagem deve existir no catálogo e estar <strong>solteiro</strong>. O casamento será registrado diretamente no banco de dados sem enviar notificações.
+          </div>
+          <div class="modal-footer" style="padding: 12px 0 0 0; background: transparent;">
+            <button type="button" class="btn-retro btn-sm" onclick="closeModal('modal-admin-marry')">Cancelar</button>
+            <button type="submit" class="btn-retro btn-gold btn-sm" id="btn-confirm-admin-marry">
+              <i class="fas fa-ring"></i> Confirmar Casamento
             </button>
           </div>
         </form>

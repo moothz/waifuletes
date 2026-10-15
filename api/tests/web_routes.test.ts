@@ -214,4 +214,89 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     expect(json.data.character.name).toBe('Personagem Teste Modificado');
     expect(json.data.character.description).toBe('Nova biografia salva diretamente pelo painel administrativo web.');
   });
+
+  it('GET /api/admin/users deve listar usuários e permitir busca por nome e número', async () => {
+    // 1. Listagem geral
+    const res = await fetch(`${BASE_URL}/api/admin/users?limit=10`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(Array.isArray(json.data.users)).toBe(true);
+    expect(json.data.pagination).toHaveProperty('total');
+
+    // 2. Busca pelo nome do usuário de teste
+    const searchRes = await fetch(`${BASE_URL}/api/admin/users?search=Jogador+Web+Teste`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(searchRes.status).toBe(200);
+    const searchJson = await searchRes.json();
+    expect(searchJson.success).toBe(true);
+    const foundUser = searchJson.data.users.find((u: any) => u.id === testUserId);
+    expect(foundUser).toBeDefined();
+    expect(foundUser.name).toBe('Jogador Web Teste');
+    expect(foundUser).toHaveProperty('totalHarem');
+    expect(foundUser).toHaveProperty('totalWishlist');
+  });
+
+  it('POST /api/admin/users/:userId/session deve gerar impersonation URL do usuário', async () => {
+    const res = await fetch(`${BASE_URL}/api/admin/users/${encodeURIComponent(testUserId)}/session`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data).toHaveProperty('token');
+    expect(json.data).toHaveProperty('url');
+    expect(json.data.url).toContain(`/user/${testPublicId}?token=`);
+  });
+
+  it('POST /api/admin/users/:userId/marry deve validar personagem e casar se solteiro', async () => {
+    // 1. Personagem inexistente -> 400
+    const notFoundRes = await fetch(`${BASE_URL}/api/admin/users/${encodeURIComponent(testUserId)}/marry`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ characterId: 'id_inexistente_12345' }),
+    });
+    expect(notFoundRes.status).toBe(400);
+
+    // 2. Busca uma waifu solteira no catálogo
+    const singleCharRes = await fetch(`${BASE_URL}/characters?maritalStatus=single&limit=1`);
+    const singleCharJson = await singleCharRes.json();
+    const singleChar = singleCharJson.data?.data?.[0];
+
+    if (singleChar) {
+      // 3. Realiza casamento administrativo
+      const marryRes = await fetch(`${BASE_URL}/api/admin/users/${encodeURIComponent(testUserId)}/marry`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ characterId: singleChar.id }),
+      });
+      expect(marryRes.status).toBe(200);
+      const marryJson = await marryRes.json();
+      expect(marryJson.success).toBe(true);
+      expect(marryJson.data.character.id).toBe(singleChar.id);
+
+      // 4. Tentativa de casar com a mesma agora que já está casada -> 400
+      const alreadyClaimedRes = await fetch(`${BASE_URL}/api/admin/users/${encodeURIComponent(testUserId)}/marry`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ characterId: singleChar.id }),
+      });
+      expect(alreadyClaimedRes.status).toBe(400);
+      const alreadyClaimedJson = await alreadyClaimedRes.json();
+      expect(alreadyClaimedJson.error.code).toMatch(/CHARACTER_ALREADY_/);
+    }
+  });
 });

@@ -52,6 +52,13 @@ body {
 }
 
 /* ========================================================
+   UTILITÁRIOS GLOBAIS
+   ======================================================== */
+.hidden {
+  display: none !important;
+}
+
+/* ========================================================
    CONTAINER & LAYOUT CENTRALIZADO
    ======================================================== */
 .container {
@@ -455,10 +462,15 @@ body {
 
 .card-actions {
   display: flex;
+  flex-direction: column;
   gap: 6px;
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px dashed #e2e8f0;
+}
+
+.card-actions .btn-retro {
+  width: 100%;
 }
 
 /* ========================================================
@@ -500,13 +512,16 @@ body {
 }
 
 /* ========================================================
-   ABAS RETRÔ (NAV TABS)
+   ABAS RETRÔ (NAV TABS & CONTEÚDO)
    ======================================================== */
 .retro-tabs {
   display: flex;
   gap: 8px;
   border-bottom: var(--border-retro);
-  margin-bottom: 20px;
+  margin-bottom: 0;
+  position: relative;
+  z-index: 2;
+  flex-wrap: wrap;
 }
 
 .retro-tab {
@@ -521,6 +536,8 @@ body {
   cursor: pointer;
   transition: all 0.12s ease;
   user-select: none;
+  position: relative;
+  bottom: -2px;
 }
 
 .retro-tab:hover {
@@ -532,7 +549,70 @@ body {
   background: var(--bg-card);
   color: var(--text-main);
   box-shadow: 2px -2px 0px #2d241e;
-  transform: translateY(2px);
+  border-bottom: 2px solid var(--bg-card);
+  z-index: 3;
+}
+
+.tab-content {
+  background: var(--bg-card);
+  border: var(--border-retro);
+  box-shadow: var(--shadow-retro);
+  border-radius: 0 var(--radius-retro) var(--radius-retro) var(--radius-retro);
+  padding: 24px;
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 640px) {
+  .tab-content {
+    border-radius: var(--radius-retro);
+    padding: 16px;
+  }
+}
+
+.tab-content .search-panel {
+  background: var(--bg-card-subtle);
+  border: 1.5px dashed #cbd5e1;
+  box-shadow: none;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.modal-box .retro-tabs {
+  margin-bottom: 16px;
+  border-bottom: var(--border-retro);
+}
+
+.modal-box .subtab-content {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 4px 0;
+}
+
+/* ========================================================
+   TABELA RETRÔ (ADMIN & USUÁRIOS)
+   ======================================================== */
+.retro-table {
+  width: 100%;
+  background: var(--bg-card);
+  border: var(--border-retro);
+  box-shadow: var(--shadow-retro-sm);
+  border-radius: var(--radius-retro);
+  border-collapse: collapse;
+}
+
+.retro-table th,
+.retro-table td {
+  padding: 12px 14px;
+  border: var(--border-retro);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.retro-table tbody tr:hover {
+  background: var(--bg-card-subtle);
 }
 
 /* ========================================================

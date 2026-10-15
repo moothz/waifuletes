@@ -34,6 +34,7 @@ import { privateKakeraRoutes } from './routes/private/kakera.js';
 import { privateAdminRoutes } from './routes/private/admin.js';
 
 const fastify = Fastify({
+  trustProxy: true,
   logger: {
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     redact: ['req.headers.authorization', 'req.headers["x-api-key"]'],
@@ -56,11 +57,22 @@ async function buildServer() {
     contentSecurityPolicy: false,
   });
 
-  // Rate Limiting (120 req/min geral para anônimos; chamadas autenticadas do bot são isentas)
+  // Rate Limiting (600 req/min geral para anônimos; bot e arquivos estáticos/mídia são isentos)
   await fastify.register(rateLimit, {
-    max: 120,
+    max: 600,
     timeWindow: '1 minute',
-    allowList: (req) => isTrustedRequest(req),
+    allowList: (req) => {
+      if (isTrustedRequest(req)) return true;
+      const cleanUrl = req.url.split('?')[0];
+      return (
+        cleanUrl.startsWith('/media/') ||
+        cleanUrl.startsWith('/css/') ||
+        cleanUrl.startsWith('/js/') ||
+        cleanUrl.startsWith('/vendor/') ||
+        cleanUrl.startsWith('/health') ||
+        cleanUrl === '/favicon.ico'
+      );
+    },
   });
 
   // Multipart/form-data

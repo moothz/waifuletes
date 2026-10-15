@@ -6,7 +6,9 @@ import { config } from '../../config.js';
 import { WebSessionService } from '../../services/WebSessionService.js';
 import { SuggestionService } from '../../services/SuggestionService.js';
 import { CharacterService } from '../../services/CharacterService.js';
-import { Rarity, SuggestionStatus, SuggestionType } from '@prisma/client';
+import { CooldownService } from '../../services/CooldownService.js';
+import { MarryService } from '../../services/MarryService.js';
+import { Prisma, Rarity, SuggestionStatus, SuggestionType } from '@prisma/client';
 
 export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
   const webSessionService = new WebSessionService(fastify.redis, fastify.prisma);
@@ -289,6 +291,219 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { rejectionReason } = (request.body as any) || {};
 
       const result = await suggestionService.rejectSuggestion(id, rejectionReason, 'admin');
+      return reply.send(result);
+    },
+  });
+
+  /**
+   * Listagem de usuários com contagem de harém, wishlist e busca por nome/número
+   */
+  fastify.get('/api/admin/users', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Lista todos os usuários com contagem de harém e wishlist, além de busca por nome ou número/ID',
+      tags: ['Admin (Web)'],
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          search: { type: 'string' },
+          page: { type: 'integer', minimum: 1, default: 1 },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const query = request.query as { search?: string; page?: number; limit?: number };
+      const search = query.search ? query.search.trim() : '';
+      const page = Math.max(1, query.page ? Number(query.page) : 1);
+      const limit = Math.min(100, Math.max(1, query.limit ? Number(query.limit) : 20));
+      const skip = (page - 1) * limit;
+
+      let total = 0;
+      let users: any[] = [];
+
+      if (search) {
+        const searchPattern = `%${search}%`;
+        const countResult = await fastify.prisma.$queryRaw<[{ count: bigint }]>`
+          SELECT count(*)::bigint AS count
+          FROM users u
+          WHERE u.name ILIKE ${searchPattern} OR u.id ILIKE ${searchPattern}
+        `;
+        total = Number(countResult[0]?.count || 0);
+
+        users = await fastify.prisma.$queryRaw<any[]>`
+          SELECT 
+            u.id,
+            u."publicId",
+            u.name,
+            u.platform,
+            u.kakera,
+            u."createdAt",
+            COALESCE(h.total_harem, 0)::int AS "totalHarem",
+            COALESCE(w.total_wishlist, 0)::int AS "totalWishlist",
+            (COALESCE(h.total_harem, 0) + COALESCE(w.total_wishlist, 0))::int AS "totalScore"
+          FROM users u
+          LEFT JOIN (
+            SELECT "userId", count(*)::int AS total_harem
+            FROM harem_entries
+            GROUP BY "userId"
+          ) h ON h."userId" = u.id
+          LEFT JOIN (
+            SELECT "userId", count(*)::int AS total_wishlist
+            FROM wishlist_entries
+            GROUP BY "userId"
+          ) w ON w."userId" = u.id
+          WHERE u.name ILIKE ${searchPattern} OR u.id ILIKE ${searchPattern}
+          ORDER BY "totalScore" DESC, "totalHarem" DESC, u."createdAt" DESC
+          LIMIT ${limit} OFFSET ${skip}
+        `;
+      } else {
+        const countResult = await fastify.prisma.$queryRaw<[{ count: bigint }]>`
+          SELECT count(*)::bigint AS count
+          FROM users
+        `;
+        total = Number(countResult[0]?.count || 0);
+
+        users = await fastify.prisma.$queryRaw<any[]>`
+          SELECT 
+            u.id,
+            u."publicId",
+            u.name,
+            u.platform,
+            u.kakera,
+            u."createdAt",
+            COALESCE(h.total_harem, 0)::int AS "totalHarem",
+            COALESCE(w.total_wishlist, 0)::int AS "totalWishlist",
+            (COALESCE(h.total_harem, 0) + COALESCE(w.total_wishlist, 0))::int AS "totalScore"
+          FROM users u
+          LEFT JOIN (
+            SELECT "userId", count(*)::int AS total_harem
+            FROM harem_entries
+            GROUP BY "userId"
+          ) h ON h."userId" = u.id
+          LEFT JOIN (
+            SELECT "userId", count(*)::int AS total_wishlist
+            FROM wishlist_entries
+            GROUP BY "userId"
+          ) w ON w."userId" = u.id
+          ORDER BY "totalScore" DESC, "totalHarem" DESC, u."createdAt" DESC
+          LIMIT ${limit} OFFSET ${skip}
+        `;
+      }
+
+      return reply.send({
+        success: true,
+        data: {
+          users: users.map((u) => ({
+            id: u.id,
+            publicId: u.publicId,
+            name: u.name,
+            platform: u.platform,
+            kakera: u.kakera,
+            totalHarem: Number(u.totalHarem) || 0,
+            totalWishlist: Number(u.totalWishlist) || 0,
+            totalScore: Number(u.totalScore) || 0,
+            createdAt: u.createdAt,
+          })),
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1,
+          },
+        },
+      });
+    },
+  });
+
+  /**
+   * Gerar sessão de impersonation do usuário (como se tivesse usado !mu-adm)
+   */
+  fastify.post('/api/admin/users/:userId/session', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Gera link de acesso como se fosse o usuário acessando via !mu-adm',
+      tags: ['Admin (Web)'],
+      params: {
+        type: 'object',
+        required: ['userId'],
+        additionalProperties: false,
+        properties: { userId: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const user = await fastify.prisma.user.findFirst({
+        where: { OR: [{ id: userId }, { publicId: userId }] },
+      });
+
+      if (!user) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' },
+        });
+      }
+
+      const session = await webSessionService.createUserSession(user.id);
+      return reply.send({
+        success: true,
+        data: session,
+      });
+    },
+  });
+
+  /**
+   * Realizar casamento administrativo direto com um usuário
+   */
+  fastify.post('/api/admin/users/:userId/marry', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Realiza casamento administrativo no banco de dados com usuário especificado',
+      tags: ['Admin (Web)'],
+      params: {
+        type: 'object',
+        required: ['userId'],
+        additionalProperties: false,
+        properties: { userId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['characterId'],
+        additionalProperties: false,
+        properties: {
+          characterId: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const { characterId } = request.body as { characterId: string };
+
+      const user = await fastify.prisma.user.findFirst({
+        where: { OR: [{ id: userId }, { publicId: userId }] },
+      });
+
+      if (!user) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' },
+        });
+      }
+
+      const cooldownService = new CooldownService(fastify.redis);
+      const marryService = new MarryService(fastify.prisma, cooldownService, characterService);
+
+      const result = await marryService.adminMarry({
+        userId: user.id,
+        characterId: characterId.trim(),
+        name: user.name,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send(result);
+      }
+
       return reply.send(result);
     },
   });
