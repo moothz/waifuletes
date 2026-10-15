@@ -23,7 +23,7 @@ const envSchema = z.object({
   DAILY_KAKERA_VARIANCE: z.coerce.number().default(150),
 
   COOLDOWN_ROLL_SECONDS: z.coerce.number().default(600), // 10 min
-  COOLDOWN_CLAIM_SECONDS: z.coerce.number().default(10800), // 3 horas
+  COOLDOWN_CLAIM_SECONDS: z.coerce.number().default(7200), // 2 horas
   COOLDOWN_DAILY_SECONDS: z.coerce.number().default(72000), // 20 horas
   CLAIM_LOCK_SECONDS: z.coerce.number().default(300), // 5 min
 

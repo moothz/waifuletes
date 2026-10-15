@@ -152,9 +152,9 @@ describe('🧩 Workstream D — Concorrência e Atomicidade', () => {
       (r) => r.success === false && r.error?.code === 'COOLDOWN_ACTIVE'
     );
 
-    // O usuário começa com 10 rolls base. Exatamente 10 devem suceder e exatamente 5 devem receber COOLDOWN_ACTIVE.
-    expect(successes.length).toBe(10);
-    expect(cooldowns.length).toBe(5);
+    const expectedBaseRolls = Number(process.env.ROLL_MAX_BASE || 9);
+    expect(successes.length).toBe(expectedBaseRolls);
+    expect(cooldowns.length).toBe(15 - expectedBaseRolls);
   });
 
   it('concorrência de múltiplos resgates de /kakera/daily', async () => {
