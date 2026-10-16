@@ -10,7 +10,7 @@ export class HaremService {
   async getUserHarem(userId: string, page = 1, limit = 20, sort: 'keys' | 'date' | 'rarity' = 'keys') {
     const skip = (page - 1) * limit;
 
-    let orderBy: any = [{ isFavorite: 'desc' }, { keys: 'desc' }, { claimedAt: 'desc' }];
+    let orderBy: any = [{ isFavorite: 'desc' }, { keys: 'desc' }, { character: { baseRarity: 'desc' } }, { character: { claimCount: 'desc' } }];
 
     if (sort === 'date') {
       orderBy = [{ isFavorite: 'desc' }, { claimedAt: 'desc' }];
@@ -70,23 +70,48 @@ export class HaremService {
       };
     }
 
-    await this.prisma.$transaction([
-      // Remove o favorito anterior
-      this.prisma.haremEntry.updateMany({
-        where: { userId, isFavorite: true },
-        data: { isFavorite: false },
-      }),
-      // Define o novo favorito
-      this.prisma.haremEntry.update({
+    // Se já é favorita, desmarca (toggle)
+    if (entry.isFavorite) {
+      await this.prisma.haremEntry.update({
         where: { id: entry.id },
-        data: { isFavorite: true },
-      }),
-    ]);
+        data: { isFavorite: false },
+      });
+
+      return {
+        success: true,
+        data: {
+          isFavorite: false,
+          message: `${entry.character.name} foi removida das suas favoritas em destaque. 💔`,
+        },
+      };
+    }
+
+    // Se não é favorita, verifica o limite de 5 favoritas
+    const currentFavoritesCount = await this.prisma.haremEntry.count({
+      where: { userId, isFavorite: true },
+    });
+
+    if (currentFavoritesCount >= 5) {
+      return {
+        success: false,
+        error: {
+          code: 'FAVORITES_LIMIT_REACHED',
+          message: 'Você já possui o limite máximo de 5 waifus favoritas em destaque. Remova uma antes para adicionar outra.',
+        },
+      };
+    }
+
+    await this.prisma.haremEntry.update({
+      where: { id: entry.id },
+      data: { isFavorite: true },
+    });
 
     return {
       success: true,
       data: {
-        message: `${entry.character.name} agora é sua waifu favorita em destaque! 💖`,
+        isFavorite: true,
+        favoritesCount: currentFavoritesCount + 1,
+        message: `${entry.character.name} agora é sua favorita em destaque! 💖 (${currentFavoritesCount + 1}/5)`,
       },
     };
   }

@@ -1,4 +1,4 @@
-// js/api.js - Utilitários de API e Notificações Toast para o Waifuletes
+// js/api.js - Utilitários de API, Tema e Notificações Toast para o Waifuletes
 
 const Api = {
   async get(url, headers = {}) {
@@ -76,5 +76,57 @@ const Api = {
     document.execCommand('copy');
     document.body.removeChild(textArea);
     this.showToast(successMsg, '📋');
+  },
+
+  initTheme() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const themeParam = urlParams.get('theme') || urlParams.get('dark');
+    const isDarkParam = themeParam === 'dark' || themeParam === 'true' || themeParam === '1';
+    const savedTheme = localStorage.getItem('waifu_theme');
+
+    if (isDarkParam || savedTheme === 'dark') {
+      document.body.classList.add('dark-mode');
+    }
+
+    const themeBtn = document.getElementById('btn-toggle-theme');
+    if (themeBtn) {
+      this.updateThemeButton(themeBtn);
+      themeBtn.addEventListener('click', () => this.toggleTheme());
+    }
+  },
+
+  updateThemeButton(btn) {
+    if (!btn) return;
+    const isDark = document.body.classList.contains('dark-mode');
+    btn.innerHTML = isDark
+      ? '<i class="fas fa-sun"></i> Claro'
+      : '<i class="fas fa-moon"></i> Dark';
+    btn.title = isDark ? 'Alternar para tema claro' : 'Alternar para tema escuro (roxo)';
+  },
+
+  toggleTheme() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    localStorage.setItem('waifu_theme', isDark ? 'dark' : 'light');
+    const themeBtn = document.getElementById('btn-toggle-theme');
+    if (themeBtn) {
+      this.updateThemeButton(themeBtn);
+    }
+    this.showToast(isDark ? 'Modo Escuro (Roxo) ativado!' : 'Modo Claro ativado!', isDark ? '🌙' : '☀️');
+  },
+
+  getShareUrl(baseUrl) {
+    if (!baseUrl) baseUrl = window.location.href;
+    const url = new URL(baseUrl, window.location.origin);
+    if (document.body.classList.contains('dark-mode')) {
+      url.searchParams.set('theme', 'dark');
+    } else {
+      url.searchParams.delete('theme');
+      url.searchParams.delete('dark');
+    }
+    return url.toString();
   }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+  Api.initTheme();
+});

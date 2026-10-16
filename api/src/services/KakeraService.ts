@@ -60,11 +60,17 @@ export class KakeraService {
     };
     const bonusPercent = streakBonusMap[currentStreak] ?? 0;
 
-    // Calcula recompensa diária com variância e bônus de streak
+    // Calcula recompensa diária com variância, bônus de streak e bônus da wishlist
     const variance = (Math.random() * 2 - 1) * config.DAILY_KAKERA_VARIANCE;
     const baseAmount = Math.max(100, Math.round(config.DAILY_KAKERA_AMOUNT + variance));
     const streakBonusAmount = Math.round(baseAmount * (bonusPercent / 100));
-    const amount = baseAmount + streakBonusAmount;
+
+    // Bônus proporcional da Wishlist: cada item na wishlist adiciona 1/1000 (+0.1%), dobrando o valor ao atingir 1000 itens (2.0x)
+    const wishlistCount = await this.prisma.wishlistEntry.count({ where: { userId } });
+    const wishlistMultiplier = Math.min(2.0, 1 + wishlistCount / 1000);
+    const wishlistBonusAmount = Math.round(baseAmount * (wishlistCount / 1000));
+
+    const amount = baseAmount + streakBonusAmount + wishlistBonusAmount;
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -85,6 +91,9 @@ export class KakeraService {
               baseAmount,
               streakBonusAmount,
               bonusPercent,
+              wishlistCount,
+              wishlistMultiplier,
+              wishlistBonusAmount,
             },
           },
         });
@@ -93,6 +102,14 @@ export class KakeraService {
       });
 
       const nextDailyAt = new Date(Date.now() + config.COOLDOWN_DAILY_SECONDS * 1000);
+
+      let msg = currentStreak > 1
+        ? `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! 🔥 Sequência Diária: Dia ${currentStreak}/7 (+${bonusPercent}% bônus)!`
+        : `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! Volte amanhã para manter sua sequência!`;
+
+      if (wishlistBonusAmount > 0) {
+        msg += ` 🌟 (+${wishlistBonusAmount} de Bônus Wishlist: ${wishlistCount}/1000)`;
+      }
 
       return {
         success: true,
@@ -105,13 +122,16 @@ export class KakeraService {
             bonusAmount: streakBonusAmount,
             maxStreak: 7,
           },
+          wishlist: {
+            count: wishlistCount,
+            bonusAmount: wishlistBonusAmount,
+            multiplier: wishlistMultiplier,
+          },
           currency: config.CURRENCY_NAME,
           currencyEmoji: config.CURRENCY_EMOJI,
           newBalance: result.kakera,
           nextDailyAt,
-          message: currentStreak > 1
-            ? `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! 🔥 Sequência Diária: Dia ${currentStreak}/7 (+${bonusPercent}% bônus)!`
-            : `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! Volte amanhã para manter sua sequência!`,
+          message: msg,
         },
       };
     } catch (err) {

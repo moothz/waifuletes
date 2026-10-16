@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Waifuletes ✨ Catálogo & Harém Retrô</title>
-  <link rel="stylesheet" href="/css/retro-theme.css">
+  <link rel="stylesheet" href="/css/retro-theme.css?v=20261015-2">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -20,6 +20,9 @@
         </div>
       </a>
       <div class="header-actions">
+        <button id="btn-toggle-theme" class="btn-retro btn-sm" title="Alternar tema">
+          <i class="fas fa-moon"></i> Dark
+        </button>
         <a id="btn-whatsapp-ravena" href="#" target="_blank" rel="noopener noreferrer" class="btn-retro btn-sm btn-gold" title="Envie !mu-adm para uma Ravena">
           <i class="fab fa-whatsapp"></i> Acesse seu painel pessoal enviando <b>!mu-adm</b> para uma ravena
         </a>
@@ -36,81 +39,146 @@
       <p class="hero-subtitle" style="font-size: 13px; margin-top: 6px;">Você pode sugerir novos personagens, modificações, salvar seus favoritos e mais usando o comando <b>!mu-adm</b> na ravena</p>
     </section>
 
-    <!-- Barra de Pesquisa & Filtros Centralizados -->
-    <section class="search-panel">
-      <div class="search-input-group">
-        <i class="fas fa-search"></i>
-        <input type="text" id="search-input" class="retro-input" placeholder="Pesquisar por nome de personagem ou série..." autocomplete="off">
-      </div>
+    <!-- Abas da Página Inicial -->
+    <div class="retro-tabs">
+      <button class="retro-tab active" data-tab="tab-catalog">
+        <i class="fas fa-venus-mars"></i> Waifus e Husbandos
+      </button>
+      <button class="retro-tab" data-tab="tab-rankings">
+        <i class="fas fa-trophy"></i> Rankings
+      </button>
+    </div>
 
-      <div class="filters-row">
-        <!-- Gênero -->
-        <div class="filter-group">
-          <span><i class="fas fa-venus-mars"></i> Gênero:</span>
-          <div class="pill-group" id="gender-pills">
-            <button class="retro-pill active" data-gender="">Todos</button>
-            <button class="retro-pill" data-gender="FEMALE">Feminino</button>
-            <button class="retro-pill" data-gender="MALE">Masculino</button>
+    <!-- Aba 1: Waifus e Husbandos (Catálogo Atual) -->
+    <div class="tab-content" id="tab-catalog">
+      <!-- Barra de Pesquisa & Filtros Centralizados -->
+      <section class="search-panel">
+        <div class="search-input-group">
+          <i class="fas fa-search"></i>
+          <input type="text" id="search-input" class="retro-input" placeholder="Pesquisar por nome de personagem ou série..." autocomplete="off">
+        </div>
+
+        <div class="filters-row">
+          <!-- Gênero -->
+          <div class="filter-group">
+            <span><i class="fas fa-venus-mars"></i> Gênero:</span>
+            <div class="pill-group" id="gender-pills">
+              <button class="retro-pill active" data-gender="">Todos</button>
+              <button class="retro-pill" data-gender="FEMALE">Feminino</button>
+              <button class="retro-pill" data-gender="MALE">Masculino</button>
+            </div>
+          </div>
+
+          <!-- Estado Civil -->
+          <div class="filter-group">
+            <span><i class="fas fa-ring"></i> Estado:</span>
+            <div class="pill-group" id="marital-pills">
+              <button class="retro-pill active" data-status="">Todos</button>
+              <button class="retro-pill" data-status="single">Solteiros</button>
+              <button class="retro-pill" data-status="married">💍 Casados</button>
+            </div>
+          </div>
+
+          <!-- Raridade -->
+          <div class="filter-group">
+            <span><i class="fas fa-gem"></i> Raridade:</span>
+            <select id="rarity-select" class="retro-select">
+              <option value="">Todas</option>
+              <option value="LEGENDARY">⭐ Lendário</option>
+              <option value="EPIC">🟣 Épico</option>
+              <option value="RARE">🔵 Raro</option>
+              <option value="UNCOMMON">🟢 Incomum</option>
+              <option value="COMMON">⚪ Comum</option>
+            </select>
+          </div>
+
+          <!-- Ordem -->
+          <div class="filter-group">
+            <span><i class="fas fa-sort"></i> Ordem:</span>
+            <select id="sort-select" class="retro-select">
+              <option value="ranking">Popularidade (Ranking)</option>
+              <option value="rarity">Raridade</option>
+              <option value="wishlist">Mais Desejados (Wishlist)</option>
+              <option value="name">Nome (A-Z)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Grid de Personagens -->
+      <main>
+        <div id="waifu-grid" class="waifu-grid">
+          <div style="grid-column: 1 / -1; text-align: center; padding: 40px; font-weight: bold;">
+            <i class="fas fa-spinner fa-spin"></i> Carregando catálogo retrô de waifus...
           </div>
         </div>
 
-        <!-- Estado Civil -->
-        <div class="filter-group">
-          <span><i class="fas fa-ring"></i> Estado:</span>
-          <div class="pill-group" id="marital-pills">
-            <button class="retro-pill active" data-status="">Todos</button>
-            <button class="retro-pill" data-status="single">Solteiros</button>
-            <button class="retro-pill" data-status="married">💍 Casados</button>
+        <!-- Barra de Paginação -->
+        <div class="pagination-bar" id="pagination-bar">
+          <div class="page-info">
+            <span id="total-count">0 personagens encontrados</span>
+          </div>
+          <div class="page-controls">
+            <button class="btn-retro btn-sm" id="btn-first" disabled><i class="fas fa-angle-double-left"></i></button>
+            <button class="btn-retro btn-sm" id="btn-prev" disabled><i class="fas fa-angle-left"></i> Anterior</button>
+            <span class="page-indicator" id="page-indicator">1 / 1</span>
+            <button class="btn-retro btn-sm" id="btn-next" disabled>Próxima <i class="fas fa-angle-right"></i></button>
+            <button class="btn-retro btn-sm" id="btn-last" disabled><i class="fas fa-angle-double-right"></i></button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Aba 2: Rankings em 2 Colunas (Zinthos e Waifus) -->
+    <div class="tab-content hidden" id="tab-rankings">
+      <div class="rankings-grid">
+        <!-- Coluna 1: Ranking por Zinthos -->
+        <div class="ranking-column">
+          <div class="ranking-header">
+            <i class="fas fa-coins" style="color: #9333ea;"></i>
+            <span>Mais Ricos em Zinthos</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="retro-table" id="table-ranking-zinthos">
+              <thead>
+                <tr style="background: var(--bg-retro-accent);">
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th>Jogador</th>
+                  <th style="text-align: right;">Saldo Zinthos</th>
+                  <th style="text-align: center;">Harém</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ranking-zinthos">
+                <tr><td colspan="4" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Carregando ranking...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <!-- Raridade -->
-        <div class="filter-group">
-          <span><i class="fas fa-gem"></i> Raridade:</span>
-          <select id="rarity-select" class="retro-select">
-            <option value="">Todas</option>
-            <option value="LEGENDARY">⭐ Lendário</option>
-            <option value="EPIC">🟣 Épico</option>
-            <option value="RARE">🔵 Raro</option>
-            <option value="UNCOMMON">🟢 Incomum</option>
-            <option value="COMMON">⚪ Comum</option>
-          </select>
-        </div>
-
-        <!-- Ordem -->
-        <div class="filter-group">
-          <span><i class="fas fa-sort"></i> Ordem:</span>
-          <select id="sort-select" class="retro-select">
-            <option value="ranking">Popularidade (Ranking)</option>
-            <option value="name">Nome (A-Z)</option>
-          </select>
-        </div>
-      </div>
-    </section>
-
-    <!-- Grid de Personagens -->
-    <main>
-      <div id="waifu-grid" class="waifu-grid">
-        <!-- Preenchido via home.js -->
-        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; font-weight: bold;">
-          <i class="fas fa-spinner fa-spin"></i> Carregando catálogo retrô de waifus...
+        <!-- Coluna 2: Ranking por Waifus -->
+        <div class="ranking-column">
+          <div class="ranking-header">
+            <i class="fas fa-ring" style="color: #e11d48;"></i>
+            <span>Maiores Haréns (Por Waifus)</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="retro-table" id="table-ranking-waifus">
+              <thead>
+                <tr style="background: var(--bg-retro-accent);">
+                  <th style="width: 45px; text-align: center;">#</th>
+                  <th>Jogador</th>
+                  <th style="text-align: center;">Waifus Casadas</th>
+                  <th style="text-align: right;">Pontos Coleção</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ranking-waifus">
+                <tr><td colspan="4" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Carregando ranking...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      <!-- Barra de Paginação -->
-      <div class="pagination-bar" id="pagination-bar">
-        <div class="page-info">
-          <span id="total-count">0 personagens encontrados</span>
-        </div>
-        <div class="page-controls">
-          <button class="btn-retro btn-sm" id="btn-first" disabled><i class="fas fa-angle-double-left"></i></button>
-          <button class="btn-retro btn-sm" id="btn-prev" disabled><i class="fas fa-angle-left"></i> Anterior</button>
-          <span class="page-indicator" id="page-indicator">1 / 1</span>
-          <button class="btn-retro btn-sm" id="btn-next" disabled>Próxima <i class="fas fa-angle-right"></i></button>
-          <button class="btn-retro btn-sm" id="btn-last" disabled><i class="fas fa-angle-double-right"></i></button>
-        </div>
-      </div>
-    </main>
+    </div>
 
     <!-- Rodapé Retrô -->
     <footer class="retro-footer">
@@ -118,10 +186,36 @@
     </footer>
   </div>
 
+  <!-- Modal de Denúncia (🔞) -->
+  <div class="modal-overlay hidden" id="modal-report">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">🔞 Denunciar Personagem</span>
+        <button class="modal-close" onclick="closeModal('modal-report')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-weight: 700; margin-bottom: 8px;">
+          Deseja denunciar <span id="report-char-name" style="color: #e11d48;"></span> para moderação e exclusão?
+        </p>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+          Esta denúncia será encaminhada automaticamente para a equipe de moderação e para o canal do Telegram com solicitação de remoção.
+        </p>
+        <div class="form-group">
+          <label class="retro-label">Motivo da denúncia (opcional):</label>
+          <textarea id="report-reason" class="retro-textarea" rows="3" placeholder="Ex: Personagem menor de idade, conteúdo inadequado, foto ofensiva..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-report')">Cancelar</button>
+        <button class="btn-retro btn-sm btn-danger" id="btn-confirm-report">Confirmar Denúncia 🔞</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast de Notificação -->
   <div id="retro-toast" class="retro-toast hidden"></div>
 
-  <script src="/js/api.js"></script>
-  <script src="/js/home.js"></script>
+  <script src="/js/api.js?v=20261015-2"></script>
+  <script src="/js/home.js?v=20261015-2"></script>
 </body>
 </html>

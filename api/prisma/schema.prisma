@@ -200,6 +200,8 @@ model GroupDisabledSeries {
 enum SuggestionType {
   RARITY
   IMAGE
+  NEW_CHARACTER
+  DELETE_CHARACTER
 }
 
 enum SuggestionStatus {
@@ -210,10 +212,13 @@ enum SuggestionStatus {
 
 model CharacterSuggestion {
   id              String           @id @default(cuid())
-  characterId     String
-  userId          String
+  characterId     String?
+  userId          String?
   type            SuggestionType
   status          SuggestionStatus @default(PENDING)
+  characterName   String?
+  series          String?
+  description     String?
   currentRarity   Rarity?
   suggestedRarity Rarity?
   reason          String?
@@ -224,8 +229,8 @@ model CharacterSuggestion {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  character       Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character       Character?       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt(sort: Desc)])
   @@index([characterId])

@@ -13,6 +13,7 @@ export interface CharacterFilter {
   page?: number;
   limit?: number;
   maritalStatus?: 'all' | 'single' | 'married' | string;
+  sort?: string;
 }
 
 export function slugify(text: string): string {
@@ -98,6 +99,15 @@ export class CharacterService {
       where.haremEntries = { none: {} };
     }
 
+    let orderBy: any = [{ claimCount: 'desc' }, { likeCount: 'desc' }, { name: 'asc' }];
+    if (filter.sort === 'name') {
+      orderBy = [{ name: 'asc' }];
+    } else if (filter.sort === 'rarity') {
+      orderBy = [{ baseRarity: 'desc' }, { claimCount: 'desc' }, { name: 'asc' }];
+    } else if (filter.sort === 'wishlist') {
+      orderBy = [{ wishlists: { _count: 'desc' } }, { claimCount: 'desc' }, { name: 'asc' }];
+    }
+
     const [total, characters] = await Promise.all([
       this.prisma.character.count({ where }),
       this.prisma.character.findMany({
@@ -114,12 +124,12 @@ export class CharacterService {
             take: 1,
             include: {
               user: {
-                select: { id: true, name: true, platform: true },
+                select: { id: true, publicId: true, name: true, platform: true },
               },
             },
           },
         },
-        orderBy: [{ claimCount: 'desc' }, { likeCount: 'desc' }, { name: 'asc' }],
+        orderBy,
       }),
     ]);
 
@@ -134,7 +144,7 @@ export class CharacterService {
         if (rawOwner) {
           owner = isTrusted
             ? rawOwner
-            : { name: rawOwner.name };
+            : { name: rawOwner.name, publicId: rawOwner.publicId };
         }
 
         const { haremEntries, ...charRest } = c;

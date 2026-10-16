@@ -329,7 +329,12 @@ export class RollService {
       else if (chosen.baseRarity === 'EPIC') rarityBonus = 100;
       else if (chosen.baseRarity === 'LEGENDARY') rarityBonus = 250;
 
-      const totalScrap = scrapRandom + scrapRollBonus + rarityBonus;
+      const baseScrap = scrapRandom + scrapRollBonus + rarityBonus;
+      // Bônus proporcional da Wishlist: cada item na wishlist adiciona 1/1000 (+0.1%), dobrando o valor ao atingir 1000 itens (2.0x)
+      const wishlistCount = wishlistRecords.length;
+      const wishlistMultiplier = Math.min(2.0, 1 + wishlistCount / 1000);
+      const totalScrap = Math.round(baseScrap * wishlistMultiplier);
+      const wishlistScrapBonus = totalScrap - baseScrap;
 
       await this.prisma.$transaction(async (tx) => {
         await tx.user.update({
@@ -345,9 +350,13 @@ export class RollService {
             metadata: {
               characterId: chosen.id,
               rarity: chosen.baseRarity,
+              baseScrap,
               scrapRandom,
               scrapRollBonus,
               rarityBonus,
+              wishlistCount,
+              wishlistMultiplier,
+              wishlistScrapBonus,
               availableRolls: rollsState.availableRolls,
             },
           },
@@ -386,9 +395,13 @@ export class RollService {
           kakeraValue: kakeraCrystalValue,
           rollReward: {
             totalScrap,
+            baseScrap,
             scrapRandom,
             scrapRollBonus,
             rarityBonus,
+            wishlistBonus: wishlistScrapBonus,
+            wishlistCount,
+            wishlistMultiplier,
           },
           lockExpiresAt,
           nextRollAt,

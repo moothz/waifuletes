@@ -12,21 +12,94 @@ export class WishlistService {
     const entries = await this.prisma.wishlistEntry.findMany({
       where: { userId },
       include: {
-        character: true,
+        character: {
+          include: {
+            haremEntries: {
+              take: 1,
+              include: {
+                user: {
+                  select: { id: true, name: true, publicId: true },
+                },
+              },
+            },
+          },
+        },
       },
       orderBy: [{ isStarWish: 'desc' }, { addedAt: 'desc' }],
     });
 
-    return entries.map((entry) => ({
-      id: entry.id,
-      isStarWish: entry.isStarWish,
-      addedAt: entry.addedAt,
-      character: {
-        ...entry.character,
-        imageUrl: this.characterService.getRandomImageUrl(entry.character.id, entry.character.imageUrls),
-        imageUrls: entry.character.imageUrls.map((img) => this.characterService.formatImageUrl(entry.character.id, img)),
+    return entries.map((entry) => {
+      const haremEntry = entry.character.haremEntries?.[0];
+      const isMarried = Boolean(haremEntry);
+      const marriedTo = haremEntry?.user?.name || null;
+      const marriedToPublicId = haremEntry?.user?.publicId || null;
+
+      const { haremEntries, ...charRest } = entry.character;
+
+      return {
+        id: entry.id,
+        isStarWish: entry.isStarWish,
+        addedAt: entry.addedAt,
+        isMarried,
+        marriedTo,
+        marriedToPublicId,
+        character: {
+          ...charRest,
+          imageUrl: this.characterService.getRandomImageUrl(entry.character.id, entry.character.imageUrls),
+          imageUrls: entry.character.imageUrls.map((img) => this.characterService.formatImageUrl(entry.character.id, img)),
+          isMarried,
+          marriedTo,
+          marriedToPublicId,
+        },
+      };
+    });
+  }
+
+  async clearMarried(userId: string) {
+    const marriedEntries = await this.prisma.wishlistEntry.findMany({
+      where: {
+        userId,
+        character: {
+          haremEntries: {
+            some: {},
+          },
+        },
       },
-    }));
+      include: {
+        character: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+
+    if (marriedEntries.length === 0) {
+      return {
+        success: true,
+        data: {
+          removedCount: 0,
+          removedCharacters: [],
+          message: 'Nenhuma personagem casada foi encontrada na sua Wishlist.',
+        },
+      };
+    }
+
+    const idsToDelete = marriedEntries.map((e) => e.id);
+    const removedCharacters = marriedEntries.map((e) => e.character.name);
+
+    await this.prisma.wishlistEntry.deleteMany({
+      where: {
+        id: { in: idsToDelete },
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        removedCount: idsToDelete.length,
+        removedCharacters,
+        message: `${idsToDelete.length} personagem(ns) casada(s) foram removida(s) da sua Wishlist com sucesso!`,
+      },
+    };
   }
 
   async addToWishlist(userId: string, characterId: string, isStarWish = false) {

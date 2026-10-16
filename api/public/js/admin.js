@@ -16,6 +16,8 @@ const catalogState = {
   search: '',
   rarity: '',
   gender: '',
+  maritalStatus: '',
+  sort: 'ranking',
   page: 1,
   limit: 18,
   total: 0,
@@ -45,6 +47,21 @@ function setupAdminEvents() {
 
   // Logout button
   document.getElementById('btn-admin-logout').addEventListener('click', handleAdminLogout);
+
+  // Theme toggle
+  const themeToggle = document.getElementById('btn-theme-toggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      Api.toggleTheme();
+    });
+  }
+  Api.initTheme();
+
+  // Aprovar todas sugestões
+  const btnApproveAll = document.getElementById('btn-approve-all-suggestions');
+  if (btnApproveAll) {
+    btnApproveAll.addEventListener('click', approveAllSuggestions);
+  }
 
   // Navegação por abas
   const tabs = document.querySelectorAll('.retro-tabs .retro-tab[data-tab]');
@@ -108,6 +125,26 @@ function setupAdminEvents() {
       loadAdminCatalog();
     });
   });
+
+  const adminMaritalPills = document.querySelectorAll('#admin-marital-pills .retro-pill');
+  adminMaritalPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      adminMaritalPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      catalogState.maritalStatus = pill.dataset.status;
+      catalogState.page = 1;
+      loadAdminCatalog();
+    });
+  });
+
+  const adminSortSelect = document.getElementById('admin-sort-select');
+  if (adminSortSelect) {
+    adminSortSelect.addEventListener('change', () => {
+      catalogState.sort = adminSortSelect.value;
+      catalogState.page = 1;
+      loadAdminCatalog();
+    });
+  }
 
   // Paginação admin
   document.getElementById('admin-btn-prev').addEventListener('click', () => {
@@ -289,6 +326,8 @@ async function loadAdminCatalog() {
   if (catalogState.search) params.append('search', catalogState.search);
   if (catalogState.rarity) params.append('rarity', catalogState.rarity);
   if (catalogState.gender) params.append('gender', catalogState.gender);
+  if (catalogState.maritalStatus) params.append('maritalStatus', catalogState.maritalStatus);
+  if (catalogState.sort) params.append('sort', catalogState.sort);
 
   try {
     const res = await Api.get(`/characters?${params.toString()}`);
@@ -310,10 +349,12 @@ async function loadAdminCatalog() {
     }
 
     characters.forEach(char => {
-      const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
+      const rarityKey = char.baseRarity || 'COMMON';
+      const rarity = RARITY_CONFIG[rarityKey] || RARITY_CONFIG.COMMON;
       const card = document.createElement('div');
-      card.className = 'waifu-card';
+      card.className = `waifu-card rarity-${rarityKey.toLowerCase()}`;
       card.id = `admin-card-${char.id}`;
+      card.style.borderColor = rarityKey === 'COMMON' ? '#000000' : rarity.color;
 
       card.innerHTML = `
         <div class="card-img-wrapper">
@@ -508,16 +549,73 @@ function createSuggestionItem(s) {
         </div>
       </div>
     `;
+  } else if (s.type === 'NEW_CHARACTER') {
+    bodyContent = `
+      <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
+        <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+          ${s.imageUrl ? `
+            <div>
+              <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Sugerida:</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #22c55e; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
+                <img src="${s.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;">
+              </div>
+            </div>
+          ` : ''}
+          <div style="flex: 1; min-width: 200px;">
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+              <span class="badge-rarity" style="position: static; border-color: ${suggestedRarity.color}; color: ${suggestedRarity.color};">
+                ${suggestedRarity.emoji} ${suggestedRarity.label}
+              </span>
+              <span style="font-weight: 800; font-size: 15px;">${escapeHtml(s.characterName || 'Sem nome')}</span>
+              <span style="font-size: 12px; color: #64748b;">(${escapeHtml(s.series || 'Sem série')})</span>
+            </div>
+            ${s.description ? `<p style="font-size: 12px; color: #475569; margin-bottom: 6px;"><strong>Descrição:</strong> ${escapeHtml(s.description)}</p>` : ''}
+            <p style="font-size: 12px; color: #475569;"><strong>Motivo do Usuário:</strong> <em>"${escapeHtml(s.reason || 'Sem motivo informado')}"</em></p>
+            <div style="margin-top: 8px; font-size: 12px; color: #16a34a; font-weight: bold; background: #f0fdf4; padding: 6px 10px; border-radius: 4px; border: 1px solid #bbf7d0;">
+              ✨ Ao aceitar, o personagem será adicionado ao catálogo oficial e adicionado na Wishlist do autor automaticamente (se houver vaga).
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (s.type === 'DELETE_CHARACTER') {
+    bodyContent = `
+      <div style="margin: 10px 0; background: #fef2f2; border: 1.5px solid #ef4444; border-radius: 6px; padding: 12px;">
+        <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+          <div>
+            <div style="width: 80px; aspect-ratio: 9/14; border: 1.5px solid #2d241e; border-radius: 4px; overflow: hidden;">
+              <img src="${char.imageUrl || '/media/characters/default.jpg'}" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 200px;">
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+              <span style="background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">🔞 DENÚNCIA / EXCLUSÃO</span>
+              <strong style="font-size: 15px;">${escapeHtml(char.name || s.characterName || 'Personagem')}</strong>
+            </div>
+            <p style="font-size: 13px; color: #991b1b; font-weight: 600; margin-top: 4px;">
+              <strong>Motivo da Denúncia:</strong> <em>"${escapeHtml(s.reason || 'Conteúdo impróprio / pedido de exclusão.')}"</em>
+            </p>
+            <div style="margin-top: 8px; font-size: 12px; color: #b91c1c; font-weight: bold; background: #fee2e2; padding: 6px 10px; border-radius: 4px; border: 1px solid #fca5a5;">
+              ⚠️ Ao aceitar, o personagem será excluído permanentemente do jogo, haréns e wishlists.
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
+
+  const charTitle = s.type === 'NEW_CHARACTER' ? (s.characterName || 'Novo Personagem') : (char.name || 'Personagem');
+  const charSeries = s.type === 'NEW_CHARACTER' ? (s.series || 'Sem série') : (char.series || 'Sem série');
+  const userName = user.name || (s.type === 'DELETE_CHARACTER' ? 'Denúncia Pública / Jogador' : 'Jogador');
 
   card.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px;">
       <div>
-        <strong style="font-size: 15px;">${char.name || 'Personagem'}</strong>
-        <span style="font-size: 12px; color: #64748b; margin-left: 6px;">(${char.series || 'Sem série'})</span>
+        <strong style="font-size: 15px;">${escapeHtml(charTitle)}</strong>
+        <span style="font-size: 12px; color: #64748b; margin-left: 6px;">(${escapeHtml(charSeries)})</span>
       </div>
       <div style="font-size: 12px; font-weight: 700;">
-        Sugerido por: <strong>${user.name || 'Jogador'}</strong> em ${new Date(s.createdAt).toLocaleDateString('pt-BR')}
+        Sugerido por: <strong>${escapeHtml(userName)}</strong> em ${new Date(s.createdAt).toLocaleDateString('pt-BR')}
       </div>
     </div>
 
@@ -540,6 +638,27 @@ function createSuggestionItem(s) {
   `;
 
   return card;
+}
+
+async function approveAllSuggestions() {
+  if (!confirm('Deseja aceitar e aplicar TODAS as sugestões pendentes agora?')) return;
+
+  try {
+    const res = await Api.post('/api/admin/suggestions/approve-all', {}, {
+      'Authorization': `Bearer ${adminToken}`
+    });
+
+    if (!res.success) {
+      Api.showToast(res.error?.message || 'Falha ao aprovar sugestões.', '❌');
+      return;
+    }
+
+    Api.showToast(res.data?.message || 'Todas as sugestões foram aceitas e aplicadas!', '✅');
+    loadSuggestions();
+  } catch (err) {
+    console.error('Erro ao aprovar todas as sugestões:', err);
+    Api.showToast('Erro de comunicação com o servidor.', '❌');
+  }
 }
 
 async function approveSuggestion(suggestionId) {

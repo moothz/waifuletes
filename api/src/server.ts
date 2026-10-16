@@ -22,6 +22,7 @@ import { publicLeaderboardRoutes } from './routes/public/leaderboard.js';
 // Rotas web públicas e administrativas
 import { userWebRoutes } from './routes/web/userWebRoutes.js';
 import { adminWebRoutes } from './routes/web/adminWebRoutes.js';
+import { telegramRoutes } from './routes/web/telegramRoutes.js';
 
 // Rotas privadas
 import { privateUserRoutes } from './routes/private/user.js';
@@ -244,6 +245,7 @@ async function buildServer() {
   // Registro de rotas web do usuário e moderação de admin
   await fastify.register(userWebRoutes);
   await fastify.register(adminWebRoutes);
+  await fastify.register(telegramRoutes);
 
   // Registro de rotas privadas do bot
   await fastify.register(privateUserRoutes);
@@ -261,6 +263,17 @@ async function buildServer() {
 async function start() {
   try {
     const server = await buildServer();
+
+    // Registra webhook do Telegram se configurado e URL pública válida
+    try {
+      const { TelegramNotificationService } = await import('./services/TelegramNotificationService.js');
+      const telegramService = new TelegramNotificationService();
+      if (telegramService.isConfigured && config.PUBLIC_BASE_URL.startsWith('https://')) {
+        await telegramService.registerWebhook(config.PUBLIC_BASE_URL);
+      }
+    } catch (tgErr: any) {
+      server.log.warn({ err: tgErr.message }, 'Falha ao registrar webhook inicial do Telegram');
+    }
 
     // Encerramento gracioso
     const closeSignals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];

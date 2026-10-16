@@ -19,6 +19,8 @@ lerna-debug.log*
 # Mídias e Arquivos Oficiais Locais
 media/characters
 media/characters/*
+media/suggestions/*
+media/uploads/*
 media/manifests/*
 !media/manifests/.gitkeep
 !media/manifests/*.example.json

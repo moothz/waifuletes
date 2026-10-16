@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel de Administração • Waifuletes ✨</title>
-  <link rel="stylesheet" href="/css/retro-theme.css">
+  <link rel="stylesheet" href="/css/retro-theme.css?v=20261015-2">
   <link rel="stylesheet" href="/vendor/cropper.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -21,6 +21,7 @@
         </div>
       </a>
       <div class="header-actions">
+        <button id="btn-theme-toggle" class="btn-retro btn-sm" title="Alternar Modo Escuro">🌓</button>
         <a href="/" class="btn-retro btn-sm">
           <i class="fas fa-eye"></i> Ver Site
         </a>
@@ -69,8 +70,29 @@
             <input type="text" id="admin-search-input" class="retro-input" placeholder="Pesquisar personagem para editar...">
           </div>
           <div class="filters-row">
+            <!-- Gênero -->
             <div class="filter-group">
-              <span>Raridade:</span>
+              <span><i class="fas fa-venus-mars"></i> Gênero:</span>
+              <div class="pill-group" id="admin-gender-pills">
+                <button class="retro-pill active" data-gender="">Todos</button>
+                <button class="retro-pill" data-gender="FEMALE">Feminino</button>
+                <button class="retro-pill" data-gender="MALE">Masculino</button>
+              </div>
+            </div>
+
+            <!-- Estado Civil -->
+            <div class="filter-group">
+              <span><i class="fas fa-ring"></i> Estado:</span>
+              <div class="pill-group" id="admin-marital-pills">
+                <button class="retro-pill active" data-status="">Todos</button>
+                <button class="retro-pill" data-status="single">Solteiros</button>
+                <button class="retro-pill" data-status="married">💍 Casados</button>
+              </div>
+            </div>
+
+            <!-- Raridade -->
+            <div class="filter-group">
+              <span><i class="fas fa-gem"></i> Raridade:</span>
               <select id="admin-rarity-select" class="retro-select">
                 <option value="">Todas</option>
                 <option value="LEGENDARY">⭐ Lendário</option>
@@ -80,13 +102,16 @@
                 <option value="COMMON">⚪ Comum</option>
               </select>
             </div>
+
+            <!-- Ordem -->
             <div class="filter-group">
-              <span>Gênero:</span>
-              <div class="pill-group" id="admin-gender-pills">
-                <button class="retro-pill active" data-gender="">Todos</button>
-                <button class="retro-pill" data-gender="FEMALE">Feminino</button>
-                <button class="retro-pill" data-gender="MALE">Masculino</button>
-              </div>
+              <span><i class="fas fa-sort"></i> Ordem:</span>
+              <select id="admin-sort-select" class="retro-select">
+                <option value="ranking">Popularidade (Ranking)</option>
+                <option value="rarity">Raridade</option>
+                <option value="wishlist">Mais Desejados (Wishlist)</option>
+                <option value="name">Nome (A-Z)</option>
+              </select>
             </div>
           </div>
         </div>
@@ -106,14 +131,19 @@
 
       <!-- Aba 2: Moderação de Sugestões -->
       <div class="tab-content hidden" id="tab-suggestions">
-        <div style="margin-bottom: 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          <span style="font-weight: 700; font-size: 14px;">Filtrar por Status:</span>
-          <div class="pill-group" id="suggestion-filter-pills">
-            <button class="retro-pill active" data-status="PENDING">Pendentes</button>
-            <button class="retro-pill" data-status="APPROVED">Aprovadas</button>
-            <button class="retro-pill" data-status="REJECTED">Recusadas</button>
-            <button class="retro-pill" data-status="all">Todas</button>
+        <div style="margin-bottom: 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <span style="font-weight: 700; font-size: 14px;">Filtrar por Status:</span>
+            <div class="pill-group" id="suggestion-filter-pills">
+              <button class="retro-pill active" data-status="PENDING">Pendentes</button>
+              <button class="retro-pill" data-status="APPROVED">Aprovadas</button>
+              <button class="retro-pill" data-status="REJECTED">Recusadas</button>
+              <button class="retro-pill" data-status="all">Todas</button>
+            </div>
           </div>
+          <button class="btn-retro btn-sm btn-gold" id="btn-approve-all-suggestions" style="font-weight: 800;">
+            <i class="fas fa-check-double"></i> Aceitar e Aplicar Todos
+          </button>
         </div>
 
         <div id="suggestions-list" style="display: flex; flex-direction: column; gap: 14px;"></div>
@@ -259,7 +289,7 @@
   <div id="retro-toast" class="retro-toast hidden"></div>
 
   <script src="/vendor/cropper.min.js"></script>
-  <script src="/js/api.js"></script>
-  <script src="/js/admin.js"></script>
+  <script src="/js/api.js?v=20261015-2"></script>
+  <script src="/js/admin.js?v=20261015-2"></script>
 </body>
 </html>

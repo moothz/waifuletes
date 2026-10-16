@@ -49,6 +49,91 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ========================================================
+   DARK MODE (Amarelos viram Roxos Vintage e Alto Contraste)
+   ======================================================== */
+body.dark-mode {
+  --bg-retro: #120d1e;
+  --bg-retro-accent: #27163f;
+  --bg-card: #1f1333;
+  --bg-card-subtle: #170d26;
+  --text-main: #f5f3ff;
+  --text-muted: #d8b4fe;
+  --border-retro: 2px solid #9333ea;
+  --shadow-retro: 3px 3px 0px #090514;
+  --shadow-retro-hover: 5px 5px 0px #090514;
+  --shadow-retro-sm: 2px 2px 0px #090514;
+
+  background-color: var(--bg-retro);
+  background-image: radial-gradient(#7c3aed 1px, transparent 1px);
+  color: var(--text-main);
+}
+
+body.dark-mode .logo-icon {
+  background: #7c3aed;
+  border-color: #a855f7;
+  color: #f5f3ff;
+}
+
+body.dark-mode .btn-gold {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #a855f7 !important;
+}
+
+body.dark-mode .retro-tabs .retro-tab {
+  background: #15072d !important;
+  color: #c4b5fd !important;
+  border-color: #4c1d95 !important;
+}
+
+body.dark-mode .retro-tabs .retro-tab:hover {
+  background: #270f52 !important;
+  color: #ffffff !important;
+}
+
+body.dark-mode .retro-tabs .retro-tab.active {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #c084fc !important;
+  border-bottom: 2px solid #7c3aed !important;
+}
+
+body.dark-mode .retro-pill.active {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #c084fc !important;
+}
+
+body.dark-mode .retro-table thead tr {
+  background: #27163f !important;
+  color: #f5f3ff !important;
+}
+
+body.dark-mode .retro-table tbody tr:hover {
+  background: #2d1847 !important;
+}
+
+body.dark-mode .retro-input,
+body.dark-mode .retro-select,
+body.dark-mode .retro-textarea {
+  background: #170d26;
+  color: #f5f3ff;
+  border-color: #9333ea;
+}
+
+body.dark-mode .modal-box {
+  background: #1f1333;
+  color: #f5f3ff;
+}
+
+body.dark-mode .badge-wishes {
+  background: #3b1d64;
+  color: #e9d5ff;
+  border-color: #9333ea;
 }
 
 /* ========================================================
@@ -338,6 +423,30 @@ body {
   position: relative;
 }
 
+.waifu-card.rarity-common {
+  border-color: #000000 !important;
+}
+
+body.dark-mode .waifu-card.rarity-common {
+  border-color: #4b5563 !important;
+}
+
+.waifu-card.rarity-uncommon {
+  border-color: #22c55e !important;
+}
+
+.waifu-card.rarity-rare {
+  border-color: #3b82f6 !important;
+}
+
+.waifu-card.rarity-epic {
+  border-color: #a855f7 !important;
+}
+
+.waifu-card.rarity-legendary {
+  border-color: #eab308 !important;
+}
+
 .waifu-card:hover {
   transform: translate(-3px, -3px);
   box-shadow: var(--shadow-retro);
@@ -400,15 +509,17 @@ body {
   position: absolute;
   bottom: 8px;
   left: 8px;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.85);
+  border: 1.5px solid #fde047;
   color: #fde047;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(2px);
 }
 
@@ -518,7 +629,7 @@ body {
   display: flex;
   gap: 8px;
   border-bottom: var(--border-retro);
-  margin-bottom: 0;
+  margin-bottom: 0 !important;
   position: relative;
   z-index: 2;
   flex-wrap: wrap;
@@ -694,28 +805,139 @@ body {
 /* ========================================================
    TOAST FLUTUANTE RETRÔ
    ======================================================== */
+/* ========================================================
+   TOAST FLUTUANTE RETRÔ (Centro Superior com Animação do Topo)
+   ======================================================== */
 .retro-toast {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: auto;
+  right: auto;
   background: var(--bg-card);
+  color: var(--text-main);
   border: var(--border-retro);
   box-shadow: var(--shadow-retro);
   border-radius: var(--radius-retro);
-  padding: 12px 18px;
+  padding: 12px 22px;
   font-size: 14px;
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 10px;
-  z-index: 2000;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 2500;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .retro-toast.hidden {
   opacity: 0;
-  transform: translateY(20px);
+  transform: translate(-50%, -40px);
   pointer-events: none;
+}
+
+/* ========================================================
+   WISHLIST CASADA REALÇADA COM BORDA VERMELHA
+   ======================================================== */
+.waifu-card.is-married-wishlist {
+  border: 2px solid #ef4444 !important;
+  box-shadow: 3px 3px 0px #ef4444 !important;
+}
+
+.badge-married-alert {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: #ef4444;
+  color: #ffffff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid #7f1d1d;
+  box-shadow: 1px 1px 0px #7f1d1d;
+  z-index: 10;
+}
+
+/* ========================================================
+   BOTÃO DE DENÚNCIA (18+) NOS CARDS
+   ======================================================== */
+.btn-card-report {
+  position: absolute;
+  top: 8px;
+  right: 44px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-retro);
+  background: var(--bg-card);
+  color: #ef4444;
+  border: var(--border-retro);
+  box-shadow: var(--shadow-retro-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.btn-card-report:hover {
+  transform: translateY(-2px);
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+body.dark-mode .btn-card-report {
+  color: #f87171;
+}
+
+body.dark-mode .btn-card-report:hover {
+  background: #450a0a;
+  border-color: #ef4444;
+}
+
+/* Badge Married Clicável para abrir perfil do usuário */
+.badge-married-link {
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+
+.badge-married-link:hover {
+  transform: scale(1.18);
+}
+
+/* ========================================================
+   RANKINGS EM DUAS COLUNAS RETRÔ
+   ======================================================== */
+.rankings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.ranking-column {
+  background: var(--bg-card);
+  border: var(--border-retro);
+  box-shadow: var(--shadow-retro);
+  border-radius: var(--radius-retro);
+  padding: 18px;
+}
+
+.ranking-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px dashed var(--text-muted);
 }
 
 /* ========================================================

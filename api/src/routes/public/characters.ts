@@ -19,6 +19,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
           tag: { type: 'string' },
           search: { type: 'string' },
           maritalStatus: { type: 'string', enum: ['all', 'single', 'married'] },
+          sort: { type: 'string' },
           page: { type: 'integer', minimum: 1, maximum: 1000, default: 1 },
           limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
         },
@@ -51,6 +52,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
           tag: query.tag,
           search: query.search,
           maritalStatus: query.maritalStatus,
+          sort: query.sort,
           page: query.page ? Math.min(1000, Math.max(1, Number(query.page))) : 1,
           limit: query.limit ? Math.min(100, Math.max(1, Number(query.limit))) : 20,
         },
@@ -135,6 +137,87 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send({
         success: true,
         data: character,
+      });
+    },
+  });
+
+  fastify.post('/characters/:id/report', {
+    schema: {
+      description: 'Reporta/denuncia um personagem para moderação e eventual exclusão',
+      tags: ['Personagens (Público)'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+          userId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { reason, userId } = (request.body as any) || {};
+
+      const suggestionService = new (await import('../../services/SuggestionService.js')).SuggestionService(
+        fastify.prisma,
+        fastify.redis,
+        characterService
+      );
+
+      const suggestion = await suggestionService.submitDeleteSuggestion(id, userId, reason);
+
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Personagem denunciado com sucesso! A equipe de moderação irá avaliar.',
+          suggestion,
+        },
+      });
+    },
+  });
+
+  fastify.post('/suggestions/delete-character', {
+    schema: {
+      description: 'Reporta/denuncia um personagem (alias direto)',
+      tags: ['Personagens (Público)'],
+      body: {
+        type: 'object',
+        properties: {
+          characterId: { type: 'string' },
+          reason: { type: 'string' },
+          userId: { type: 'string' },
+          reportedBy: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { characterId, reason, userId } = (request.body as any) || {};
+
+      if (!characterId) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'CHARACTER_ID_REQUIRED', message: 'ID do personagem é obrigatório.' },
+        });
+      }
+
+      const suggestionService = new (await import('../../services/SuggestionService.js')).SuggestionService(
+        fastify.prisma,
+        fastify.redis,
+        characterService
+      );
+
+      const suggestion = await suggestionService.submitDeleteSuggestion(characterId, userId, reason);
+
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Personagem denunciado com sucesso! A equipe de moderação irá avaliar.',
+          suggestion,
+        },
       });
     },
   });

@@ -89,4 +89,42 @@ export const privateWishlistRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send(result);
     },
   });
+
+  fastify.delete('/wishlist/:userId/married', {
+    schema: {
+      description: 'Remove todas as personagens que já estão casadas da lista de desejos do usuário',
+      tags: ['Wishlist (Privado)'],
+      params: {
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const result = await wishlistService.clearMarried(userId);
+      return reply.send(result);
+    },
+  });
+
+  fastify.post('/wishlist/:userId/clear-married', {
+    schema: {
+      description: 'Alias POST para remover personagens casadas da lista de desejos do usuário',
+      tags: ['Wishlist (Privado)'],
+      params: {
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const result = await wishlistService.clearMarried(userId);
+      return reply.send(result);
+    },
+  });
 };

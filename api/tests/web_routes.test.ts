@@ -297,6 +297,15 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
       expect(alreadyClaimedRes.status).toBe(400);
       const alreadyClaimedJson = await alreadyClaimedRes.json();
       expect(alreadyClaimedJson.error.code).toMatch(/CHARACTER_ALREADY_/);
+
+      // 5. Desfaz o casamento do teste para não deixar personagem preso
+      await fetch(`${BASE_URL}/api/web/user/${encodeURIComponent(testPublicId)}/divorce`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token: testUserToken, characterId: singleChar.id }),
+      });
     }
   });
 });

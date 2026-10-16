@@ -208,6 +208,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           isAdmin: false,
           publicId: user.publicId,
           name: user.name,
+          kakera: user.kakera,
           harem: publicHarem,
         },
       });
@@ -248,6 +249,48 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const result = await divorceService.divorce(session.userId, characterId);
+      if (!result.success) {
+        return reply.status(400).send(result);
+      }
+
+      return reply.send(result);
+    },
+  });
+
+  /**
+   * Alterna favorita em destaque via sessão web do usuário
+   */
+  fastify.post('/api/web/user/:publicId/favorite', {
+    schema: {
+      description: 'Alterna status de favorita (máximo 5) para um personagem pertencente ao harém',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'characterId'],
+        properties: {
+          token: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, characterId } = request.body as { token: string; characterId: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida. Gere um novo link no WhatsApp.' },
+        });
+      }
+
+      const result = await haremService.setFavorite(session.userId, characterId);
       if (!result.success) {
         return reply.status(400).send(result);
       }
@@ -348,11 +391,84 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Envia sugestão de raridade ou nova foto para o personagem
+   * Remove todas as personagens casadas da wishlist do usuário via sessão web
+   */
+  fastify.delete('/api/web/user/:publicId/wishlist/married', {
+    schema: {
+      description: 'Remove todas as personagens que já estão casadas da lista de desejos do usuário',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await wishlistService.clearMarried(session.userId);
+      return reply.send(result);
+    },
+  });
+
+  /**
+   * Lista as sugestões enviadas pelo usuário
+   */
+  fastify.get('/api/web/user/:publicId/suggestions', {
+    schema: {
+      description: 'Lista histórico de sugestões enviadas pelo usuário autenticado',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const suggestions = await suggestionService.listUserSuggestions(session.userId);
+      return reply.send({
+        success: true,
+        data: suggestions,
+      });
+    },
+  });
+
+  /**
+   * Envia sugestão de raridade, nova foto ou novo personagem
    */
   fastify.post('/api/web/user/:publicId/suggestions', {
     schema: {
-      description: 'Envia sugestão de nova raridade ou nova imagem para avaliação de um moderador',
+      description: 'Envia sugestão de nova raridade, nova imagem ou cadastro de novo personagem',
       tags: ['Usuário (Web)'],
     },
     handler: async (request, reply) => {
@@ -362,6 +478,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         const parts = request.parts();
         let token = '';
         let characterId = '';
+        let characterName = '';
+        let series = '';
+        let description = '';
         let type = '';
         let suggestedRarity = '';
         let reason = '';
@@ -371,10 +490,13 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           if (part.type === 'field') {
             if (part.fieldname === 'token') token = String(part.value);
             if (part.fieldname === 'characterId') characterId = String(part.value);
+            if (part.fieldname === 'characterName' || part.fieldname === 'name') characterName = String(part.value);
+            if (part.fieldname === 'series') series = String(part.value);
+            if (part.fieldname === 'description') description = String(part.value);
             if (part.fieldname === 'type') type = String(part.value);
-            if (part.fieldname === 'suggestedRarity') suggestedRarity = String(part.value);
+            if (part.fieldname === 'suggestedRarity' || part.fieldname === 'rarity') suggestedRarity = String(part.value);
             if (part.fieldname === 'reason') reason = String(part.value);
-          } else if (part.type === 'file' && part.fieldname === 'image') {
+          } else if (part.type === 'file' && (part.fieldname === 'image' || part.fieldname === 'photo')) {
             imageBuffer = await part.toBuffer();
           }
         }
@@ -387,7 +509,23 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           });
         }
 
-        if (type === 'IMAGE') {
+        if (type === 'NEW_CHARACTER') {
+          const suggestion = await suggestionService.submitNewCharacterSuggestion(session.userId, {
+            name: characterName,
+            series,
+            rarity: (suggestedRarity || 'COMMON') as Rarity,
+            description,
+            reason,
+            imageBuffer: imageBuffer || undefined,
+          });
+          return reply.send({
+            success: true,
+            data: {
+              message: 'Sugestão de novo personagem enviada com sucesso! A equipe irá avaliar.',
+              suggestion,
+            },
+          });
+        } else if (type === 'IMAGE') {
           if (!imageBuffer) {
             return reply.status(400).send({
               success: false,
@@ -425,7 +563,17 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // JSON direto
-      const { token, type, characterId, suggestedRarity, reason, imageBase64 } = (request.body as any) || {};
+      const {
+        token,
+        type,
+        characterId,
+        characterName,
+        series,
+        description,
+        suggestedRarity,
+        reason,
+        imageBase64,
+      } = (request.body as any) || {};
 
       const session = await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
@@ -435,7 +583,27 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      if (type === 'RARITY') {
+      if (type === 'NEW_CHARACTER') {
+        let buffer: Buffer | undefined;
+        if (imageBase64) {
+          buffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+        }
+        const suggestion = await suggestionService.submitNewCharacterSuggestion(session.userId, {
+          name: characterName,
+          series,
+          rarity: (suggestedRarity || 'COMMON') as Rarity,
+          description,
+          reason,
+          imageBuffer: buffer,
+        });
+        return reply.send({
+          success: true,
+          data: {
+            message: 'Sugestão de novo personagem enviada com sucesso! A moderação irá analisar.',
+            suggestion,
+          },
+        });
+      } else if (type === 'RARITY') {
         const suggestion = await suggestionService.submitRaritySuggestion(
           session.userId,
           characterId,
@@ -456,6 +624,19 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           success: true,
           data: {
             message: 'Sugestão de foto enviada com sucesso! A moderação irá analisar.',
+            suggestion,
+          },
+        });
+      } else if (type === 'DELETE_CHARACTER' || type === 'REPORT') {
+        const suggestion = await suggestionService.submitDeleteSuggestion(
+          characterId,
+          session.userId,
+          reason
+        );
+        return reply.send({
+          success: true,
+          data: {
+            message: 'Denúncia enviada com sucesso para a moderação!',
             suggestion,
           },
         });

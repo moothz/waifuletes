@@ -31,10 +31,13 @@ const envSchema = z.object({
   ROLL_REGEN_SECONDS: z.coerce.number().default(300), // 5 min
 
   SOULMATE_KEYS_REQUIRED: z.coerce.number().default(10),
-  WISHLIST_MAX_ITEMS: z.coerce.number().default(100),
+  WISHLIST_MAX_ITEMS: z.coerce.number().default(1000),
 
   INTERNAL_BASE_URL: z.string().default('http://localhost:3000'),
   PUBLIC_BASE_URL: z.string().default('http://localhost:3000'),
+
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_CHAT_ID: z.string().optional(),
 
   MEDIA_DIR: z.string().default(
     process.env.MEDIA_DIR ||

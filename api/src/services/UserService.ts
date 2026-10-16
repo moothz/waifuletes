@@ -97,7 +97,7 @@ export class UserService {
         },
         harem: {
           where: { isFavorite: true },
-          take: 1,
+          take: 5,
           include: {
             character: true,
           },
@@ -107,7 +107,8 @@ export class UserService {
 
     if (!user) return null;
 
-    const favoriteCharacter = user.harem[0]?.character ?? null;
+    const favoriteCharacters = user.harem.map((h) => h.character);
+    const favoriteCharacter = favoriteCharacters[0] ?? null;
 
     return {
       id: user.id,
@@ -120,30 +121,47 @@ export class UserService {
       soulmateCount: user._count.soulmates,
       wishlistCount: user._count.wishlist,
       favoriteCharacter,
+      favoriteCharacters,
       createdAt: user.createdAt,
     };
   }
 
   async setFavoriteCharacter(userId: string, characterId: string) {
-    // 1. Desmarca favorito atual
-    await this.prisma.haremEntry.updateMany({
-      where: { userId, isFavorite: true },
-      data: { isFavorite: false },
-    });
-
-    // 2. Marca novo favorito
-    const updated = await this.prisma.haremEntry.update({
+    const entry = await this.prisma.haremEntry.findUnique({
       where: {
         userId_characterId: {
           userId,
           characterId,
         },
       },
-      data: { isFavorite: true },
       include: { character: true },
     });
 
-    return updated;
+    if (!entry) {
+      throw new Error('NOT_IN_HAREM');
+    }
+
+    if (entry.isFavorite) {
+      return this.prisma.haremEntry.update({
+        where: { id: entry.id },
+        data: { isFavorite: false },
+        include: { character: true },
+      });
+    }
+
+    const currentCount = await this.prisma.haremEntry.count({
+      where: { userId, isFavorite: true },
+    });
+
+    if (currentCount >= 5) {
+      throw new Error('FAVORITES_LIMIT_REACHED');
+    }
+
+    return this.prisma.haremEntry.update({
+      where: { id: entry.id },
+      data: { isFavorite: true },
+      include: { character: true },
+    });
   }
 
   async updateUserName(userId: string, name: string) {

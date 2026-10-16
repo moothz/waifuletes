@@ -296,6 +296,21 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
+   * Aprovar todas as sugestões pendentes em lote
+   */
+  fastify.post('/api/admin/suggestions/approve-all', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Aprova todas as sugestões com status PENDING e aplica as alterações',
+      tags: ['Admin (Web)'],
+    },
+    handler: async (_request, reply) => {
+      const result = await suggestionService.approveAllSuggestions('admin');
+      return reply.send(result);
+    },
+  });
+
+  /**
    * Listagem de usuários com contagem de harém, wishlist e busca por nome/número
    */
   fastify.get('/api/admin/users', {
