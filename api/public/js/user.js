@@ -767,13 +767,14 @@ function openReportModal(charId, charName) {
 }
 
 async function submitReport() {
-  if (!activeReportCharacter) return;
+  if (!activeReportCharacter || !activeReportCharacter.id) return;
   const reason = document.getElementById('report-reason')?.value?.trim() || 'Conteúdo reportado pelo usuário (🔞).';
   const btn = document.getElementById('btn-confirm-report');
   if (btn) btn.disabled = true;
 
   try {
     const res = await Api.post(`/characters/${encodeURIComponent(activeReportCharacter.id)}/report`, {
+      characterId: activeReportCharacter.id,
       reason,
       userId: userSessionData?.publicId || undefined,
     });

@@ -16,7 +16,7 @@ export class SuggestionService {
     private redis: Redis,
     private characterService: CharacterService
   ) {
-    this.telegramService = new TelegramNotificationService();
+    this.telegramService = new TelegramNotificationService(this.redis);
   }
 
   /**
@@ -36,12 +36,18 @@ export class SuggestionService {
       throw new DomainError('SAME_RARITY', 'A raridade sugerida é exatamente igual à raridade atual do personagem.', 400);
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ id: userId }, { publicId: userId }] },
+      select: { id: true, name: true },
+    });
+    if (!user) {
+      throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
+    }
 
     const suggestion = await this.prisma.characterSuggestion.create({
       data: {
         characterId: character.id,
-        userId,
+        userId: user.id,
         type: 'RARITY',
         status: 'PENDING',
         currentRarity: character.baseRarity,
@@ -56,7 +62,7 @@ export class SuggestionService {
     });
 
     // Notifica Telegram
-    this.telegramService.notifySuggestion({
+    await this.telegramService.notifySuggestion({
       id: suggestion.id,
       type: 'RARITY',
       characterId: character.id,
@@ -98,13 +104,19 @@ export class SuggestionService {
     await fs.writeFile(filePath, imageBuffer);
 
     const relPath = `suggestions/${fileName}`;
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ id: userId }, { publicId: userId }] },
+      select: { id: true, name: true },
+    });
+    if (!user) {
+      throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
+    }
 
     const suggestion = await this.prisma.characterSuggestion.create({
       data: {
         id: suggestionId,
         characterId: character.id,
-        userId,
+        userId: user.id,
         type: 'IMAGE',
         status: 'PENDING',
         imageUrl: relPath,
@@ -118,13 +130,13 @@ export class SuggestionService {
     });
 
     // Notifica Telegram
-    this.telegramService.notifySuggestion({
+    await this.telegramService.notifySuggestion({
       id: suggestion.id,
       type: 'IMAGE',
       characterId: character.id,
       imageUrl: relPath,
       reason: reason ? reason.trim() : null,
-      userName: user?.name || userId,
+      userName: user.name || userId,
       character: {
         id: character.id,
         name: character.name,
@@ -171,12 +183,18 @@ export class SuggestionService {
       relPath = `suggestions/${fileName}`;
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ id: userId }, { publicId: userId }] },
+      select: { id: true, name: true },
+    });
+    if (!user) {
+      throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
+    }
 
     const suggestion = await this.prisma.characterSuggestion.create({
       data: {
         id: suggestionId,
-        userId,
+        userId: user.id,
         type: 'NEW_CHARACTER',
         status: 'PENDING',
         characterName: data.name.trim(),
@@ -189,7 +207,7 @@ export class SuggestionService {
     });
 
     // Notifica Telegram
-    this.telegramService.notifySuggestion({
+    await this.telegramService.notifySuggestion({
       id: suggestion.id,
       type: 'NEW_CHARACTER',
       characterName: data.name.trim(),
@@ -198,7 +216,7 @@ export class SuggestionService {
       suggestedRarity: data.rarity || 'COMMON',
       imageUrl: relPath,
       reason: data.reason ? data.reason.trim() : null,
-      userName: user?.name || userId,
+      userName: user.name || userId,
     }).catch((err) => console.error('Telegram notification error:', err));
 
     return suggestion;
@@ -213,16 +231,23 @@ export class SuggestionService {
       throw new DomainError('CHARACTER_NOT_FOUND', 'Personagem não encontrado.', 404);
     }
 
-    let userName = 'Anônimo na Home';
+    let userName = 'Anônimo na Web';
+    let resolvedUserId: string | null = null;
     if (userId) {
-      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-      if (user?.name) userName = user.name;
+      const user = await this.prisma.user.findFirst({
+        where: { OR: [{ id: userId }, { publicId: userId }] },
+        select: { id: true, name: true },
+      });
+      if (user) {
+        resolvedUserId = user.id;
+        if (user.name) userName = user.name;
+      }
     }
 
     const suggestion = await this.prisma.characterSuggestion.create({
       data: {
         characterId: character.id,
-        userId: userId || null,
+        userId: resolvedUserId,
         type: 'DELETE_CHARACTER',
         status: 'PENDING',
         reason: reason ? reason.trim() : 'Conteúdo inadequado ou denúncia de exclusão (🔞).',
@@ -235,7 +260,7 @@ export class SuggestionService {
     });
 
     // Notifica Telegram
-    this.telegramService.notifySuggestion({
+    await this.telegramService.notifySuggestion({
       id: suggestion.id,
       type: 'DELETE_CHARACTER',
       characterId: character.id,
@@ -334,8 +359,14 @@ export class SuggestionService {
    * Lista sugestões de um usuário específico
    */
   async listUserSuggestions(userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ id: userId }, { publicId: userId }] },
+      select: { id: true },
+    });
+    const targetUserId = user ? user.id : userId;
+
     const suggestions = await this.prisma.characterSuggestion.findMany({
-      where: { userId },
+      where: { userId: targetUserId },
       orderBy: [{ createdAt: 'desc' }],
       include: {
         character: {
@@ -568,6 +599,23 @@ export class SuggestionService {
         results,
       },
     };
+  }
+
+  /**
+   * Apaga a notificação enviada ao Telegram de uma sugestão
+   */
+  async deleteTelegramNotification(suggestionId: string): Promise<boolean> {
+    return this.telegramService.deleteSuggestionMessage(suggestionId, this.redis);
+  }
+
+  /**
+   * Deleta uma sugestão e remove sua mensagem do Telegram
+   */
+  async deleteSuggestion(suggestionId: string) {
+    await this.deleteTelegramNotification(suggestionId).catch(() => {});
+    return this.prisma.characterSuggestion.delete({
+      where: { id: suggestionId },
+    });
   }
 
   /**

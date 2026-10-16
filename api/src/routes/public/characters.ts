@@ -153,6 +153,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
       body: {
         type: 'object',
         properties: {
+          characterId: { type: 'string' },
           reason: { type: 'string' },
           userId: { type: 'string' },
         },
@@ -160,7 +161,8 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
     },
     handler: async (request, reply) => {
       const { id } = request.params as { id: string };
-      const { reason, userId } = (request.body as any) || {};
+      const { reason, userId, characterId } = (request.body as any) || {};
+      const targetCharacterId = id || characterId;
 
       const suggestionService = new (await import('../../services/SuggestionService.js')).SuggestionService(
         fastify.prisma,
@@ -168,7 +170,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
         characterService
       );
 
-      const suggestion = await suggestionService.submitDeleteSuggestion(id, userId, reason);
+      const suggestion = await suggestionService.submitDeleteSuggestion(targetCharacterId, userId, reason);
 
       return reply.send({
         success: true,
@@ -187,6 +189,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
       body: {
         type: 'object',
         properties: {
+          id: { type: 'string' },
           characterId: { type: 'string' },
           reason: { type: 'string' },
           userId: { type: 'string' },
@@ -195,9 +198,10 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (request, reply) => {
-      const { characterId, reason, userId } = (request.body as any) || {};
+      const { characterId, id, reason, userId, reportedBy } = (request.body as any) || {};
+      const targetCharacterId = characterId || id;
 
-      if (!characterId) {
+      if (!targetCharacterId) {
         return reply.status(400).send({
           success: false,
           error: { code: 'CHARACTER_ID_REQUIRED', message: 'ID do personagem é obrigatório.' },
@@ -210,7 +214,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
         characterService
       );
 
-      const suggestion = await suggestionService.submitDeleteSuggestion(characterId, userId, reason);
+      const suggestion = await suggestionService.submitDeleteSuggestion(targetCharacterId, userId || reportedBy, reason);
 
       return reply.send({
         success: true,

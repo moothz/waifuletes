@@ -385,6 +385,7 @@ async function submitReport() {
 
   try {
     const res = await Api.post(`/characters/${encodeURIComponent(state.pendingReportCharId)}/report`, {
+      characterId: state.pendingReportCharId,
       reason: reason || 'Denúncia de personagem pelo catálogo da web (🔞).',
     });
 

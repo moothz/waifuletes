@@ -42,7 +42,51 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     }
   });
 
+  let createdReportSuggestionId = '';
+
   afterAll(async () => {
+    if (!adminToken) {
+      try {
+        const loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: ADMIN_PASSWORD }),
+        });
+        const loginJson = await loginRes.json();
+        if (loginJson?.data?.token) adminToken = loginJson.data.token;
+      } catch (_) {}
+    }
+
+    // 1. Apaga a mensagem gerada no Telegram para as sugestões de teste (Beowulf / Denúncias)
+    if (createdSuggestionId && adminToken) {
+      const res = await fetch(`${BASE_URL}/api/admin/suggestions/${createdSuggestionId}/telegram`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const json = await res.json().catch(() => null);
+      console.log('Deleted rarity telegram msg:', json);
+
+      await fetch(`${BASE_URL}/api/admin/suggestions/${createdSuggestionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).catch(() => {});
+    }
+
+    if (createdReportSuggestionId && adminToken) {
+      const res = await fetch(`${BASE_URL}/api/admin/suggestions/${createdReportSuggestionId}/telegram`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const json = await res.json().catch(() => null);
+      console.log('Deleted report telegram msg:', json);
+
+      await fetch(`${BASE_URL}/api/admin/suggestions/${createdReportSuggestionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).catch(() => {});
+    }
+
+    // 2. Restaura dados do personagem original
     if (testCharacterId && originalCharacterData && adminToken) {
       await fetch(`${BASE_URL}/api/admin/characters/${testCharacterId}`, {
         method: 'PUT',
@@ -147,6 +191,25 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     expect(json.data).toHaveProperty('suggestion');
     expect(json.data.suggestion.status).toBe('PENDING');
     createdSuggestionId = json.data.suggestion.id;
+  });
+
+  it('POST /characters/:id/report deve aceitar denúncia enviando publicId e characterId sem erro 500/P2003', async () => {
+    const res = await fetch(`${BASE_URL}/characters/${encodeURIComponent(testCharacterId)}/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        characterId: testCharacterId,
+        reason: 'Conteúdo reportado pelo usuário (🔞).',
+        userId: testPublicId,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data).toHaveProperty('suggestion');
+    expect(json.data.suggestion.type).toBe('DELETE_CHARACTER');
+    createdReportSuggestionId = json.data.suggestion.id;
   });
 
   it('POST /api/admin/login deve autenticar com a senha única do .env', async () => {

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { Redis } from 'ioredis';
 import { config } from '../config.js';
 
 export interface SuggestionNotifyData {
@@ -27,7 +28,7 @@ export class TelegramNotificationService {
   private botToken?: string;
   private chatId?: string;
 
-  constructor() {
+  constructor(private redis?: Redis) {
     this.botToken = config.TELEGRAM_BOT_TOKEN;
     this.chatId = config.TELEGRAM_CHAT_ID;
   }
@@ -97,12 +98,22 @@ export class TelegramNotificationService {
         } catch (_) {}
       }
 
+      let sentInfo: { messageId: number; chatId: string } | null = null;
       if (imageBuffer) {
-        await this.sendPhotoWithBuffer(imageBuffer, text, replyMarkup);
+        sentInfo = await this.sendPhotoWithBuffer(imageBuffer, text, replyMarkup);
       } else if (data.character?.imageUrl && data.character.imageUrl.startsWith('http')) {
-        await this.sendPhotoWithUrl(data.character.imageUrl, text, replyMarkup);
+        sentInfo = await this.sendPhotoWithUrl(data.character.imageUrl, text, replyMarkup);
       } else {
-        await this.sendMessage(text, replyMarkup);
+        sentInfo = await this.sendMessage(text, replyMarkup);
+      }
+
+      if (sentInfo && this.redis) {
+        await this.redis.set(
+          `telegram:suggestion:${data.id}:msg`,
+          JSON.stringify(sentInfo),
+          'EX',
+          7 * 86400
+        );
       }
     } catch (err: any) {
       console.error('Falha ao enviar notificação para o Telegram:', err?.message || err);
@@ -189,48 +200,129 @@ export class TelegramNotificationService {
     }
   }
 
-  private async sendMessage(text: string, replyMarkup: any): Promise<void> {
-    const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: this.chatId,
-        text,
-        parse_mode: 'HTML',
-        reply_markup: replyMarkup,
-      }),
-    });
+  private async sendMessage(text: string, replyMarkup: any): Promise<{ messageId: number; chatId: string } | null> {
+    try {
+      const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: this.chatId,
+          text,
+          parse_mode: 'HTML',
+          reply_markup: replyMarkup,
+        }),
+      });
+      const data = (await res.json()) as any;
+      if (data?.ok && data.result?.message_id) {
+        return {
+          messageId: data.result.message_id,
+          chatId: String(data.result.chat?.id || this.chatId),
+        };
+      }
+    } catch (_) {}
+    return null;
   }
 
-  private async sendPhotoWithUrl(photoUrl: string, caption: string, replyMarkup: any): Promise<void> {
-    const url = `https://api.telegram.org/bot${this.botToken}/sendPhoto`;
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: this.chatId,
-        photo: photoUrl,
-        caption,
-        parse_mode: 'HTML',
-        reply_markup: replyMarkup,
-      }),
-    });
+  private async sendPhotoWithUrl(photoUrl: string, caption: string, replyMarkup: any): Promise<{ messageId: number; chatId: string } | null> {
+    try {
+      const url = `https://api.telegram.org/bot${this.botToken}/sendPhoto`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: this.chatId,
+          photo: photoUrl,
+          caption,
+          parse_mode: 'HTML',
+          reply_markup: replyMarkup,
+        }),
+      });
+      const data = (await res.json()) as any;
+      if (data?.ok && data.result?.message_id) {
+        return {
+          messageId: data.result.message_id,
+          chatId: String(data.result.chat?.id || this.chatId),
+        };
+      }
+    } catch (_) {}
+    return null;
   }
 
-  private async sendPhotoWithBuffer(buffer: Buffer, caption: string, replyMarkup: any): Promise<void> {
-    const url = `https://api.telegram.org/bot${this.botToken}/sendPhoto`;
-    const form = new FormData();
-    form.append('chat_id', this.chatId!);
-    form.append('caption', caption);
-    form.append('parse_mode', 'HTML');
-    form.append('reply_markup', JSON.stringify(replyMarkup));
-    form.append('photo', new Blob([new Uint8Array(buffer)]), 'suggestion.png');
+  private async sendPhotoWithBuffer(buffer: Buffer, caption: string, replyMarkup: any): Promise<{ messageId: number; chatId: string } | null> {
+    try {
+      const url = `https://api.telegram.org/bot${this.botToken}/sendPhoto`;
+      const form = new FormData();
+      form.append('chat_id', this.chatId!);
+      form.append('caption', caption);
+      form.append('parse_mode', 'HTML');
+      form.append('reply_markup', JSON.stringify(replyMarkup));
+      form.append('photo', new Blob([new Uint8Array(buffer)]), 'suggestion.png');
 
-    await fetch(url, {
-      method: 'POST',
-      body: form,
-    });
+      const res = await fetch(url, {
+        method: 'POST',
+        body: form,
+      });
+      const data = (await res.json()) as any;
+      if (data?.ok && data.result?.message_id) {
+        return {
+          messageId: data.result.message_id,
+          chatId: String(data.result.chat?.id || this.chatId),
+        };
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /**
+   * Apaga uma mensagem do Telegram dado chatId e messageId
+   */
+  async deleteMessage(chatId: string | number, messageId: number): Promise<boolean> {
+    if (!this.botToken) return false;
+    try {
+      const url = `https://api.telegram.org/bot${this.botToken}/deleteMessage`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+        }),
+      });
+      const data = (await res.json()) as any;
+      return Boolean(data?.ok);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Apaga a mensagem enviada ao Telegram referente a uma sugestão específica
+   */
+  async deleteSuggestionMessage(suggestionId: string, redis?: Redis): Promise<boolean> {
+    const r = redis || this.redis;
+    if (!this.botToken || !r) return false;
+
+    try {
+      const key = `telegram:suggestion:${suggestionId}:msg`;
+      let raw: string | null = null;
+      for (let i = 0; i < 5; i++) {
+        raw = await r.get(key);
+        if (raw) break;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      if (!raw) return false;
+
+      const { chatId, messageId } = JSON.parse(raw);
+      if (chatId && messageId) {
+        const deleted = await this.deleteMessage(chatId, messageId);
+        await r.del(key);
+        return deleted;
+      }
+    } catch (err: any) {
+      console.error('Erro ao deletar mensagem de sugestão do Telegram:', err?.message || err);
+    }
+    return false;
   }
 
   private async answerCallback(callbackQueryId: string, text: string): Promise<void> {
