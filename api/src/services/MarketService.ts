@@ -21,7 +21,7 @@ export class MarketService {
     private characterService?: CharacterService
   ) {}
 
-  private formatCharacter(character: any) {
+  public formatCharacter(character: any) {
     if (!character) return character;
     let imageUrl = '/media/characters/default.jpg';
     let imageUrls: string[] = [];

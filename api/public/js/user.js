@@ -85,14 +85,14 @@ function setupEventListeners() {
   }
 
   // Alternância de abas do painel privado
-  const tabs = document.querySelectorAll('.retro-tabs .retro-tab[data-tab]');
+  const tabs = document.querySelectorAll('#private-panel .retro-tabs .retro-tab[data-tab]');
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       tabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
 
       const targetId = tab.dataset.tab;
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      document.querySelectorAll('#private-panel .tab-content').forEach(c => c.classList.add('hidden'));
       const activeContent = document.getElementById(targetId);
       if (activeContent) activeContent.classList.remove('hidden');
 
@@ -102,6 +102,24 @@ function setupEventListeners() {
         loadUserSuggestions();
       } else if (targetId === 'tab-market') {
         loadMarketTab();
+      }
+    });
+  });
+
+  // Alternância de abas do painel público (Harém e Classificados)
+  const publicTabs = document.querySelectorAll('#public-panel .retro-tab[data-publictab]');
+  publicTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      publicTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const targetId = tab.dataset.publictab;
+      document.querySelectorAll('#public-panel .public-tab-content').forEach(c => c.classList.add('hidden'));
+      const activeContent = document.getElementById(targetId);
+      if (activeContent) activeContent.classList.remove('hidden');
+
+      if (targetId === 'public-tab-market') {
+        loadPublicUserListings();
       }
     });
   });
@@ -447,7 +465,11 @@ async function loadUserData() {
       document.getElementById('private-panel').classList.add('hidden');
       document.getElementById('public-panel').classList.remove('hidden');
 
+      const marketUserNameEl = document.getElementById('public-market-user-name');
+      if (marketUserNameEl) marketUserNameEl.textContent = userSessionData.name || 'Jogador';
+
       renderPublicHarem(harem);
+      renderPublicMarketListings(userSessionData.listings || []);
     }
   } catch (err) {
     console.error('Erro ao carregar dados do usuário:', err);
@@ -668,6 +690,9 @@ function renderPrivateWishlist(wishlist) {
 }
 
 function renderPublicHarem(harem) {
+  const haremCountBadge = document.getElementById('public-harem-count');
+  if (haremCountBadge) haremCountBadge.textContent = String(harem ? harem.length : 0);
+
   const favoritesSection = document.getElementById('public-favorites-section');
   const favoritesGrid = document.getElementById('public-favorites-grid');
   const sectionTitle = document.getElementById('public-harem-section-title');
@@ -757,6 +782,104 @@ function renderPublicHarem(harem) {
     `;
     grid.appendChild(card);
   });
+}
+
+async function loadPublicUserListings() {
+  const grid = document.getElementById('public-market-grid');
+  try {
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/user-listings`);
+    if (res.success && Array.isArray(res.data)) {
+      renderPublicMarketListings(res.data);
+    }
+  } catch (err) {
+    console.error('Erro ao recarregar classificados públicos:', err);
+  }
+}
+
+function renderPublicMarketListings(listings) {
+  const grid = document.getElementById('public-market-grid');
+  const countBadge = document.getElementById('public-market-count');
+  if (countBadge) countBadge.textContent = String(listings ? listings.length : 0);
+
+  if (!grid) return;
+  if (!listings || listings.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 40px 20px; background: var(--bg-card-subtle, rgba(0,0,0,0.05)); border: var(--border-retro); border-radius: 8px;">
+        <div style="font-size: 32px; margin-bottom: 10px;">🏷️</div>
+        <h4 style="font-weight: 800; margin-bottom: 6px;">Nenhum personagem anunciado</h4>
+        <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
+          Este usuário não possui personagens à venda ou troca nos classificados no momento.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = '';
+  listings.forEach(listing => {
+    const char = listing.character;
+    const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
+    const isOwnListing = Boolean(userSessionData && userSessionData.publicId === userPublicId && userSessionData.isAdmin);
+
+    const card = document.createElement('div');
+    card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
+    card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
+
+    card.innerHTML = `
+      <div class="card-img-wrapper">
+        <img src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
+        <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
+          ${rarity.emoji} ${rarity.label}
+        </div>
+      </div>
+      <div class="card-info">
+        <div class="card-name">${escapeHtml(char.name)}</div>
+        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 8px 0; border: var(--border-retro);">
+          <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
+        </div>
+        <div class="card-actions" style="margin-top: 8px;">
+          ${isOwnListing ? `
+            <button class="btn-retro btn-sm" style="width: 100%; opacity: 0.8;" disabled>
+              <i class="fas fa-check"></i> Seu Anúncio
+            </button>
+          ` : `
+            <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="handlePublicOfferClick('${listing.id}', '${escapeAttr(char.name)}', '${getCharImg(char)}', '${escapeAttr(listing.interest)}')">
+              <i class="fas fa-handshake"></i> Fazer Oferta
+            </button>
+          `}
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+async function handlePublicOfferClick(listingId, charName, charImg, interest) {
+  if (userSessionToken && userSessionData?.isAdmin) {
+    openOfferModal(listingId, charName, charImg, interest);
+    return;
+  }
+
+  // Se não autenticado, abre modal instrutivo com link do WhatsApp da Ravena
+  const titleEl = document.getElementById('public-offer-char-title');
+  if (titleEl) titleEl.textContent = `Negociar ${charName}`;
+
+  const btnWa = document.getElementById('btn-public-offer-wa-link');
+  if (btnWa) {
+    try {
+      const res = await Api.get('/api/web/ravena-contact');
+      if (res.success && res.data?.waLink) {
+        btnWa.href = res.data.waLink;
+      } else {
+        btnWa.href = 'https://wa.me/?text=!mu-adm';
+      }
+    } catch {
+      btnWa.href = 'https://wa.me/?text=!mu-adm';
+    }
+  }
+
+  openModal('modal-public-offer-help');
 }
 
 // ========================================================

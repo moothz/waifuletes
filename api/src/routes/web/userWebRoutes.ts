@@ -217,6 +217,31 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         claimedAt: item.claimedAt,
       }));
 
+      // Busca os classificados ativos deste usuário para a aba pública de classificados
+      const userListings = await fastify.prisma.marketListing.findMany({
+        where: {
+          userId: user.id,
+          status: 'ACTIVE',
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          character: {
+            include: {
+              _count: {
+                select: { wishlists: true },
+              },
+            },
+          },
+        },
+      });
+
+      const publicListings = userListings.map((l) => ({
+        id: l.id,
+        interest: l.interest,
+        createdAt: l.createdAt,
+        character: marketService.formatCharacter(l.character),
+      }));
+
       return reply.send({
         success: true,
         data: {
@@ -225,6 +250,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           name: user.name,
           kakera: user.kakera,
           harem: publicHarem,
+          listings: publicListings,
         },
       });
     },
@@ -727,6 +753,54 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
 
       const listings = await marketService.getUserListings(session.userId);
       return reply.send({ success: true, data: listings });
+    },
+  });
+
+  /**
+   * Lista pública dos anúncios ativos de um usuário específico (sem token)
+   */
+  fastify.get('/api/web/user/:publicId/market/user-listings', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const user = await fastify.prisma.user.findUnique({
+        where: { publicId },
+        select: { id: true },
+      });
+      if (!user) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' },
+        });
+      }
+
+      const listings = await fastify.prisma.marketListing.findMany({
+        where: { userId: user.id, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          character: {
+            include: {
+              _count: { select: { wishlists: true } },
+            },
+          },
+        },
+      });
+
+      const formatted = listings.map((l) => ({
+        id: l.id,
+        interest: l.interest,
+        createdAt: l.createdAt,
+        character: marketService.formatCharacter(l.character),
+      }));
+
+      return reply.send({ success: true, data: formatted });
     },
   });
 

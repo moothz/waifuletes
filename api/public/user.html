@@ -309,24 +309,58 @@
 
     <!-- Container do Painel Público (Apenas leitura) -->
     <div id="public-panel" class="hidden">
-      <!-- Seção de Favoritas em Destaque (Centralizadas no Topo) -->
-      <div id="public-favorites-section" class="hidden" style="margin-bottom: 28px; text-align: center;">
-        <div style="display: inline-block; background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 8px 24px; box-shadow: var(--shadow-retro-sm); margin-bottom: 16px;">
-          <span style="font-weight: 800; font-size: 16px; color: #ec4899;">💖 Favoritas 💖</span>
-        </div>
-        <div id="public-favorites-grid" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; max-width: 1200px; margin: 0 auto;"></div>
+      <!-- Abas da Página Pública -->
+      <div class="retro-tabs" style="margin-bottom: 24px;">
+        <button class="retro-tab active" data-publictab="public-tab-harem">
+          <i class="fas fa-ring"></i> Harém (<span id="public-harem-count">0</span>)
+        </button>
+        <button class="retro-tab" data-publictab="public-tab-market">
+          <i class="fas fa-store"></i> Classificados (<span id="public-market-count">0</span>)
+        </button>
       </div>
 
-      <!-- Título de quebra de linha para o Harém Geral -->
-      <div id="public-harem-section-title" class="hidden" style="margin-bottom: 16px;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <span style="font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted);"><i class="fas fa-ring"></i> Coleção do Harém</span>
-          <div style="flex: 1; height: 2px; background: var(--border-color, #2d241e);"></div>
+      <!-- Aba 1: Harém Público (Padrão) -->
+      <div class="public-tab-content" id="public-tab-harem">
+        <!-- Seção de Favoritas em Destaque (Centralizadas no Topo) -->
+        <div id="public-favorites-section" class="hidden" style="margin-bottom: 28px; text-align: center;">
+          <div style="display: inline-block; background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 8px 24px; box-shadow: var(--shadow-retro-sm); margin-bottom: 16px;">
+            <span style="font-weight: 800; font-size: 16px; color: #ec4899;">💖 Favoritas 💖</span>
+          </div>
+          <div id="public-favorites-grid" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; max-width: 1200px; margin: 0 auto;"></div>
         </div>
+
+        <!-- Título de quebra de linha para o Harém Geral -->
+        <div id="public-harem-section-title" class="hidden" style="margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted);"><i class="fas fa-ring"></i> Coleção do Harém</span>
+            <div style="flex: 1; height: 2px; background: var(--border-color, #2d241e);"></div>
+          </div>
+        </div>
+
+        <!-- Grid dos Demais Personagens (Quebra forçada para baixo) -->
+        <div id="public-harem-grid" class="waifu-grid"></div>
       </div>
 
-      <!-- Grid dos Demais Personagens (Quebra forçada para baixo) -->
-      <div id="public-harem-grid" class="waifu-grid"></div>
+      <!-- Aba 2: Classificados do Usuário Específico -->
+      <div class="public-tab-content hidden" id="public-tab-market">
+        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="font-size: 18px; font-weight: 800; margin: 0;">
+              <i class="fas fa-bullhorn" style="color: #f59e0b;"></i> Classificados de <span id="public-market-user-name">Usuário</span>
+            </h3>
+            <p style="font-size: 13px; color: var(--text-muted); margin: 4px 0 0 0;">
+              Personagens que este jogador colocou à venda ou troca nos classificados.
+            </p>
+          </div>
+        </div>
+
+        <!-- Grid de Anúncios deste Usuário -->
+        <div id="public-market-grid" class="waifu-grid">
+          <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--text-muted);">
+            Carregando classificados...
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Rodapé -->
@@ -709,6 +743,32 @@
       </div>
       <div class="modal-footer" style="justify-content: center;">
         <button class="btn-retro btn-sm btn-gold" onclick="closeModal('modal-waifu-preview')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Ajuda para Oferta Pública -->
+  <div class="modal-overlay hidden" id="modal-public-offer-help">
+    <div class="modal-box" style="max-width: min(500px, 80vw); max-height: 80vh;">
+      <div class="modal-header">
+        <span class="modal-title">🤝 Fazer Oferta</span>
+        <button class="modal-close" onclick="closeModal('modal-public-offer-help')">&times;</button>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 20px;">
+        <div style="font-size: 40px; margin-bottom: 12px;">💬</div>
+        <h3 id="public-offer-char-title" style="font-weight: 800; font-size: 17px; margin-bottom: 8px;">Negociar Waifu</h3>
+        <p style="font-size: 14px; color: var(--text-color); margin-bottom: 14px;">
+          Para fazer uma oferta por este personagem, acesse seu painel seguro de jogador.
+        </p>
+        <div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px; text-align: left;">
+          👉 Envie o comando <code>!mu-adm</code> para o WhatsApp da <strong>Ravena</strong> para receber seu link de acesso seguro com seu inventário e harém!
+        </div>
+        <a id="btn-public-offer-wa-link" href="#" target="_blank" class="btn-retro btn-sm btn-gold" style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px; text-decoration: none;">
+          <i class="fab fa-whatsapp" style="font-size: 18px;"></i> Abrir WhatsApp da Ravena
+        </a>
+      </div>
+      <div class="modal-footer" style="justify-content: center;">
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-public-offer-help')">Fechar</button>
       </div>
     </div>
   </div>
