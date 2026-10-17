@@ -87,11 +87,24 @@ export class CharacterService {
       where.tags = { has: filter.tag };
     }
     if (filter.search) {
-      where.OR = [
-        { id: { contains: filter.search, mode: 'insensitive' } },
-        { name: { contains: filter.search, mode: 'insensitive' } },
-        { series: { contains: filter.search, mode: 'insensitive' } },
-      ];
+      const searchTerms = filter.search.trim().split(/\s+/).filter(Boolean);
+      if (searchTerms.length > 1) {
+        where.AND = searchTerms.map((term) => ({
+          OR: [
+            { id: { contains: term, mode: 'insensitive' } },
+            { name: { contains: term, mode: 'insensitive' } },
+            { series: { contains: term, mode: 'insensitive' } },
+            { description: { contains: term, mode: 'insensitive' } },
+          ],
+        }));
+      } else {
+        where.OR = [
+          { id: { contains: filter.search, mode: 'insensitive' } },
+          { name: { contains: filter.search, mode: 'insensitive' } },
+          { series: { contains: filter.search, mode: 'insensitive' } },
+          { description: { contains: filter.search, mode: 'insensitive' } },
+        ];
+      }
     }
     if (filter.maritalStatus === 'married') {
       where.haremEntries = { some: {} };
