@@ -36,6 +36,17 @@
       user-select: none;
     }
   </style>
+  <script>
+    window.DEFAULT_CHAR_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232a2a3e'/%3E%3Ctext x='50' y='55' font-size='32' text-anchor='middle' dominant-baseline='middle'%3E%F0%9F%91%A4%3C/text%3E%3C/svg%3E";
+    window.handleImgError = function(img) {
+      if (!img) return;
+      img.onerror = function() {
+        img.onerror = null;
+        img.src = window.DEFAULT_CHAR_IMG;
+      };
+      img.src = "/media/characters/default.jpg";
+    };
+  </script>
 </head>
 <body>
 
@@ -326,7 +337,7 @@
 
   <!-- Modal de Confirmação de Divórcio -->
   <div class="modal-overlay hidden" id="modal-divorce">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: min(550px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">💔 Confirmar Divórcio</span>
         <button class="modal-close" onclick="closeModal('modal-divorce')">&times;</button>
@@ -346,7 +357,7 @@
 
   <!-- Modal de Sugestões de Personagem Existente (Raridade ou Foto) -->
   <div class="modal-overlay hidden" id="modal-suggest">
-    <div class="modal-box" style="max-width: 600px;">
+    <div class="modal-box" style="max-width: min(650px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">💡 Sugerir Alteração</span>
         <button class="modal-close" onclick="closeModal('modal-suggest')">&times;</button>
@@ -420,7 +431,7 @@
 
   <!-- Modal de Sugestão de NOVO PERSONAGEM -->
   <div class="modal-overlay hidden" id="modal-suggest-character">
-    <div class="modal-box" style="max-width: 580px;">
+    <div class="modal-box" style="max-width: min(640px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">✨ Sugerir Novo Personagem</span>
         <button class="modal-close" onclick="closeModal('modal-suggest-character')">&times;</button>
@@ -483,7 +494,7 @@
 
   <!-- Modal de Denúncia (🔞) -->
   <div class="modal-overlay hidden" id="modal-report">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: min(550px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">🔞 Denunciar Personagem</span>
         <button class="modal-close" onclick="closeModal('modal-report')">&times;</button>
@@ -509,14 +520,14 @@
 
   <!-- Modal de Anunciar Waifu (Vender) -->
   <div class="modal-overlay hidden" id="modal-market-sell">
-    <div class="modal-box" style="max-width: 500px;">
+    <div class="modal-box" style="max-width: min(560px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">💰 Anunciar nos Classificados</span>
         <button class="modal-close" onclick="closeModal('modal-market-sell')">&times;</button>
       </div>
       <div class="modal-body">
         <div style="text-align: center; margin-bottom: 16px;">
-          <img id="sell-modal-char-img" src="/media/characters/default.jpg" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: var(--border-retro); margin: 0 auto; display: block;">
+          <img id="sell-modal-char-img" src="/media/characters/default.jpg" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: var(--border-retro); margin: 0 auto; display: block;" onerror="handleImgError(this)">
           <h4 id="sell-modal-char-name" style="font-weight: 800; font-size: 16px; margin: 8px 0 2px 0;">Nome</h4>
           <span id="sell-modal-char-series" style="font-size: 13px; color: var(--text-muted);">Série</span>
         </div>
@@ -537,14 +548,14 @@
 
   <!-- Modal de Fazer Oferta -->
   <div class="modal-overlay hidden" id="modal-market-offer">
-    <div class="modal-box" style="max-width: 650px;">
+    <div class="modal-box" style="max-width: min(850px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">🤝 Fazer Oferta</span>
         <button class="modal-close" onclick="closeModal('modal-market-offer')">&times;</button>
       </div>
-      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+      <div class="modal-body" style="max-height: calc(80vh - 130px); overflow-y: auto;">
         <div style="display: flex; gap: 14px; align-items: center; background: var(--bg-retro-accent); padding: 10px 14px; border-radius: 6px; border: var(--border-retro); margin-bottom: 14px;">
-          <img id="offer-target-img" src="/media/characters/default.jpg" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;">
+          <img id="offer-target-img" src="/media/characters/default.jpg" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;" onerror="handleImgError(this)">
           <div>
             <div id="offer-target-name" style="font-weight: 800; font-size: 15px;">Nome</div>
             <div id="offer-target-interest" style="font-size: 13px; color: var(--text-muted);">Procura: ...</div>
@@ -626,12 +637,12 @@
 
   <!-- Modal de Ver Ofertas Recebidas -->
   <div class="modal-overlay hidden" id="modal-market-view-offers">
-    <div class="modal-box" style="max-width: 650px;">
+    <div class="modal-box" style="max-width: min(750px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">📬 Ofertas Recebidas</span>
         <button class="modal-close" onclick="closeModal('modal-market-view-offers')">&times;</button>
       </div>
-      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+      <div class="modal-body" style="max-height: calc(80vh - 130px); overflow-y: auto;">
         <h4 id="view-offers-char-title" style="font-weight: 800; font-size: 15px; margin: 0 0 12px 0;">Anúncio: ...</h4>
         <div id="offers-list-container" style="display: flex; flex-direction: column; gap: 12px;"></div>
       </div>
@@ -643,12 +654,12 @@
 
   <!-- Modal de Interessados no Harém (Cobiçar) -->
   <div class="modal-overlay hidden" id="modal-harem-covets">
-    <div class="modal-box" style="max-width: 600px;">
+    <div class="modal-box" style="max-width: min(700px, 80vw); max-height: 80vh;">
       <div class="modal-header">
         <span class="modal-title">👀 Interessados em <span id="covets-char-name">Waifu</span></span>
         <button class="modal-close" onclick="closeModal('modal-harem-covets')">&times;</button>
       </div>
-      <div class="modal-body" style="max-height: 65vh; overflow-y: auto;">
+      <div class="modal-body" style="max-height: calc(80vh - 130px); overflow-y: auto;">
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
           Jogadores que cobiçaram esta waifu do seu harém. Você pode ignorar ou anunciar diretamente nos classificados!
         </p>
@@ -684,14 +695,14 @@
 
   <!-- Modal Popup de Preview de Waifu (Sobreposto com z-index alto) -->
   <div class="modal-overlay hidden" id="modal-waifu-preview" style="z-index: 10005;">
-    <div class="modal-box" style="max-width: 380px; text-align: center; border: 3px solid #000; box-shadow: 6px 6px 0px #000;">
+    <div class="modal-box" style="max-width: min(420px, 80vw); max-height: 80vh; text-align: center; border: 3px solid #000; box-shadow: 6px 6px 0px #000;">
       <div class="modal-header" style="justify-content: space-between;">
         <span class="modal-title" id="waifu-preview-name" style="font-size: 15px;">Detalhes da Waifu</span>
         <button class="modal-close" onclick="closeModal('modal-waifu-preview')">&times;</button>
       </div>
-      <div class="modal-body" style="padding: 12px;">
+      <div class="modal-body" style="padding: 12px; max-height: calc(80vh - 130px); overflow-y: auto;">
         <div style="width: 100%; height: 320px; overflow: hidden; border: 2px solid #000; border-radius: 4px; background: #111; margin-bottom: 10px;">
-          <img id="waifu-preview-img" src="/media/characters/default.jpg" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg';">
+          <img id="waifu-preview-img" src="/media/characters/default.jpg" style="width: 100%; height: 100%; object-fit: cover;" onerror="handleImgError(this)">
         </div>
         <div id="waifu-preview-series" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;"></div>
         <div id="waifu-preview-rarity" style="font-size: 12px; font-weight: 800;"></div>

@@ -8,6 +8,16 @@ const RARITY_CONFIG = {
   LEGENDARY: { emoji: '⭐', label: 'Lendário', color: '#eab308' }
 };
 
+window.DEFAULT_CHAR_IMG = window.DEFAULT_CHAR_IMG || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232a2a3e'/%3E%3Ctext x='50' y='55' font-size='32' text-anchor='middle' dominant-baseline='middle'%3E%F0%9F%91%A4%3C/text%3E%3C/svg%3E";
+window.handleImgError = window.handleImgError || function(img) {
+  if (!img) return;
+  img.onerror = function() {
+    img.onerror = null;
+    img.src = window.DEFAULT_CHAR_IMG;
+  };
+  img.src = '/media/characters/default.jpg';
+};
+
 let userPublicId = '';
 let userSessionToken = '';
 let userSessionData = null;
@@ -520,7 +530,7 @@ function renderPrivateHarem(harem) {
 
     card.innerHTML = `
       <div class="card-img-wrapper">
-        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
@@ -534,7 +544,7 @@ function renderPrivateHarem(harem) {
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
           <!-- 1. Favoritar (rosa com coração rosa) -->
           <button class="btn-retro btn-sm" style="width: 100%; background: #ec4899; color: white; border-color: #db2777;" onclick="toggleFavorite('${char.id}')">
-            💖 ${entry.isFavorite ? 'Favorita' : 'Favoritar'}
+            💖 ${entry.isFavorite ? 'Desfavoritar' : 'Favoritar'}
           </button>
           <!-- 2. Divorciar -->
           <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="openDivorceModal('${char.id}', '${escapeHtml(char.name)}')">
@@ -620,7 +630,7 @@ function renderPrivateWishlist(wishlist) {
 
     card.innerHTML = `
       <div class="card-img-wrapper">
-        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
@@ -692,7 +702,7 @@ function renderPublicHarem(harem) {
 
         card.innerHTML = `
           <div class="card-img-wrapper">
-            <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+            <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
             <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
               ${rarity.emoji} ${rarity.label}
             </div>
@@ -733,7 +743,7 @@ function renderPublicHarem(harem) {
 
     card.innerHTML = `
       <div class="card-img-wrapper">
-        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
@@ -824,7 +834,7 @@ async function loadCatalogCharacters() {
 
       card.innerHTML = `
         <div class="card-img-wrapper">
-          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
           <div class="badge-rarity" style="border-color: ${rarityCfg.color}; color: ${rarityCfg.color};" title="Raridade: ${rarityCfg.label}">
             ${rarityCfg.emoji} ${rarityCfg.label}
           </div>
@@ -1233,8 +1243,8 @@ async function loadUserSuggestions() {
       } else if (s.character) {
         detail = `<strong>${escapeHtml(s.character.name)}</strong> (${escapeHtml(s.character.series || '')})`;
         if (s.type === 'RARITY') detail += ` &rarr; Nova: ${s.suggestedRarity}`;
-        if (s.type === 'IMAGE' && imgUrl) {
-          detail += ` &rarr; Nova Foto <a href="${imgUrl}" target="_blank" style="margin-left: 6px; text-decoration: underline; font-size: 11px;">[Ver foto enviada]</a>`;
+        if (s.type === 'IMAGE') {
+          detail += ` &rarr; Nova Foto`;
         }
       } else {
         detail = escapeHtml(s.characterName || 'Personagem');
@@ -1451,7 +1461,7 @@ async function loadMyListings() {
 
       card.innerHTML = `
         <div class="card-img-wrapper">
-          <img src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+          <img src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
           <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
             ${rarity.emoji} ${rarity.label}
           </div>
@@ -1686,7 +1696,7 @@ async function loadGlobalMarket() {
 
       card.innerHTML = `
         <div class="card-img-wrapper">
-          <img src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+          <img src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
           <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
             ${rarity.emoji} ${rarity.label}
           </div>
@@ -1747,7 +1757,7 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
       const char = item.character;
       return `
         <label style="border: var(--border-retro); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; align-items: center; cursor: pointer; background: var(--bg-card); font-size: 11px; text-align: center;">
-          <img src="${getCharImg(char)}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-bottom: 4px;" onerror="this.src='/media/characters/default.jpg';">
+          <img src="${getCharImg(char)}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-bottom: 4px;" onerror="handleImgError(this)">
           <span style="font-weight: 700; max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(char.name)}</span>
           <input type="checkbox" name="offer-waifu-cb" value="${char.id}" style="margin-top: 4px;">
         </label>

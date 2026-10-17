@@ -753,8 +753,8 @@ body.dark-mode .waifu-card.rarity-common {
   box-shadow: 6px 6px 0px #2d241e;
   border-radius: var(--radius-retro);
   width: 100%;
-  max-width: 540px;
-  max-height: 90vh;
+  max-width: min(580px, 80vw);
+  max-height: 80vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
