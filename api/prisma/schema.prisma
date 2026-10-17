@@ -35,6 +35,7 @@ enum KakeraReason {
   EVENT_REWARD
   WISHLIST_BONUS
   SOULMATE_BONUS
+  MARKET_TRADE
 }
 
 model User {
@@ -55,6 +56,9 @@ model User {
   marketListings MarketListing[]
   buyerOffers    MarketOffer[]         @relation("BuyerOffers")
   sellerOffers   MarketOffer[]         @relation("SellerOffers")
+  covetsGiven    CharacterCovet[]      @relation("UserCovets")
+  covetsReceived CharacterCovet[]      @relation("OwnerCovets")
+  marketNotifications MarketListingNotification[]
 
   @@index([kakera(sort: Desc)])
   @@map("users")
@@ -120,6 +124,8 @@ model Character {
   disabledGroups GroupDisabledSeries[]
   suggestions    CharacterSuggestion[]
   marketListings MarketListing[]
+  covets         CharacterCovet[]
+  marketNotifications MarketListingNotification[]
 
   @@index([claimCount(sort: Desc), likeCount(sort: Desc)])
   @@index([baseRarity, claimCount(sort: Desc)])
@@ -267,6 +273,7 @@ model MarketListing {
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   character      Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
   offers         MarketOffer[]
+  notifications  MarketListingNotification[]
 
   @@index([status, createdAt(sort: Desc)])
   @@index([userId, status])
@@ -298,4 +305,49 @@ model MarketOffer {
   @@index([sellerId, status, createdAt])
   @@map("market_offers")
 }
+
+enum CovetStatus {
+  PENDING
+  SEEN
+  IGNORED
+}
+
+model CharacterCovet {
+  id            String      @id @default(cuid())
+  characterId   String      @map("character_id")
+  userId        String      @map("user_id")
+  ownerId       String      @map("owner_id")
+  status        CovetStatus @default(PENDING)
+  notifiedOwner Boolean     @default(false) @map("notified_owner")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  character     Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  user          User        @relation("UserCovets", fields: [userId], references: [id], onDelete: Cascade)
+  owner         User        @relation("OwnerCovets", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, userId])
+  @@index([ownerId, status])
+  @@index([ownerId, notifiedOwner])
+  @@index([characterId])
+  @@map("character_covets")
+}
+
+model MarketListingNotification {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  listingId   String   @map("listing_id")
+  characterId String   @map("character_id")
+  notified    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing     MarketListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  character   Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, userId])
+  @@index([userId, notified])
+  @@map("market_listing_notifications")
+}
+
 

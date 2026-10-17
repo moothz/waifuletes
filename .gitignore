@@ -31,3 +31,4 @@ local/
 *.dump
 *.bundle
 *.bak
+.ai-memory.toml

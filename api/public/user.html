@@ -561,6 +561,7 @@
         <div id="offer-items-selection-area">
           <div class="retro-tabs" style="margin-bottom: 12px;">
             <button class="retro-tab active" data-offertab="offertab-waifus"><i class="fas fa-ring"></i> Waifus</button>
+            <button class="retro-tab" data-offertab="offertab-zinthos"><i class="fas fa-coins"></i> Zinthos</button>
             <button class="retro-tab" data-offertab="offertab-fishes"><i class="fas fa-fish"></i> Peixes</button>
             <button class="retro-tab" data-offertab="offertab-buffs"><i class="fas fa-bolt"></i> Buffs Pesca</button>
             <button class="retro-tab" data-offertab="offertab-farm"><i class="fas fa-seedling"></i> Fazenda</button>
@@ -569,6 +570,30 @@
           <!-- Seleção de Waifus -->
           <div class="offertab-content" id="offertab-waifus">
             <div id="offer-waifus-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; max-height: 220px; overflow-y: auto; padding: 4px;"></div>
+          </div>
+
+          <!-- Seleção de Zinthos -->
+          <div class="offertab-content hidden" id="offertab-zinthos">
+            <div style="background: var(--bg-card); padding: 14px; border: var(--border-retro); border-radius: 6px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
+                <span style="font-weight: 800; font-size: 14px;"><i class="fas fa-coins" style="color: #f59e0b;"></i> Moeda do Jogo (Zinthos)</span>
+                <span style="font-size: 12px; color: var(--text-muted);">Seu Saldo: <b id="offer-user-zinthos-balance" style="color: #10b981;">0</b> Zinthos</span>
+              </div>
+              <div class="form-group" style="margin-bottom: 8px;">
+                <label class="retro-label">Quantidade de Zinthos a oferecer:</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <input type="number" id="offer-zinthos-input" class="retro-input" min="0" value="0" placeholder="0">
+                  <button type="button" class="btn-retro btn-sm" onclick="setOfferZinthosMax()">Máximo</button>
+                  <button type="button" class="btn-retro btn-sm btn-danger" onclick="setOfferZinthosZero()">Zerar</button>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+                <button type="button" class="btn-retro btn-sm" onclick="addOfferZinthos(100)">+100</button>
+                <button type="button" class="btn-retro btn-sm" onclick="addOfferZinthos(500)">+500</button>
+                <button type="button" class="btn-retro btn-sm" onclick="addOfferZinthos(1000)">+1.000</button>
+                <button type="button" class="btn-retro btn-sm" onclick="addOfferZinthos(5000)">+5.000</button>
+              </div>
+            </div>
           </div>
 
           <!-- Seleção de Peixes -->
@@ -612,6 +637,47 @@
       </div>
       <div class="modal-footer">
         <button class="btn-retro btn-sm" onclick="closeModal('modal-market-view-offers')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Interessados no Harém (Cobiçar) -->
+  <div class="modal-overlay hidden" id="modal-harem-covets">
+    <div class="modal-box" style="max-width: 600px;">
+      <div class="modal-header">
+        <span class="modal-title">👀 Interessados em <span id="covets-char-name">Waifu</span></span>
+        <button class="modal-close" onclick="closeModal('modal-harem-covets')">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 65vh; overflow-y: auto;">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+          Jogadores que cobiçaram esta waifu do seu harém. Você pode ignorar ou anunciar diretamente nos classificados!
+        </p>
+        <div style="overflow-x: auto;">
+          <table class="retro-table" id="table-harem-covets">
+            <thead>
+              <tr style="background: var(--bg-retro-accent);">
+                <th>Jogador</th>
+                <th>Data</th>
+                <th>Status</th>
+                <th style="text-align: right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-harem-covets">
+              <tr><td colspan="4" style="text-align: center; padding: 16px;">Carregando interessados...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <button class="btn-retro btn-sm btn-gold" id="btn-covets-sell-now">
+          <i class="fas fa-bullhorn"></i> Anunciar nos Classificados 💰
+        </button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-retro btn-sm" id="btn-covets-mark-all-seen">
+            <i class="fas fa-check-double"></i> Visto
+          </button>
+          <button class="btn-retro btn-sm" onclick="closeModal('modal-harem-covets')">Fechar</button>
+        </div>
       </div>
     </div>
   </div>

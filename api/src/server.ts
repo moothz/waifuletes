@@ -34,6 +34,7 @@ import { privateWishlistRoutes } from './routes/private/wishlist.js';
 import { privateKakeraRoutes } from './routes/private/kakera.js';
 import { privateAdminRoutes } from './routes/private/admin.js';
 import { privateMarketRoutes } from './routes/private/market.js';
+import { privateCovetRoutes } from './routes/private/covet.js';
 
 const fastify = Fastify({
   trustProxy: true,
@@ -258,6 +259,7 @@ async function buildServer() {
   await fastify.register(privateKakeraRoutes);
   await fastify.register(privateAdminRoutes);
   await fastify.register(privateMarketRoutes);
+  await fastify.register(privateCovetRoutes);
 
   return fastify;
 }

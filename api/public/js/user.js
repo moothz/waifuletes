@@ -17,6 +17,8 @@ let pendingDivorceTarget = null;
 let activeReportCharacter = null;
 let activeSellCharacter = null;
 let activeOfferListing = null;
+let activeCovetsChar = null;
+let userCovetedSet = new Set();
 
 let marketState = {
   search: '',
@@ -402,6 +404,7 @@ async function loadUserData() {
 
     userSessionData = res.data;
     const isOwner = Boolean(userSessionData.isAdmin);
+    userCovetedSet = new Set(userSessionData.covetedCharacterIds || []);
 
     document.getElementById('user-title').textContent = isOwner
       ? `Painel de ${userSessionData.name}`
@@ -510,6 +513,11 @@ function renderPrivateHarem(harem) {
     card.id = `harem-card-${char.id}`;
     card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
 
+    const unseenCovets = Number(entry.unseenCovetsCount || 0);
+    const covetsLabel = unseenCovets > 0 ? `Interessados (${unseenCovets})` : 'Interessados';
+    const covetsBtnClass = unseenCovets > 0 ? 'btn-gold' : '';
+    const covetsBtnStyle = unseenCovets > 0 ? 'border-color: #f59e0b; font-weight: 800;' : '';
+
     card.innerHTML = `
       <div class="card-img-wrapper">
         <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
@@ -518,20 +526,29 @@ function renderPrivateHarem(harem) {
         </div>
         ${entry.keys ? `<div class="badge-wishes"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
         ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
+        ${unseenCovets > 0 ? `<div class="badge-married" style="background: #f59e0b; color: #000; left: 8px; right: auto; font-weight: 800;">👀 ${unseenCovets}</div>` : ''}
       </div>
       <div class="card-info">
         <div class="card-name">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-          <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openSellModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
-            <i class="fas fa-tag"></i> 💰 Vender
+          <!-- 1. Favoritar (rosa com coração rosa) -->
+          <button class="btn-retro btn-sm" style="width: 100%; background: #ec4899; color: white; border-color: #db2777;" onclick="toggleFavorite('${char.id}')">
+            💖 ${entry.isFavorite ? 'Favorita' : 'Favoritar'}
           </button>
-          <button class="btn-retro btn-sm ${entry.isFavorite ? 'btn-gold' : ''}" style="width: 100%;" onclick="toggleFavorite('${char.id}')">
-            ${entry.isFavorite ? '💖 Favorita' : '🤍 Favoritar'}
-          </button>
+          <!-- 2. Divorciar -->
           <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="openDivorceModal('${char.id}', '${escapeHtml(char.name)}')">
             <i class="fas fa-heart-crack"></i> Divorciar
           </button>
+          <!-- 3. Vender -->
+          <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openSellModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
+            <i class="fas fa-tag"></i> 💰 Vender
+          </button>
+          <!-- 4. Interessados -->
+          <button class="btn-retro btn-sm ${covetsBtnClass}" style="width: 100%; ${covetsBtnStyle}" onclick="openHaremCovetsModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
+            <i class="fas fa-eye"></i> 👀 ${covetsLabel}
+          </button>
+          <!-- 5. Sugerir Mudança -->
           <button class="btn-retro btn-sm" style="width: 100%;" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
             <i class="fas fa-lightbulb"></i> Sugerir Mudança
           </button>
@@ -613,13 +630,26 @@ function renderPrivateWishlist(wishlist) {
       <div class="card-info">
         <div class="card-name">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
-        <div class="card-actions">
-          <button class="btn-retro btn-sm btn-danger" onclick="removeFromWishlist('${char.id}')">
-            <i class="fas fa-times"></i> Remover
-          </button>
-          <button class="btn-retro btn-sm" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
-            <i class="fas fa-lightbulb"></i> Sugerir Mudança
-          </button>
+        <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+          ${isMarried && entry.marriedToPublicId !== userSessionData?.publicId ? `
+            ${userCovetedSet.has(char.id) ? `
+              <button class="btn-retro btn-sm" style="width: 100%; border-color: #ec4899; color: #ec4899;" disabled>
+                <i class="fas fa-check"></i> 👀 Cobiçado
+              </button>
+            ` : `
+              <button class="btn-retro btn-sm" style="width: 100%; border-color: #ec4899; color: #ec4899;" onclick="covetCharacter('${char.id}', this, event)">
+                <i class="fas fa-eye"></i> 👀 Cobiçar
+              </button>
+            `}
+          ` : ''}
+          <div style="display: flex; gap: 6px; width: 100%;">
+            <button class="btn-retro btn-sm btn-danger" style="flex: 1;" onclick="removeFromWishlist('${char.id}')">
+              <i class="fas fa-times"></i> Remover
+            </button>
+            <button class="btn-retro btn-sm" style="flex: 1;" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
+              <i class="fas fa-lightbulb"></i> Sugerir
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -810,6 +840,17 @@ async function loadCatalogCharacters() {
             <button class="btn-retro btn-sm ${isAlreadyWish ? '' : 'btn-gold'}" style="width: 100%;" ${isAlreadyWish ? 'disabled' : ''} onclick="addToWishlist('${char.id}', this, event)">
               ${isAlreadyWish ? '<i class="fas fa-check"></i> Na Wishlist' : '<i class="fas fa-star"></i> + Wishlist'}
             </button>
+            ${isMarried && spousePublicId !== userSessionData?.publicId ? `
+              ${userCovetedSet.has(char.id) ? `
+                <button class="btn-retro btn-sm" style="width: 100%; border-color: #ec4899; color: #ec4899;" disabled>
+                  <i class="fas fa-check"></i> 👀 Cobiçado
+                </button>
+              ` : `
+                <button class="btn-retro btn-sm" style="width: 100%; border-color: #ec4899; color: #ec4899;" onclick="covetCharacter('${char.id}', this, event)">
+                  <i class="fas fa-eye"></i> 👀 Cobiçar
+                </button>
+              `}
+            ` : ''}
             <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="openReportModal('${char.id}', '${escapeHtml(char.name)}')">
               <i class="fas fa-ban"></i> Denunciar 🔞
             </button>
@@ -1513,6 +1554,9 @@ async function openViewOffersModal(listingId, characterName) {
         if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) {
           parts.push(`<div><strong>Itens de Fazenda:</strong> ${offered.farmItems.map(it => `${it.amount}x ${escapeHtml(it.name || it.itemId)}`).join(', ')}</div>`);
         }
+        if (offered.zinthos && Number(offered.zinthos) > 0) {
+          parts.push(`<div><strong>Moeda (Zinthos):</strong> <span style="color:#f59e0b;font-weight:800;">🪙 ${Number(offered.zinthos).toLocaleString('pt-BR')} Zinthos</span></div>`);
+        }
         itemsHtml = parts.join('<div style="margin-top: 4px;"></div>') || '<span style="color: var(--text-muted);">Nenhum item especificado</span>';
       }
 
@@ -1685,6 +1729,13 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
   document.getElementById('offer-is-free-checkbox').checked = false;
   toggleFreeOffer(false);
   document.getElementById('offer-message-input').value = '';
+
+  const zInput = document.getElementById('offer-zinthos-input');
+  if (zInput) zInput.value = '0';
+  const balanceEl = document.getElementById('offer-user-zinthos-balance');
+  if (balanceEl) {
+    balanceEl.textContent = Number(userSessionData?.kakera || 0).toLocaleString('pt-BR');
+  }
 
   // 1. Popula Waifus disponíveis do harém do comprador
   const waifusList = document.getElementById('offer-waifus-list');
@@ -1903,8 +1954,10 @@ async function submitMarketOffer() {
     }
   });
 
-  if (!isFree && selectedWaifuIds.length === 0 && selectedFishes.length === 0 && selectedBuffs.length === 0 && farmItems.length === 0) {
-    Api.showToast('Selecione ao menos um item para oferecer ou marque "Pedir de graça".', '⚠️');
+  const zinthos = parseInt(document.getElementById('offer-zinthos-input')?.value, 10) || 0;
+
+  if (!isFree && selectedWaifuIds.length === 0 && selectedFishes.length === 0 && selectedBuffs.length === 0 && farmItems.length === 0 && zinthos <= 0) {
+    Api.showToast('Selecione ao menos um item, waifu ou Zinthos para oferecer (ou marque "Pedir de graça").', '⚠️');
     return;
   }
 
@@ -1918,6 +1971,7 @@ async function submitMarketOffer() {
       message,
       offeredItems: {
         isFree,
+        zinthos,
         waifuIds: selectedWaifuIds,
         fishes: selectedFishes,
         fishingBuffs: selectedBuffs,
@@ -1966,6 +2020,7 @@ async function loadMySentOffers() {
         if (Array.isArray(offered.fishes) && offered.fishes.length > 0) parts.push(`${offered.fishes.length} peixe(s)`);
         if (Array.isArray(offered.fishingBuffs) && offered.fishingBuffs.length > 0) parts.push(`${offered.fishingBuffs.length} buff(s)`);
         if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) parts.push(`${offered.farmItems.length} item(ns) da fazenda`);
+        if (offered.zinthos && Number(offered.zinthos) > 0) parts.push(`🪙 ${Number(offered.zinthos).toLocaleString('pt-BR')} zinthos`);
         summary = parts.join(', ') || 'Nenhum item';
       }
 
@@ -1989,6 +2044,150 @@ async function loadMySentOffers() {
     }).join('');
   } catch (err) {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-red); padding: 20px;">Erro ao carregar histórico de ofertas.</td></tr>';
+  }
+}
+
+// Funções de controle de Zinthos no modal de oferta
+function setOfferZinthosMax() {
+  const max = Number(userSessionData?.kakera || 0);
+  const input = document.getElementById('offer-zinthos-input');
+  if (input) input.value = max;
+}
+
+function setOfferZinthosZero() {
+  const input = document.getElementById('offer-zinthos-input');
+  if (input) input.value = '0';
+}
+
+function addOfferZinthos(amount) {
+  const input = document.getElementById('offer-zinthos-input');
+  if (!input) return;
+  const current = parseInt(input.value, 10) || 0;
+  const max = Number(userSessionData?.kakera || 0);
+  input.value = Math.min(max, current + amount);
+}
+
+// Cobiçar personagem casado
+async function covetCharacter(characterId, btn, event) {
+  if (event) event.stopPropagation();
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/covet`, {
+      token: userSessionToken,
+      characterId,
+    });
+
+    if (res.success) {
+      userCovetedSet.add(characterId);
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-check"></i> 👀 Cobiçado';
+        btn.disabled = true;
+      }
+      Api.showToast('Você cobiçou o personagem! Ele também foi adicionado à sua Wishlist.', '👀');
+      loadUserData();
+    } else {
+      if (btn) btn.disabled = false;
+      Api.showToast(res.error?.message || 'Falha ao cobiçar personagem.', '❌');
+    }
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    Api.showToast('Erro de comunicação ao cobiçar.', '❌');
+  }
+}
+
+// Modal de Interessados no Harém
+async function openHaremCovetsModal(characterId, characterName, imageUrl, series) {
+  activeCovetsChar = { id: characterId, name: characterName, imageUrl, series };
+  const nameEl = document.getElementById('covets-char-name');
+  if (nameEl) nameEl.textContent = characterName;
+
+  const sellBtn = document.getElementById('btn-covets-sell-now');
+  if (sellBtn) {
+    sellBtn.onclick = () => {
+      closeModal('modal-harem-covets');
+      openSellModal(characterId, characterName, imageUrl || '/media/characters/default.jpg', series || '');
+    };
+  }
+
+  const markAllBtn = document.getElementById('btn-covets-mark-all-seen');
+  if (markAllBtn) {
+    markAllBtn.onclick = () => markAllCovetsSeen(characterId);
+  }
+
+  openModal('modal-harem-covets');
+  loadHaremCovetsTable(characterId);
+}
+
+async function loadHaremCovetsTable(characterId) {
+  const tbody = document.getElementById('tbody-harem-covets');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 16px;"><i class="fas fa-spinner fa-spin"></i> Carregando interessados...</td></tr>';
+
+  try {
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/harem/${encodeURIComponent(characterId)}/covets?token=${encodeURIComponent(userSessionToken)}`);
+    if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px; color: var(--text-muted);">Nenhum jogador cobiçou este personagem ainda.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = res.data.map(covet => {
+      const date = new Date(covet.createdAt).toLocaleDateString('pt-BR');
+      let statusHtml = '<span class="badge-tag" style="background: #f59e0b; color: #000;">Novo</span>';
+      if (covet.status === 'SEEN') statusHtml = '<span class="badge-tag" style="background: #3b82f6; color: #fff;">Visto</span>';
+      if (covet.status === 'IGNORED') statusHtml = '<span class="badge-tag" style="background: #64748b; color: #fff;">Ignorado</span>';
+
+      const isIgnored = covet.status === 'IGNORED';
+      const actionBtn = !isIgnored
+        ? `<button class="btn-retro btn-sm btn-danger" onclick="ignoreHaremCovet('${characterId}', '${covet.id}')"><i class="fas fa-eye-slash"></i> Ignorar</button>`
+        : '<span style="color: var(--text-muted); font-size: 11px;">Ignorado</span>';
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(covet.userName)}</strong></td>
+          <td style="font-size: 12px; color: var(--text-muted);">${date}</td>
+          <td>${statusHtml}</td>
+          <td style="text-align: right;">${actionBtn}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 16px; color: var(--accent-red);">Erro ao carregar interessados.</td></tr>';
+  }
+}
+
+async function ignoreHaremCovet(characterId, covetId) {
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/harem/${encodeURIComponent(characterId)}/covets/ignore`, {
+      token: userSessionToken,
+      covetId,
+    });
+    if (res.success) {
+      Api.showToast('Interesse ignorado.', 'ℹ️');
+      loadHaremCovetsTable(characterId);
+      loadUserData();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao ignorar interesse.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação.', '❌');
+  }
+}
+
+async function markAllCovetsSeen(characterId) {
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/harem/${encodeURIComponent(characterId)}/covets/seen-all`, {
+      token: userSessionToken,
+    });
+    if (res.success) {
+      Api.showToast('Marcado como visto!', '✨');
+      loadHaremCovetsTable(characterId);
+      loadUserData();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao marcar como visto.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação.', '❌');
   }
 }
 

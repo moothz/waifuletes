@@ -6,6 +6,7 @@ import { DivorceService } from '../../services/DivorceService.js';
 import { CharacterService } from '../../services/CharacterService.js';
 import { SuggestionService } from '../../services/SuggestionService.js';
 import { MarketService } from '../../services/MarketService.js';
+import { CovetService } from '../../services/CovetService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
 import { Rarity } from '@prisma/client';
@@ -77,6 +78,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   const webSessionService = new WebSessionService(fastify.redis, fastify.prisma);
   const suggestionService = new SuggestionService(fastify.prisma, fastify.redis, characterService);
   const marketService = new MarketService(fastify.prisma, characterService);
+  const covetService = new CovetService(fastify.prisma, characterService, wishlistService);
 
   /**
    * Retorna um número de WhatsApp ativo da Ravena para redirecionamento com !mu-adm
@@ -174,6 +176,14 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (isOwner) {
         const wishlistResult = await wishlistService.getWishlist(user.id);
+        const covetCountsMap = await covetService.getHaremCovetCounts(user.id);
+        const covetedCharacterIds = await covetService.getUserCovetedCharacterIds(user.id);
+
+        const enrichedHarem = haremResult.data.map((item) => ({
+          ...item,
+          unseenCovetsCount: covetCountsMap[item.character.id]?.unseen || 0,
+          totalCovetsCount: covetCountsMap[item.character.id]?.total || 0,
+        }));
 
         return reply.send({
           success: true,
@@ -183,8 +193,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             name: user.name,
             kakera: user.kakera,
             expiresIn: session.expiresIn,
-            harem: haremResult.data,
+            harem: enrichedHarem,
             wishlist: wishlistResult,
+            covetedCharacterIds,
             inventory: session.inventory || null,
           },
         });
@@ -988,6 +999,189 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
 
       const offer = await marketService.rejectOffer(session.userId, offerId);
       return reply.send({ success: true, data: offer });
+    },
+  });
+
+  /**
+   * Cobiçar um personagem já casado de outro jogador
+   */
+  fastify.post('/api/web/user/:publicId/covet', {
+    schema: {
+      description: 'Cobiça um personagem casado e adiciona à wishlist',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'characterId'],
+        properties: {
+          token: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, characterId } = request.body as { token: string; characterId: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' },
+        });
+      }
+
+      try {
+        const result = await covetService.covet(session.userId, characterId);
+        return reply.send({ success: true, data: result });
+      } catch (err: any) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: err.code || 'COVET_ERROR', message: err.message },
+        });
+      }
+    },
+  });
+
+  /**
+   * Lista os interessados em uma waifu do harém
+   */
+  fastify.get('/api/web/user/:publicId/harem/:characterId/covets', {
+    schema: {
+      description: 'Lista jogadores interessados em uma waifu do harém',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'characterId'],
+        properties: {
+          publicId: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, characterId } = request.params as { publicId: string; characterId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' },
+        });
+      }
+
+      try {
+        const covets = await covetService.getCharacterCovets(session.userId, characterId);
+        return reply.send({ success: true, data: covets });
+      } catch (err: any) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: err.code || 'COVET_ERROR', message: err.message },
+        });
+      }
+    },
+  });
+
+  /**
+   * Ignora um interesse específico
+   */
+  fastify.post('/api/web/user/:publicId/harem/:characterId/covets/ignore', {
+    schema: {
+      description: 'Ignora um interesse de um jogador',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'characterId'],
+        properties: {
+          publicId: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'covetId'],
+        properties: {
+          token: { type: 'string' },
+          covetId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, characterId } = request.params as { publicId: string; characterId: string };
+      const { token, covetId } = request.body as { token: string; covetId: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' },
+        });
+      }
+
+      try {
+        const result = await covetService.ignoreCovet(session.userId, covetId);
+        return reply.send({ success: true, data: result });
+      } catch (err: any) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: err.code || 'COVET_ERROR', message: err.message },
+        });
+      }
+    },
+  });
+
+  /**
+   * Marca todos os interessados como vistos
+   */
+  fastify.post('/api/web/user/:publicId/harem/:characterId/covets/seen-all', {
+    schema: {
+      description: 'Marca todos os interessados de um personagem como vistos',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'characterId'],
+        properties: {
+          publicId: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, characterId } = request.params as { publicId: string; characterId: string };
+      const { token } = request.body as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' },
+        });
+      }
+
+      try {
+        const result = await covetService.markAllSeen(session.userId, characterId);
+        return reply.send({ success: true, data: result });
+      } catch (err: any) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: err.code || 'COVET_ERROR', message: err.message },
+        });
+      }
     },
   });
 };

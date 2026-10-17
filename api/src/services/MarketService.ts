@@ -1,4 +1,4 @@
-import { PrismaClient, ListingStatus, OfferStatus } from '@prisma/client';
+import { PrismaClient, ListingStatus, OfferStatus, KakeraReason } from '@prisma/client';
 import { config } from '../config.js';
 import { DomainError } from '../errors/DomainError.js';
 import { CharacterService } from './CharacterService.js';
@@ -6,6 +6,7 @@ import { CharacterService } from './CharacterService.js';
 export interface CreateOfferData {
   message?: string;
   offeredItems: {
+    zinthos?: number;
     waifuIds?: string[];
     fishes?: Array<{ id: number; name?: string; weight?: number; isRare?: boolean }>;
     fishingBuffs?: Array<{ id: number; originalName?: string; type?: string; description?: string }>;
@@ -83,6 +84,31 @@ export class MarketService {
         character: true,
       },
     });
+
+    // Registra notificações para quem possui na Wishlist ou cobiçou este personagem
+    try {
+      const interestedUsers = await this.prisma.$queryRaw<{ userId: string }[]>`
+        SELECT DISTINCT "user_id" as "userId" FROM (
+          SELECT "user_id" FROM "wishlist_entries" WHERE "character_id" = ${characterId}
+          UNION
+          SELECT "user_id" FROM "character_covets" WHERE "character_id" = ${characterId}
+        ) t WHERE "user_id" != ${userId}
+      `;
+
+      if (interestedUsers.length > 0) {
+        await this.prisma.marketListingNotification.createMany({
+          data: interestedUsers.map((u) => ({
+            userId: u.userId,
+            listingId: listing.id,
+            characterId,
+            notified: false,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    } catch {
+      // Ignora erro para não falhar a criação do anúncio
+    }
 
     return {
       ...listing,
@@ -390,6 +416,21 @@ export class MarketService {
       }
     }
 
+    // Se ofertou Zinthos, valida se o comprador tem saldo suficiente
+    const offeredZinthos = Number(data.offeredItems?.zinthos) || 0;
+    if (offeredZinthos > 0) {
+      const buyer = await this.prisma.user.findUnique({
+        where: { id: buyerId },
+        select: { kakera: true },
+      });
+      if (!buyer || buyer.kakera < offeredZinthos) {
+        throw new DomainError(
+          'INSUFFICIENT_ZINTHOS',
+          `Saldo insuficiente de Zinthos. Você possui ${buyer?.kakera || 0} Zinthos, mas tentou oferecer ${offeredZinthos}.`
+        );
+      }
+    }
+
     const offer = await this.prisma.marketOffer.create({
       data: {
         listingId,
@@ -515,7 +556,32 @@ export class MarketService {
       }
     }
 
-    // 3. Valida e transfere itens externos (Pesca e Fazenda) via Ravena
+    // 3. Valida se o Comprador ainda possui os Zinthos ofertados
+    const offeredZinthos = Number(offered.zinthos) || 0;
+    if (offeredZinthos > 0) {
+      const buyer = await this.prisma.user.findUnique({
+        where: { id: offer.buyerId },
+        select: { kakera: true },
+      });
+      if (!buyer || buyer.kakera < offeredZinthos) {
+        await this.prisma.marketOffer.update({
+          where: { id: offer.id },
+          data: {
+            status: OfferStatus.CANCELLED,
+            cancelReason: `Falta de itens no momento: O proponente não possui mais os Zinthos ofertados (${buyer?.kakera || 0}/${offeredZinthos}).`,
+            notifiedBuyer: false,
+            buyerNotifiedStatus: 'CANCELLED',
+          },
+        });
+        return {
+          success: false,
+          cancelled: true,
+          reason: 'Não foi possível aceitar a oferta: o usuário não possui mais o saldo de Zinthos ofertado. A oferta foi cancelada automaticamente.',
+        };
+      }
+    }
+
+    // 4. Valida e transfere itens externos (Pesca e Fazenda) via Ravena
     const fishes = Array.isArray(offered.fishes) ? offered.fishes : [];
     const buffs = Array.isArray(offered.fishingBuffs) ? offered.fishingBuffs : [];
     const farmItems = Array.isArray(offered.farmItems) ? offered.farmItems : [];
@@ -577,7 +643,7 @@ export class MarketService {
       }
     }
 
-    // 4. Executa a transferência de Waifus atomicamente no PostgreSQL
+    // 5. Executa a transferência de Waifus e Zinthos atomicamente no PostgreSQL
     await this.prisma.$transaction(async (tx) => {
       // Passa a waifu anunciada do vendedor para o comprador
       await tx.haremEntry.update({
@@ -585,11 +651,59 @@ export class MarketService {
         data: { userId: offer.buyerId },
       });
 
+      // Se o comprador tiver cobiçado este personagem anunciado, remove o covet dele
+      await tx.characterCovet.deleteMany({
+        where: { characterId: listing.characterId, userId: offer.buyerId },
+      });
+
+      // Atualiza os covets restantes desse personagem para o novo dono
+      await tx.characterCovet.updateMany({
+        where: { characterId: listing.characterId },
+        data: { ownerId: offer.buyerId },
+      });
+
       // Passa as waifus ofertadas do comprador para o vendedor
       for (const wId of waifuIds) {
         await tx.haremEntry.update({
           where: { characterId: wId },
           data: { userId: sellerId },
+        });
+
+        // Atualiza covets das waifus ofertadas para o novo dono
+        await tx.characterCovet.deleteMany({
+          where: { characterId: wId, userId: sellerId },
+        });
+        await tx.characterCovet.updateMany({
+          where: { characterId: wId },
+          data: { ownerId: sellerId },
+        });
+      }
+
+      // Transfere Zinthos (se houver)
+      if (offeredZinthos > 0) {
+        await tx.user.update({
+          where: { id: offer.buyerId },
+          data: { kakera: { decrement: offeredZinthos } },
+        });
+        await tx.user.update({
+          where: { id: sellerId },
+          data: { kakera: { increment: offeredZinthos } },
+        });
+        await tx.kakeraTransaction.createMany({
+          data: [
+            {
+              userId: offer.buyerId,
+              amount: -offeredZinthos,
+              reason: KakeraReason.MARKET_TRADE,
+              metadata: { type: 'market_offer_paid', listingId: listing.id, sellerId },
+            },
+            {
+              userId: sellerId,
+              amount: offeredZinthos,
+              reason: KakeraReason.MARKET_TRADE,
+              metadata: { type: 'market_offer_received', listingId: listing.id, buyerId: offer.buyerId },
+            },
+          ],
         });
       }
 
@@ -701,6 +815,44 @@ export class MarketService {
         data: { notifiedSeller: true },
       });
       return '🫰 Tem ofertas pendentes nos seus classificados! Veja no !mu-adm';
+    }
+
+    // 3. Avisos para o dono se alguém cobiçou personagem do seu harém
+    const pendingCovet = await this.prisma.characterCovet.findFirst({
+      where: {
+        ownerId: userId,
+        notifiedOwner: false,
+      },
+    });
+
+    if (pendingCovet) {
+      await this.prisma.characterCovet.updateMany({
+        where: {
+          ownerId: userId,
+          notifiedOwner: false,
+        },
+        data: { notifiedOwner: true },
+      });
+      return '👀 Alguém está cobiçando um personagem do seu harém! Acesse !mu-adm';
+    }
+
+    // 4. Avisos para o usuário se um personagem da sua wishlist ou cobiçado foi anunciado nos classificados
+    const pendingListingNotif = await this.prisma.marketListingNotification.findFirst({
+      where: {
+        userId,
+        notified: false,
+      },
+    });
+
+    if (pendingListingNotif) {
+      await this.prisma.marketListingNotification.updateMany({
+        where: {
+          userId,
+          notified: false,
+        },
+        data: { notified: true },
+      });
+      return '📢 Um personagem da sua Wishlist ou cobiçado foi anunciado nos classificados! Veja no !mu-adm';
     }
 
     return null;
