@@ -269,6 +269,46 @@ export class RollService {
         throw new Error('CHOSEN_CHARACTER_NOT_FOUND');
       }
 
+      // Buscar membros do grupo que têm esse personagem na wishlist
+      const groupWishlistEntries = groupId
+        ? await this.prisma.wishlistEntry.findMany({
+            where: {
+              characterId: chosen.id,
+              user: {
+                groups: {
+                  some: { groupId },
+                },
+              },
+            },
+            select: {
+              userId: true,
+              isStarWish: true,
+              user: {
+                select: { id: true, name: true },
+              },
+            },
+          })
+        : [];
+
+      const wishlistUsers = groupWishlistEntries.map((e) => ({
+        userId: e.userId,
+        name: e.user?.name || e.userId,
+        isStarWish: e.isStarWish,
+      }));
+
+      // Garante que se o autor do roll tiver na wishlist, esteja presente na lista
+      if (wishMap.has(chosen.id) && !wishlistUsers.some((u) => u.userId === userId)) {
+        const roller = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, name: true },
+        });
+        wishlistUsers.push({
+          userId,
+          name: roller?.name || userId,
+          isStarWish: wishMap.get(chosen.id) ?? false,
+        });
+      }
+
       // 7. Processar estado de dono e recompensas
       const existingHaremEntry = chosen.haremEntries[0];
       const isOwner = existingHaremEntry?.userId === userId;
@@ -384,6 +424,7 @@ export class RollService {
           available: !isClaimed,
           isWishlist: wishMap.has(chosen.id),
           isStarWish: wishMap.get(chosen.id) ?? false,
+          wishlistUsers,
           isOwner,
           owner: isClaimed
             ? {

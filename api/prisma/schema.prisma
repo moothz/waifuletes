@@ -128,7 +128,7 @@ model HaremEntry {
   characterId    String
   claimedAt      DateTime  @default(now())
   claimedInGroup String
-  keys           Int       @default(0)
+  keys           Int       @default(1)
   isFavorite     Boolean   @default(false)
   note           String?
 
