@@ -1222,6 +1222,82 @@ async function loadUserSuggestions() {
 /* MÓDULO DE CLASSIFICADOS E MERCADO (PAINEL WEB)                             */
 /* ────────────────────────────────────────────────────────────────────────── */
 
+function getCharImg(char) {
+  if (!char) return '/media/characters/default.jpg';
+  if (typeof char === 'string') {
+    if (char.startsWith('http') || char.startsWith('/media/')) return char;
+    return `/media/${char}`;
+  }
+  if (char.imageUrl) {
+    if (char.imageUrl.startsWith('http') || char.imageUrl.startsWith('/media/')) return char.imageUrl;
+    return `/media/${char.imageUrl}`;
+  }
+  if (Array.isArray(char.imageUrls) && char.imageUrls.length > 0) {
+    const first = char.imageUrls[0];
+    if (first.startsWith('http') || first.startsWith('/media/')) return first;
+    return `/media/${first}`;
+  }
+  return '/media/characters/default.jpg';
+}
+
+function escapeAttr(str) {
+  if (!str) return '';
+  return String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+const LOCAL_BUFF_DESCRIPTIONS = {
+  bait_on_trash: 'Evita perder a isca ao pescar lixo',
+  rare_chance_boost: 'Aumenta chance de peixe raro',
+  double_catch: 'Pesca 2 peixes em 1 tentativa',
+  cooldown_reduction: 'Reduz o tempo de espera',
+  guaranteed_weight: 'Garante peso extra aos peixes',
+  inventory_slot: 'Aumenta capacidade do inventário',
+  next_fish_bonus: 'Bônus de peso no próximo peixe',
+  longer_cooldown: 'Aumenta o tempo de espera',
+  remove_baits: 'Perde iscas'
+};
+
+function getLocalBuffDescription(type) {
+  return LOCAL_BUFF_DESCRIPTIONS[type] || 'Buff permanente de pesca';
+}
+
+async function openWaifuPreview(charId, charName, charImg, series, rarity) {
+  const modal = document.getElementById('modal-waifu-preview');
+  if (!modal) return;
+  document.getElementById('waifu-preview-name').textContent = charName || charId;
+  document.getElementById('waifu-preview-series').textContent = series ? `Série: ${series}` : '';
+  const rarityEl = document.getElementById('waifu-preview-rarity');
+  if (rarity && RARITY_CONFIG[rarity]) {
+    const r = RARITY_CONFIG[rarity];
+    rarityEl.innerHTML = `<span style="color:${r.color}; font-weight:800;">${r.emoji} ${r.label}</span>`;
+  } else {
+    rarityEl.textContent = '';
+  }
+
+  if (charImg && charImg !== '/media/characters/default.jpg') {
+    document.getElementById('waifu-preview-img').src = charImg;
+    openModal('modal-waifu-preview');
+  } else {
+    document.getElementById('waifu-preview-img').src = '/media/characters/default.jpg';
+    openModal('modal-waifu-preview');
+    try {
+      const res = await Api.get(`/api/characters/${encodeURIComponent(charId)}`);
+      if (res?.data) {
+        const char = res.data;
+        document.getElementById('waifu-preview-name').textContent = char.name || charId;
+        document.getElementById('waifu-preview-series').textContent = char.series ? `Série: ${char.series}` : '';
+        document.getElementById('waifu-preview-img').src = getCharImg(char);
+        if (char.baseRarity && RARITY_CONFIG[char.baseRarity]) {
+          const r = RARITY_CONFIG[char.baseRarity];
+          rarityEl.innerHTML = `<span style="color:${r.color}; font-weight:800;">${r.emoji} ${r.label}</span>`;
+        }
+      }
+    } catch {
+      // Silencioso
+    }
+  }
+}
+
 function switchTab(tabId) {
   const tabBtn = document.querySelector(`.retro-tabs .retro-tab[data-tab="${tabId}"]`);
   if (tabBtn) tabBtn.click();
@@ -1231,7 +1307,7 @@ function openSellModal(characterId, characterName, imageUrl, series) {
   activeSellCharacter = { id: characterId, name: characterName };
   document.getElementById('sell-modal-char-name').textContent = characterName;
   document.getElementById('sell-modal-char-series').textContent = series || 'Sem série';
-  document.getElementById('sell-modal-char-img').src = imageUrl || '/media/characters/default.jpg';
+  document.getElementById('sell-modal-char-img').src = getCharImg(imageUrl);
   document.getElementById('sell-modal-interest').value = '';
   openModal('modal-market-sell');
 }
@@ -1334,7 +1410,7 @@ async function loadMyListings() {
 
       card.innerHTML = `
         <div class="card-img-wrapper">
-          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+          <img src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
           <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
             ${rarity.emoji} ${rarity.label}
           </div>
@@ -1347,7 +1423,7 @@ async function loadMyListings() {
             <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
           </div>
           <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-            <button class="btn-retro btn-sm ${offersBtnClass}" style="width: 100%;" onclick="openViewOffersModal('${listing.id}', '${escapeHtml(char.name)}')">
+            <button class="btn-retro btn-sm ${offersBtnClass}" style="width: 100%;" onclick="openViewOffersModal('${listing.id}', '${escapeAttr(char.name)}')">
               ${offersBtnText}
             </button>
             <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="cancelMyListing('${listing.id}')">
@@ -1405,14 +1481,34 @@ async function openViewOffersModal(listingId, characterName) {
         itemsHtml = '<div style="color: #10b981; font-weight: 700;">🎁 Pediu de graça (Doação)</div>';
       } else {
         const parts = [];
-        if (Array.isArray(offered.waifuIds) && offered.waifuIds.length > 0) {
-          parts.push(`<div><strong>Waifus (${offered.waifuIds.length}):</strong> ${offered.waifuIds.map(w => `<span class="badge-tag" style="background:#8b5cf6;color:#fff;">${escapeHtml(w)}</span>`).join(' ')}</div>`);
+        if (Array.isArray(offered.waifus) && offered.waifus.length > 0) {
+          parts.push(`<div><strong>Waifus (${offered.waifus.length}):</strong> ${offered.waifus.map(w => {
+            const wImg = getCharImg(w);
+            const wSeries = escapeAttr(w.series || '');
+            const wRarity = w.baseRarity || '';
+            const wName = escapeAttr(w.name || w.id);
+            return `<button type="button" class="badge-tag" style="background:#8b5cf6;color:#fff;border:none;cursor:pointer;margin:2px;padding:3px 8px;font-size:12px;" onclick="openWaifuPreview('${w.id}', '${wName}', '${wImg}', '${wSeries}', '${wRarity}')"><i class="fas fa-image"></i> ${escapeHtml(w.name || w.id)}</button>`;
+          }).join(' ')}</div>`);
+        } else if (Array.isArray(offered.waifuIds) && offered.waifuIds.length > 0) {
+          parts.push(`<div><strong>Waifus (${offered.waifuIds.length}):</strong> ${offered.waifuIds.map(wId => {
+            return `<button type="button" class="badge-tag" style="background:#8b5cf6;color:#fff;border:none;cursor:pointer;margin:2px;padding:3px 8px;font-size:12px;" onclick="openWaifuPreview('${wId}', '${wId}', '', '', '')"><i class="fas fa-image"></i> ${escapeHtml(wId)}</button>`;
+          }).join(' ')}</div>`);
         }
         if (Array.isArray(offered.fishes) && offered.fishes.length > 0) {
-          parts.push(`<div><strong>Peixes (${offered.fishes.length}):</strong> ${offered.fishes.map(f => `${escapeHtml(f.name || 'Peixe')} (${f.weight || 0}kg)`).join(', ')}</div>`);
+          const fishSummary = {};
+          offered.fishes.forEach(f => {
+            const k = f.name || 'Peixe';
+            fishSummary[k] = (fishSummary[k] || 0) + 1;
+          });
+          const fishStr = Object.entries(fishSummary).map(([name, count]) => `${count}x ${escapeHtml(name)}`).join(', ');
+          parts.push(`<div><strong>Peixes (${offered.fishes.length}):</strong> ${fishStr}</div>`);
         }
         if (Array.isArray(offered.fishingBuffs) && offered.fishingBuffs.length > 0) {
-          parts.push(`<div><strong>Buffs de Pesca (${offered.fishingBuffs.length}):</strong> ${offered.fishingBuffs.map(b => escapeHtml(b.originalName || b.type || 'Buff')).join(', ')}</div>`);
+          parts.push(`<div><strong>Buffs de Pesca (${offered.fishingBuffs.length}):</strong> ${offered.fishingBuffs.map(b => {
+            const bName = b.originalName || b.type || 'Buff';
+            const bDesc = b.description || getLocalBuffDescription(b.type);
+            return `<b>${escapeHtml(bName)}</b> <span style="color:var(--text-muted); font-size:11px;">(${escapeHtml(bDesc)})</span>`;
+          }).join(', ')}</div>`);
         }
         if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) {
           parts.push(`<div><strong>Itens de Fazenda:</strong> ${offered.farmItems.map(it => `${it.amount}x ${escapeHtml(it.name || it.itemId)}`).join(', ')}</div>`);
@@ -1546,7 +1642,7 @@ async function loadGlobalMarket() {
 
       card.innerHTML = `
         <div class="card-img-wrapper">
-          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+          <img src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
           <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
             ${rarity.emoji} ${rarity.label}
           </div>
@@ -1567,7 +1663,7 @@ async function loadGlobalMarket() {
                 <i class="fas fa-check"></i> Seu Personagem
               </button>
             ` : `
-              <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openOfferModal('${listing.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(listing.interest)}')">
+              <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openOfferModal('${listing.id}', '${escapeAttr(char.name)}', '${getCharImg(char)}', '${escapeAttr(listing.interest)}')">
                 <i class="fas fa-handshake"></i> Fazer Oferta
               </button>
             `}
@@ -1585,7 +1681,7 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
   activeOfferListing = { id: listingId, name: characterName };
   document.getElementById('offer-target-name').textContent = characterName;
   document.getElementById('offer-target-interest').textContent = `Procura: ${interest}`;
-  document.getElementById('offer-target-img').src = imageUrl || '/media/characters/default.jpg';
+  document.getElementById('offer-target-img').src = getCharImg(imageUrl);
   document.getElementById('offer-is-free-checkbox').checked = false;
   toggleFreeOffer(false);
   document.getElementById('offer-message-input').value = '';
@@ -1600,7 +1696,7 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
       const char = item.character;
       return `
         <label style="border: var(--border-retro); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; align-items: center; cursor: pointer; background: var(--bg-card); font-size: 11px; text-align: center;">
-          <img src="${char.imageUrl || '/media/characters/default.jpg'}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-bottom: 4px;">
+          <img src="${getCharImg(char)}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-bottom: 4px;" onerror="this.src='/media/characters/default.jpg';">
           <span style="font-weight: 700; max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(char.name)}</span>
           <input type="checkbox" name="offer-waifu-cb" value="${char.id}" style="margin-top: 4px;">
         </label>
@@ -1608,35 +1704,82 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
     }).join('');
   }
 
-  // 2. Popula Peixes da Pescaria
+  // 2. Popula Peixes da Pescaria (agrupados por espécie com quantidade)
   const fishesList = document.getElementById('offer-fishes-list');
-  const fishes = userSessionData?.inventory?.fishes || [];
-  if (fishes.length === 0) {
+  const rawFishes = userSessionData?.inventory?.fishes || [];
+  const fishGroups = {};
+  rawFishes.forEach(f => {
+    const key = f.name || 'Peixe';
+    if (!fishGroups[key]) {
+      fishGroups[key] = { name: key, items: [], isRare: Boolean(f.is_rare || f.isRare) };
+    }
+    fishGroups[key].items.push(f);
+  });
+  const groupList = Object.values(fishGroups);
+
+  if (groupList.length === 0) {
     fishesList.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">Nenhum peixe na sua mochila de pesca no momento.</div>';
+    window.activeFishGroups = [];
   } else {
-    fishesList.innerHTML = fishes.map(fish => {
-      const rareTag = fish.is_rare || fish.isRare ? '⭐ RARO' : '';
+    window.activeFishGroups = groupList;
+    fishesList.innerHTML = groupList.map((g, idx) => {
+      const count = g.items.length;
+      const avgWeight = (g.items.reduce((acc, it) => acc + (Number(it.weight) || 0), 0) / count).toFixed(1);
+      const rareTag = g.isRare ? '⭐ RARO' : '';
       return `
-        <label style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 6px 10px; border-radius: 4px; background: var(--bg-card); font-size: 12px; cursor: pointer;">
-          <span>🐟 <strong>${escapeHtml(fish.name)}</strong> (${fish.weight} kg) <span style="color:#eab308;font-weight:bold;">${rareTag}</span></span>
-          <input type="checkbox" name="offer-fish-cb" value="${fish.id}" data-name="${escapeHtml(fish.name)}" data-weight="${fish.weight}">
-        </label>
+        <div style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 6px 10px; border-radius: 4px; background: var(--bg-card); font-size: 12px;">
+          <div>
+            🐟 <strong>${escapeHtml(g.name)}</strong>
+            <span style="color: var(--text-muted); font-size: 11px; margin-left: 4px;">(~${avgWeight}kg | Em estoque: ${count})</span>
+            ${rareTag ? `<span style="color:#eab308;font-weight:bold;margin-left:4px;">${rareTag}</span>` : ''}
+          </div>
+          <div class="retro-qty-control">
+            <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFishGroupQty(${idx}, -1, ${count})">-</button>
+            <input type="text" inputmode="numeric" id="fish-group-qty-${idx}" value="0" readonly>
+            <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFishGroupQty(${idx}, 1, ${count})">+</button>
+          </div>
+        </div>
       `;
     }).join('');
   }
 
-  // 3. Popula Buffs Permanentes de Pesca
+  // 3. Popula Buffs Permanentes de Pesca (agrupados com descrição clara e quantidade)
   const buffsList = document.getElementById('offer-buffs-list');
-  const buffs = userSessionData?.inventory?.buffs || [];
-  if (buffs.length === 0) {
+  const rawBuffs = userSessionData?.inventory?.buffs || [];
+  const buffGroups = {};
+  rawBuffs.forEach(b => {
+    const key = b.originalName || b.original_name || b.type || 'Buff';
+    if (!buffGroups[key]) {
+      buffGroups[key] = {
+        name: key,
+        type: b.type,
+        description: b.description || getLocalBuffDescription(b.type),
+        items: []
+      };
+    }
+    buffGroups[key].items.push(b);
+  });
+  const buffGroupList = Object.values(buffGroups);
+
+  if (buffGroupList.length === 0) {
     buffsList.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">Nenhum buff de pesca permanente no seu inventário.</div>';
+    window.activeBuffGroups = [];
   } else {
-    buffsList.innerHTML = buffs.map(b => {
+    window.activeBuffGroups = buffGroupList;
+    buffsList.innerHTML = buffGroupList.map((bg, idx) => {
+      const count = bg.items.length;
       return `
-        <label style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 6px 10px; border-radius: 4px; background: var(--bg-card); font-size: 12px; cursor: pointer;">
-          <span>⚡ <strong>${escapeHtml(b.original_name || b.originalName || b.type)}</strong> (${escapeHtml(b.type || 'buff')})</span>
-          <input type="checkbox" name="offer-buff-cb" value="${b.id}" data-name="${escapeHtml(b.original_name || b.originalName || b.type)}">
-        </label>
+        <div style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 6px 10px; border-radius: 4px; background: var(--bg-card); font-size: 12px;">
+          <div>
+            ⚡ <strong>${escapeHtml(bg.name)}</strong>
+            <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(bg.description)} <span style="font-weight:700;">(Estoque: ${count})</span></div>
+          </div>
+          <div class="retro-qty-control">
+            <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, -1, ${count})">-</button>
+            <input type="text" inputmode="numeric" id="buff-group-qty-${idx}" value="0" readonly>
+            <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, 1, ${count})">+</button>
+          </div>
+        </div>
       `;
     }).join('');
   }
@@ -1655,9 +1798,9 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
             🌱 <strong>${escapeHtml(it.name || it.itemId)}</strong>
             <span style="color: var(--text-muted); margin-left: 6px;">(Em estoque: ${maxQty})</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 6px;">
+          <div class="retro-qty-control">
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', -1, ${maxQty})">-</button>
-            <input type="number" id="farm-qty-${it.itemId}" value="0" min="0" max="${maxQty}" style="width: 45px; text-align: center; border: var(--border-retro); border-radius: 4px;" readonly>
+            <input type="text" inputmode="numeric" id="farm-qty-${it.itemId}" value="0" readonly>
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', 1, ${maxQty})">+</button>
           </div>
         </div>
@@ -1666,6 +1809,22 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
   }
 
   openModal('modal-market-offer');
+}
+
+function adjustOfferFishGroupQty(idx, delta, max) {
+  const input = document.getElementById(`fish-group-qty-${idx}`);
+  if (!input) return;
+  let val = parseInt(input.value, 10) || 0;
+  val = Math.max(0, Math.min(max, val + delta));
+  input.value = val;
+}
+
+function adjustOfferBuffGroupQty(idx, delta, max) {
+  const input = document.getElementById(`buff-group-qty-${idx}`);
+  if (!input) return;
+  let val = parseInt(input.value, 10) || 0;
+  val = Math.max(0, Math.min(max, val + delta));
+  input.value = val;
 }
 
 function adjustOfferFarmQty(itemId, delta, max) {
@@ -1691,15 +1850,44 @@ async function submitMarketOffer() {
   const message = document.getElementById('offer-message-input').value.trim();
 
   const selectedWaifuIds = Array.from(document.querySelectorAll('input[name="offer-waifu-cb"]:checked')).map(cb => cb.value);
-  const selectedFishes = Array.from(document.querySelectorAll('input[name="offer-fish-cb"]:checked')).map(cb => ({
-    id: parseInt(cb.value, 10),
-    name: cb.dataset.name,
-    weight: parseFloat(cb.dataset.weight),
-  }));
-  const selectedBuffs = Array.from(document.querySelectorAll('input[name="offer-buff-cb"]:checked')).map(cb => ({
-    id: parseInt(cb.value, 10),
-    originalName: cb.dataset.name,
-  }));
+
+  const selectedFishes = [];
+  if (Array.isArray(window.activeFishGroups)) {
+    window.activeFishGroups.forEach((g, idx) => {
+      const input = document.getElementById(`fish-group-qty-${idx}`);
+      const qty = parseInt(input?.value, 10) || 0;
+      if (qty > 0) {
+        for (let i = 0; i < qty && i < g.items.length; i++) {
+          const item = g.items[i];
+          selectedFishes.push({
+            id: item.id,
+            name: item.name,
+            weight: Number(item.weight) || 0,
+            isRare: item.isRare,
+          });
+        }
+      }
+    });
+  }
+
+  const selectedBuffs = [];
+  if (Array.isArray(window.activeBuffGroups)) {
+    window.activeBuffGroups.forEach((bg, idx) => {
+      const input = document.getElementById(`buff-group-qty-${idx}`);
+      const qty = parseInt(input?.value, 10) || 0;
+      if (qty > 0) {
+        for (let i = 0; i < qty && i < bg.items.length; i++) {
+          const b = bg.items[i];
+          selectedBuffs.push({
+            id: b.id,
+            originalName: b.originalName || bg.name,
+            type: b.type,
+            description: bg.description,
+          });
+        }
+      }
+    });
+  }
 
   const farmItems = [];
   const farmList = userSessionData?.inventory?.farmItems || [];

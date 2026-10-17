@@ -7,6 +7,35 @@
   <link rel="stylesheet" href="/css/retro-theme.css?v=20261015-5">
   <link rel="stylesheet" href="/vendor/cropper.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    /* Remove setas padrões dos inputs do tipo number */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+    .retro-qty-control {
+      display: inline-flex;
+      align-items: center;
+      background: var(--bg-card);
+      border: var(--border-retro);
+      border-radius: var(--radius-retro);
+      overflow: hidden;
+    }
+    .retro-qty-control input {
+      border: none;
+      background: transparent;
+      text-align: center;
+      font-weight: 800;
+      color: var(--text-color);
+      width: 42px;
+      outline: none;
+      user-select: none;
+    }
+  </style>
 </head>
 <body>
 
@@ -47,8 +76,8 @@
         <button class="retro-tab active" data-tab="tab-catalog"><i class="fas fa-book"></i> Catálogo</button>
         <button class="retro-tab" data-tab="tab-harem"><i class="fas fa-ring"></i> Meu Harém (<span id="harem-count">0</span>)</button>
         <button class="retro-tab" data-tab="tab-wishlist"><i class="fas fa-star"></i> Minha Wishlist (<span id="wishlist-count">0</span>)</button>
+        <button class="retro-tab" data-tab="tab-market"><i class="fas fa-store"></i> Classificados <span id="market-pending-badge" class="badge-tag hidden" style="background:#f59e0b;color:#000;margin-left:4px;font-weight:800;padding:3px 6px;border-radius:4px;font-size:11px;">0</span></button>
         <button class="retro-tab" data-tab="tab-suggestions"><i class="fas fa-lightbulb"></i> Sugestões (<span id="user-suggestions-count">0</span>)</button>
-        <button class="retro-tab" data-tab="tab-market"><i class="fas fa-store"></i> Classificados <span id="market-pending-badge" class="badge-tag hidden" style="background:#f59e0b;color:#000;margin-left:4px;font-weight:800;">0</span></button>
       </div>
 
       <!-- Aba 1: Catálogo Geral com Ações Rápidas -->
@@ -583,6 +612,26 @@
       </div>
       <div class="modal-footer">
         <button class="btn-retro btn-sm" onclick="closeModal('modal-market-view-offers')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Popup de Preview de Waifu (Sobreposto com z-index alto) -->
+  <div class="modal-overlay hidden" id="modal-waifu-preview" style="z-index: 10005;">
+    <div class="modal-box" style="max-width: 380px; text-align: center; border: 3px solid #000; box-shadow: 6px 6px 0px #000;">
+      <div class="modal-header" style="justify-content: space-between;">
+        <span class="modal-title" id="waifu-preview-name" style="font-size: 15px;">Detalhes da Waifu</span>
+        <button class="modal-close" onclick="closeModal('modal-waifu-preview')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 12px;">
+        <div style="width: 100%; height: 320px; overflow: hidden; border: 2px solid #000; border-radius: 4px; background: #111; margin-bottom: 10px;">
+          <img id="waifu-preview-img" src="/media/characters/default.jpg" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg';">
+        </div>
+        <div id="waifu-preview-series" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;"></div>
+        <div id="waifu-preview-rarity" style="font-size: 12px; font-weight: 800;"></div>
+      </div>
+      <div class="modal-footer" style="justify-content: center;">
+        <button class="btn-retro btn-sm btn-gold" onclick="closeModal('modal-waifu-preview')">Fechar</button>
       </div>
     </div>
   </div>

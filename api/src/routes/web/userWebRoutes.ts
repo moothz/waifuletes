@@ -76,7 +76,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   const divorceService = new DivorceService(fastify.prisma);
   const webSessionService = new WebSessionService(fastify.redis, fastify.prisma);
   const suggestionService = new SuggestionService(fastify.prisma, fastify.redis, characterService);
-  const marketService = new MarketService(fastify.prisma);
+  const marketService = new MarketService(fastify.prisma, characterService);
 
   /**
    * Retorna um número de WhatsApp ativo da Ravena para redirecionamento com !mu-adm

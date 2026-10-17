@@ -1,20 +1,49 @@
 import { PrismaClient, ListingStatus, OfferStatus } from '@prisma/client';
 import { config } from '../config.js';
 import { DomainError } from '../errors/DomainError.js';
+import { CharacterService } from './CharacterService.js';
 
 export interface CreateOfferData {
   message?: string;
   offeredItems: {
     waifuIds?: string[];
     fishes?: Array<{ id: number; name?: string; weight?: number; isRare?: boolean }>;
-    fishingBuffs?: Array<{ id: number; originalName?: string; type?: string }>;
+    fishingBuffs?: Array<{ id: number; originalName?: string; type?: string; description?: string }>;
     farmItems?: Array<{ itemId: string; name?: string; amount: number }>;
     isFree?: boolean;
   };
 }
 
 export class MarketService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(
+    private prisma: PrismaClient,
+    private characterService?: CharacterService
+  ) {}
+
+  private formatCharacter(character: any) {
+    if (!character) return character;
+    let imageUrl = '/media/characters/default.jpg';
+    let imageUrls: string[] = [];
+    if (this.characterService) {
+      imageUrl = this.characterService.getRandomImageUrl(character.id, character.imageUrls);
+      imageUrls = (character.imageUrls || []).map((img: string) =>
+        this.characterService!.formatImageUrl(character.id, img)
+      );
+    } else {
+      if (Array.isArray(character.imageUrls) && character.imageUrls.length > 0) {
+        const first = character.imageUrls[0];
+        imageUrl = first.startsWith('http') || first.startsWith('/media/') ? first : `${config.PUBLIC_BASE_URL}/media/${first}`;
+        imageUrls = character.imageUrls.map((img: string) =>
+          img.startsWith('http') || img.startsWith('/media/') ? img : `${config.PUBLIC_BASE_URL}/media/${img}`
+        );
+      }
+    }
+    return {
+      ...character,
+      imageUrl,
+      imageUrls,
+    };
+  }
 
   /**
    * Cria um novo anúncio de venda nos classificados
@@ -55,7 +84,10 @@ export class MarketService {
       },
     });
 
-    return listing;
+    return {
+      ...listing,
+      character: this.formatCharacter(listing.character),
+    };
   }
 
   /**
@@ -168,8 +200,13 @@ export class MarketService {
       );
     }
 
+    const formattedListings = sorted.map((l) => ({
+      ...l,
+      character: this.formatCharacter(l.character),
+    }));
+
     return {
-      listings: sorted,
+      listings: formattedListings,
       total,
       page,
       totalPages: Math.ceil(total / limit) || 1,
@@ -177,11 +214,11 @@ export class MarketService {
   }
 
   /**
-   * Retorna os anúncios do próprio usuário com contagem de ofertas pendentes
+   * Retorna os anúncios ATIVOS do próprio usuário com contagem de ofertas pendentes
    */
   async getUserListings(userId: string) {
-    return await this.prisma.marketListing.findMany({
-      where: { userId },
+    const listings = await this.prisma.marketListing.findMany({
+      where: { userId, status: ListingStatus.ACTIVE },
       orderBy: { createdAt: 'desc' },
       include: {
         character: true,
@@ -198,6 +235,11 @@ export class MarketService {
         },
       },
     });
+
+    return listings.map((l) => ({
+      ...l,
+      character: this.formatCharacter(l.character),
+    }));
   }
 
   /**
@@ -206,7 +248,7 @@ export class MarketService {
   async getUserSentOffers(buyerId: string) {
     const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
 
-    return await this.prisma.marketOffer.findMany({
+    const offers = await this.prisma.marketOffer.findMany({
       where: {
         buyerId,
         createdAt: { gte: fifteenDaysAgo },
@@ -221,10 +263,18 @@ export class MarketService {
         },
       },
     });
+
+    return offers.map((o) => ({
+      ...o,
+      listing: {
+        ...o.listing,
+        character: this.formatCharacter(o.listing.character),
+      },
+    }));
   }
 
   /**
-   * Retorna as ofertas de um anúncio específico para o vendedor
+   * Retorna as ofertas de um anúncio específico para o vendedor com detalhes das waifus ofertadas
    */
   async getListingOffers(sellerId: string, listingId: string) {
     const listing = await this.prisma.marketListing.findUnique({
@@ -239,7 +289,7 @@ export class MarketService {
       throw new DomainError('UNAUTHORIZED', 'Apenas o dono do anúncio pode ver suas ofertas.');
     }
 
-    return await this.prisma.marketOffer.findMany({
+    const offers = await this.prisma.marketOffer.findMany({
       where: { listingId },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -248,13 +298,40 @@ export class MarketService {
         },
       },
     });
+
+    // Se há waifuIds nas ofertas, busca os dados das waifus para exibir no modal
+    const allWaifuIds = new Set<string>();
+    offers.forEach((o) => {
+      const waifuIds = (o.offeredItems as any)?.waifuIds || [];
+      waifuIds.forEach((id: string) => allWaifuIds.add(id));
+    });
+
+    const waifuMap = new Map<string, any>();
+    if (allWaifuIds.size > 0) {
+      const chars = await this.prisma.character.findMany({
+        where: { id: { in: Array.from(allWaifuIds) } },
+      });
+      chars.forEach((c) => waifuMap.set(c.id, this.formatCharacter(c)));
+    }
+
+    return offers.map((o) => {
+      const offered = (o.offeredItems as any) || {};
+      const waifus = (offered.waifuIds || []).map((id: string) => waifuMap.get(id) || { id, name: id });
+      return {
+        ...o,
+        offeredItems: {
+          ...offered,
+          waifus,
+        },
+      };
+    });
   }
 
   /**
    * Retorna todas as ofertas pendentes recebidas pelo vendedor (para WhatsApp !mu-ofertas)
    */
   async getUserReceivedOffers(sellerId: string) {
-    return await this.prisma.marketOffer.findMany({
+    const offers = await this.prisma.marketOffer.findMany({
       where: {
         sellerId,
         status: OfferStatus.PENDING,
@@ -266,6 +343,14 @@ export class MarketService {
         listing: { include: { character: true } },
       },
     });
+
+    return offers.map((o) => ({
+      ...o,
+      listing: {
+        ...o.listing,
+        character: this.formatCharacter(o.listing.character),
+      },
+    }));
   }
 
   /**
@@ -523,6 +608,27 @@ export class MarketService {
         where: { id: listing.id },
         data: { status: ListingStatus.COMPLETED },
       });
+
+      // Cancela outros anúncios ativos desse mesmo personagem (caso existam)
+      await tx.marketListing.updateMany({
+        where: {
+          characterId: listing.characterId,
+          id: { not: listing.id },
+          status: ListingStatus.ACTIVE,
+        },
+        data: { status: ListingStatus.CANCELLED },
+      });
+
+      // Se o comprador ofertou waifus, cancela anúncios ativos delas também
+      if (waifuIds.length > 0) {
+        await tx.marketListing.updateMany({
+          where: {
+            characterId: { in: waifuIds },
+            status: ListingStatus.ACTIVE,
+          },
+          data: { status: ListingStatus.CANCELLED },
+        });
+      }
 
       // Cancela outras ofertas pendentes no mesmo anúncio
       await tx.marketOffer.updateMany({

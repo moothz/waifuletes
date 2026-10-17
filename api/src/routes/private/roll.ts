@@ -12,7 +12,7 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
   const cooldownService = new CooldownService(fastify.redis);
   const characterService = new CharacterService(fastify.prisma);
   const userService = new UserService(fastify.prisma, fastify.redis);
-  const marketService = new MarketService(fastify.prisma);
+  const marketService = new MarketService(fastify.prisma, characterService);
   const rollService = new RollService(fastify.prisma, cooldownService, characterService);
 
   // Inicializa o pool em memória em segundo plano no startup
