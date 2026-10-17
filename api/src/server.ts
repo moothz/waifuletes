@@ -33,6 +33,7 @@ import { privateHaremRoutes } from './routes/private/harem.js';
 import { privateWishlistRoutes } from './routes/private/wishlist.js';
 import { privateKakeraRoutes } from './routes/private/kakera.js';
 import { privateAdminRoutes } from './routes/private/admin.js';
+import { privateMarketRoutes } from './routes/private/market.js';
 
 const fastify = Fastify({
   trustProxy: true,
@@ -256,6 +257,7 @@ async function buildServer() {
   await fastify.register(privateWishlistRoutes);
   await fastify.register(privateKakeraRoutes);
   await fastify.register(privateAdminRoutes);
+  await fastify.register(privateMarketRoutes);
 
   return fastify;
 }

@@ -7,6 +7,11 @@ import { DomainError } from '../errors/DomainError.js';
 export interface UserSessionData {
   userId: string;
   publicId: string;
+  inventory?: {
+    fishes?: any[];
+    buffs?: any[];
+    farmItems?: any[];
+  } | null;
 }
 
 export class WebSessionService {
@@ -18,7 +23,7 @@ export class WebSessionService {
   /**
    * Cria uma sessão web temporária de 30 minutos para o usuário
    */
-  async createUserSession(userId: string) {
+  async createUserSession(userId: string, inventorySnapshot?: any) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, publicId: true, name: true },
@@ -32,6 +37,7 @@ export class WebSessionService {
     const sessionData: UserSessionData = {
       userId: user.id,
       publicId: user.publicId,
+      inventory: inventorySnapshot || null,
     };
 
     // 1800 segundos = 30 minutos
@@ -51,18 +57,18 @@ export class WebSessionService {
    */
   async validateUserSession(publicId: string, token?: string) {
     if (!token || typeof token !== 'string') {
-      return { valid: false as const, userId: null, expiresIn: 0 };
+      return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
     }
 
     const raw = await this.redis.get(`web:session:${token}`);
     if (!raw) {
-      return { valid: false as const, userId: null, expiresIn: 0 };
+      return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
     }
 
     try {
       const data = JSON.parse(raw) as UserSessionData;
       if (data.publicId !== publicId) {
-        return { valid: false as const, userId: null, expiresIn: 0 };
+        return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
       }
 
       const ttl = await this.redis.ttl(`web:session:${token}`);
@@ -71,10 +77,34 @@ export class WebSessionService {
         valid: true as const,
         userId: data.userId,
         publicId: data.publicId,
+        inventory: data.inventory || null,
         expiresIn: Math.max(0, ttl),
       };
     } catch (_) {
-      return { valid: false as const, userId: null, expiresIn: 0 };
+      return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
+    }
+  }
+
+  /**
+   * Obtém a sessão do usuário apenas pelo token (para rotas autenticadas da API)
+   */
+  async getUserSessionByToken(token?: string) {
+    if (!token || typeof token !== 'string') {
+      return null;
+    }
+
+    const raw = await this.redis.get(`web:session:${token}`);
+    if (!raw) return null;
+
+    try {
+      const data = JSON.parse(raw) as UserSessionData;
+      const ttl = await this.redis.ttl(`web:session:${token}`);
+      return {
+        ...data,
+        expiresIn: Math.max(0, ttl),
+      };
+    } catch (_) {
+      return null;
     }
   }
 

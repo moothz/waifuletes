@@ -52,6 +52,9 @@ model User {
   wishlist      WishlistEntry[]
   kakeraHistory KakeraTransaction[]
   suggestions   CharacterSuggestion[]
+  marketListings MarketListing[]
+  buyerOffers    MarketOffer[]         @relation("BuyerOffers")
+  sellerOffers   MarketOffer[]         @relation("SellerOffers")
 
   @@index([kakera(sort: Desc)])
   @@map("users")
@@ -116,6 +119,7 @@ model Character {
   wishlists      WishlistEntry[]
   disabledGroups GroupDisabledSeries[]
   suggestions    CharacterSuggestion[]
+  marketListings MarketListing[]
 
   @@index([claimCount(sort: Desc), likeCount(sort: Desc)])
   @@index([baseRarity, claimCount(sort: Desc)])
@@ -237,3 +241,61 @@ model CharacterSuggestion {
   @@index([userId])
   @@map("character_suggestions")
 }
+
+enum ListingStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+model MarketListing {
+  id             String         @id @default(cuid())
+  userId         String
+  characterId    String
+  interest       String         // O que o vendedor busca (texto livre)
+  status         ListingStatus  @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character      Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  offers         MarketOffer[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId, status])
+  @@index([characterId])
+  @@map("market_listings")
+}
+
+model MarketOffer {
+  id                  String         @id @default(cuid())
+  listingId           String
+  buyerId             String
+  sellerId            String
+  message             String?
+  offeredItems        Json           // { waifuIds: string[], fishes: object[], fishingBuffs: object[], farmItems: object[], isFree: boolean }
+  status              OfferStatus    @default(PENDING)
+  cancelReason        String?        // Motivo caso cancelada (ex: falta de itens)
+  notifiedSeller      Boolean        @default(false)
+  notifiedBuyer       Boolean        @default(false)
+  buyerNotifiedStatus String?        // "ACCEPTED" | "REJECTED" | "CANCELLED"
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  listing             MarketListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer               User           @relation("BuyerOffers", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller              User           @relation("SellerOffers", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, status])
+  @@index([buyerId, status, createdAt])
+  @@index([sellerId, status, createdAt])
+  @@map("market_offers")
+}
+

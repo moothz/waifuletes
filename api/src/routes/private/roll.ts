@@ -3,6 +3,7 @@ import { RollService } from '../../services/RollService.js';
 import { CooldownService } from '../../services/CooldownService.js';
 import { CharacterService } from '../../services/CharacterService.js';
 import { UserService } from '../../services/UserService.js';
+import { MarketService } from '../../services/MarketService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { Gender, Platform } from '@prisma/client';
 import { RollBonuses } from '../../utils/rarityCalculator.js';
@@ -11,6 +12,7 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
   const cooldownService = new CooldownService(fastify.redis);
   const characterService = new CharacterService(fastify.prisma);
   const userService = new UserService(fastify.prisma, fastify.redis);
+  const marketService = new MarketService(fastify.prisma);
   const rollService = new RollService(fastify.prisma, cooldownService, characterService);
 
   // Inicializa o pool em memória em segundo plano no startup
@@ -114,6 +116,15 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (!result.success) {
         return reply.status(400).send(result);
+      }
+
+      try {
+        const marketNotif = await marketService.getPendingRollNotification(body.userId);
+        if (marketNotif && (result as any).data) {
+          (result as any).data.marketNotification = marketNotif;
+        }
+      } catch (e) {
+        // Ignora erro de notificação para não falhar o roll
       }
 
       return reply.send(result);

@@ -48,6 +48,7 @@
         <button class="retro-tab" data-tab="tab-harem"><i class="fas fa-ring"></i> Meu Harém (<span id="harem-count">0</span>)</button>
         <button class="retro-tab" data-tab="tab-wishlist"><i class="fas fa-star"></i> Minha Wishlist (<span id="wishlist-count">0</span>)</button>
         <button class="retro-tab" data-tab="tab-suggestions"><i class="fas fa-lightbulb"></i> Sugestões (<span id="user-suggestions-count">0</span>)</button>
+        <button class="retro-tab" data-tab="tab-market"><i class="fas fa-store"></i> Classificados <span id="market-pending-badge" class="badge-tag hidden" style="background:#f59e0b;color:#000;margin-left:4px;font-weight:800;">0</span></button>
       </div>
 
       <!-- Aba 1: Catálogo Geral com Ações Rápidas -->
@@ -168,6 +169,98 @@
             </thead>
             <tbody id="tbody-user-suggestions">
               <tr><td colspan="5" style="text-align: center; padding: 20px;">Carregando sugestões...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Aba 5: Classificados Globais & Mercado -->
+      <div class="tab-content hidden" id="tab-market">
+        <!-- Seção 1: Meus Anúncios -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+            <div>
+              <h3 style="font-size: 16px; font-weight: 800; margin: 0;"><i class="fas fa-bullhorn"></i> Meus Anúncios</h3>
+              <p style="font-size: 13px; color: var(--text-muted); margin: 4px 0 0 0;">
+                Personagens que você colocou à venda ou troca nos classificados.
+              </p>
+            </div>
+            <button class="btn-retro btn-sm btn-gold" id="btn-market-new-from-harem">
+              <i class="fas fa-plus"></i> Novo Anúncio (via Harém)
+            </button>
+          </div>
+          <div id="my-listings-grid" class="waifu-grid">
+            <div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: var(--text-muted);">
+              Você não possui nenhum anúncio ativo no momento.
+            </div>
+          </div>
+        </div>
+
+        <!-- Divisor Retrô Pixel-Art -->
+        <div class="retro-divider" style="margin: 32px 0; display: flex; align-items: center; gap: 14px;">
+          <div style="flex: 1; height: 3px; background: var(--border-color, #2d241e);"></div>
+          <span style="font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #f59e0b; display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-globe"></i> Classificados Globais
+          </span>
+          <div style="flex: 1; height: 3px; background: var(--border-color, #2d241e);"></div>
+        </div>
+
+        <!-- Seção 2: Classificados Globais com Busca e Filtros -->
+        <div class="search-panel" style="margin-bottom: 20px;">
+          <div class="search-input-group">
+            <i class="fas fa-search"></i>
+            <input type="text" id="market-search-input" class="retro-input" placeholder="Buscar nos classificados por personagem ou anime...">
+          </div>
+          <div class="filters-row" style="margin-top: 10px;">
+            <div class="filter-group">
+              <span><i class="fas fa-sort"></i> Ordenação:</span>
+              <select id="market-sort-select" class="retro-select">
+                <option value="rarity">⭐ Por Raridade</option>
+                <option value="wishlist">❤️ Mais Desejados (Wishlist)</option>
+                <option value="popularity">🔥 Mais Populares</option>
+                <option value="recent">🕐 Mais Recentes</option>
+              </select>
+            </div>
+            <button class="btn-retro btn-sm" id="btn-refresh-market" style="align-self: flex-end;">
+              <i class="fas fa-sync-alt"></i> Atualizar
+            </button>
+          </div>
+        </div>
+
+        <div id="global-market-grid" class="waifu-grid">
+          <div style="grid-column: 1 / -1; text-align: center; padding: 28px;">Carregando classificados...</div>
+        </div>
+
+        <!-- Paginação Global -->
+        <div class="pagination-panel" id="market-pagination" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 24px;">
+          <button class="btn-retro btn-sm" id="btn-market-prev" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
+          <span id="market-page-info" style="font-weight: bold; font-size: 13px;">Página 1 de 1</span>
+          <button class="btn-retro btn-sm" id="btn-market-next" disabled>Próxima <i class="fas fa-chevron-right"></i></button>
+        </div>
+
+        <!-- Divisor Retrô Pixel-Art -->
+        <div class="retro-divider" style="margin: 32px 0; display: flex; align-items: center; gap: 14px;">
+          <div style="flex: 1; height: 3px; background: var(--border-color, #2d241e);"></div>
+          <span style="font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-history"></i> Minhas Ofertas Enviadas (Últimos 15 dias)
+          </span>
+          <div style="flex: 1; height: 3px; background: var(--border-color, #2d241e);"></div>
+        </div>
+
+        <!-- Seção 3: Histórico de Ofertas Enviadas -->
+        <div style="overflow-x: auto;">
+          <table class="retro-table" id="table-my-offers">
+            <thead>
+              <tr style="background: var(--bg-retro-accent);">
+                <th>Data</th>
+                <th>Personagem Anunciado</th>
+                <th>Vendedor</th>
+                <th>O que você ofereceu</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-my-offers">
+              <tr><td colspan="5" style="text-align: center; padding: 20px;">Carregando suas ofertas...</td></tr>
             </tbody>
           </table>
         </div>
@@ -381,6 +474,115 @@
       <div class="modal-footer">
         <button class="btn-retro btn-sm" onclick="closeModal('modal-report')">Cancelar</button>
         <button class="btn-retro btn-sm btn-danger" id="btn-confirm-report">Confirmar Denúncia 🔞</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Anunciar Waifu (Vender) -->
+  <div class="modal-overlay hidden" id="modal-market-sell">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <span class="modal-title">💰 Anunciar nos Classificados</span>
+        <button class="modal-close" onclick="closeModal('modal-market-sell')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <img id="sell-modal-char-img" src="/media/characters/default.jpg" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: var(--border-retro); margin: 0 auto; display: block;">
+          <h4 id="sell-modal-char-name" style="font-weight: 800; font-size: 16px; margin: 8px 0 2px 0;">Nome</h4>
+          <span id="sell-modal-char-series" style="font-size: 13px; color: var(--text-muted);">Série</span>
+        </div>
+        <div class="form-group">
+          <label class="retro-label">O que você tem interesse em troca?</label>
+          <textarea id="sell-modal-interest" class="retro-textarea" rows="3" placeholder="Ex: Outras waifus, peixes raros ou itens da fazenda..."></textarea>
+          <small style="color: var(--text-muted); font-size: 12px; display: block; margin-top: 4px;">
+            Este texto será exibido no seu card para orientar outros jogadores.
+          </small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-market-sell')">Cancelar</button>
+        <button class="btn-retro btn-sm btn-gold" id="btn-confirm-sell">Publicar Anúncio ✨</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Fazer Oferta -->
+  <div class="modal-overlay hidden" id="modal-market-offer">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <span class="modal-title">🤝 Fazer Oferta</span>
+        <button class="modal-close" onclick="closeModal('modal-market-offer')">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+        <div style="display: flex; gap: 14px; align-items: center; background: var(--bg-retro-accent); padding: 10px 14px; border-radius: 6px; border: var(--border-retro); margin-bottom: 14px;">
+          <img id="offer-target-img" src="/media/characters/default.jpg" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;">
+          <div>
+            <div id="offer-target-name" style="font-weight: 800; font-size: 15px;">Nome</div>
+            <div id="offer-target-interest" style="font-size: 13px; color: var(--text-muted);">Procura: ...</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 14px; background: var(--bg-card); border: var(--border-retro); padding: 8px 12px; border-radius: 6px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; font-size: 13px;">
+            <input type="checkbox" id="offer-is-free-checkbox" onchange="toggleFreeOffer(this.checked)">
+            🎁 Pedir de graça (Doação / Não oferecer nada em troca)
+          </label>
+        </div>
+
+        <div id="offer-items-selection-area">
+          <div class="retro-tabs" style="margin-bottom: 12px;">
+            <button class="retro-tab active" data-offertab="offertab-waifus"><i class="fas fa-ring"></i> Waifus</button>
+            <button class="retro-tab" data-offertab="offertab-fishes"><i class="fas fa-fish"></i> Peixes</button>
+            <button class="retro-tab" data-offertab="offertab-buffs"><i class="fas fa-bolt"></i> Buffs Pesca</button>
+            <button class="retro-tab" data-offertab="offertab-farm"><i class="fas fa-seedling"></i> Fazenda</button>
+          </div>
+
+          <!-- Seleção de Waifus -->
+          <div class="offertab-content" id="offertab-waifus">
+            <div id="offer-waifus-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; max-height: 220px; overflow-y: auto; padding: 4px;"></div>
+          </div>
+
+          <!-- Seleção de Peixes -->
+          <div class="offertab-content hidden" id="offertab-fishes">
+            <div id="offer-fishes-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; padding: 4px;"></div>
+          </div>
+
+          <!-- Seleção de Buffs -->
+          <div class="offertab-content hidden" id="offertab-buffs">
+            <div id="offer-buffs-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; padding: 4px;"></div>
+          </div>
+
+          <!-- Seleção de Fazenda -->
+          <div class="offertab-content hidden" id="offertab-farm">
+            <div id="offer-farm-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; padding: 4px;"></div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 14px;">
+          <label class="retro-label">Mensagem para o vendedor (opcional):</label>
+          <input type="text" id="offer-message-input" class="retro-input" placeholder="Ex: Adoraria trocar por esta waifu!">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-market-offer')">Cancelar</button>
+        <button class="btn-retro btn-sm btn-gold" id="btn-submit-offer">Enviar Oferta 🚀</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Ver Ofertas Recebidas -->
+  <div class="modal-overlay hidden" id="modal-market-view-offers">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <span class="modal-title">📬 Ofertas Recebidas</span>
+        <button class="modal-close" onclick="closeModal('modal-market-view-offers')">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+        <h4 id="view-offers-char-title" style="font-weight: 800; font-size: 15px; margin: 0 0 12px 0;">Anúncio: ...</h4>
+        <div id="offers-list-container" style="display: flex; flex-direction: column; gap: 12px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-market-view-offers')">Fechar</button>
       </div>
     </div>
   </div>

@@ -5,6 +5,7 @@ import { WishlistService } from '../../services/WishlistService.js';
 import { DivorceService } from '../../services/DivorceService.js';
 import { CharacterService } from '../../services/CharacterService.js';
 import { SuggestionService } from '../../services/SuggestionService.js';
+import { MarketService } from '../../services/MarketService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
 import { Rarity } from '@prisma/client';
@@ -75,6 +76,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   const divorceService = new DivorceService(fastify.prisma);
   const webSessionService = new WebSessionService(fastify.redis, fastify.prisma);
   const suggestionService = new SuggestionService(fastify.prisma, fastify.redis, characterService);
+  const marketService = new MarketService(fastify.prisma);
 
   /**
    * Retorna um número de WhatsApp ativo da Ravena para redirecionamento com !mu-adm
@@ -113,12 +115,13 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         required: ['userId'],
         properties: {
           userId: { type: 'string' },
+          inventory: { type: 'object' },
         },
       },
     },
     handler: async (request, reply) => {
-      const { userId } = request.body as { userId: string };
-      const session = await webSessionService.createUserSession(userId);
+      const { userId, inventory } = request.body as { userId: string; inventory?: any };
+      const session = await webSessionService.createUserSession(userId, inventory);
       return reply.send({
         success: true,
         data: session,
@@ -182,6 +185,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             expiresIn: session.expiresIn,
             harem: haremResult.data,
             wishlist: wishlistResult,
+            inventory: session.inventory || null,
           },
         });
       }
@@ -646,6 +650,344 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         success: false,
         error: { code: 'INVALID_REQUEST', message: 'Formato ou parâmetros de sugestão inválidos.' },
       });
+    },
+  });
+
+  /* ────────────────────────────────────────────────────────────────────────── */
+  /* ROTAS DO MERCADO E CLASSIFICADOS (PAINEL WEB)                              */
+  /* ────────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * Listagem global paginada de classificados com busca e filtros
+   */
+  fastify.get('/api/web/user/:publicId/market/listings', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          search: { type: 'string' },
+          sortBy: { type: 'string', enum: ['rarity', 'wishlist', 'popularity', 'recent'], default: 'rarity' },
+          page: { type: 'number', default: 1 },
+          limit: { type: 'number', default: 12 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const query = request.query as any;
+      const result = await marketService.listGlobalListings(query);
+      return reply.send({ success: true, data: result });
+    },
+  });
+
+  /**
+   * Lista os anúncios criados pelo usuário logado
+   */
+  fastify.get('/api/web/user/:publicId/market/my-listings', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const listings = await marketService.getUserListings(session.userId);
+      return reply.send({ success: true, data: listings });
+    },
+  });
+
+  /**
+   * Lista as ofertas enviadas pelo usuário logado nos últimos 15 dias
+   */
+  fastify.get('/api/web/user/:publicId/market/my-offers', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const offers = await marketService.getUserSentOffers(session.userId);
+      return reply.send({ success: true, data: offers });
+    },
+  });
+
+  /**
+   * Cria um novo anúncio de waifu nos classificados
+   */
+  fastify.post('/api/web/user/:publicId/market/listings', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'characterId', 'interest'],
+        properties: {
+          token: { type: 'string' },
+          characterId: { type: 'string' },
+          interest: { type: 'string', maxLength: 500 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, characterId, interest } = request.body as {
+        token: string;
+        characterId: string;
+        interest: string;
+      };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const listing = await marketService.createListing(session.userId, characterId, interest);
+      return reply.send({ success: true, data: listing });
+    },
+  });
+
+  /**
+   * Cancela um anúncio do usuário
+   */
+  fastify.delete('/api/web/user/:publicId/market/listings/:listingId', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'listingId'],
+        properties: {
+          publicId: { type: 'string' },
+          listingId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, listingId } = request.params as { publicId: string; listingId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      await marketService.cancelListing(session.userId, listingId);
+      return reply.send({ success: true, message: 'Anúncio cancelado com sucesso.' });
+    },
+  });
+
+  /**
+   * Visualiza as ofertas de um anúncio específico
+   */
+  fastify.get('/api/web/user/:publicId/market/listings/:listingId/offers', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'listingId'],
+        properties: {
+          publicId: { type: 'string' },
+          listingId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, listingId } = request.params as { publicId: string; listingId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const offers = await marketService.getListingOffers(session.userId, listingId);
+      return reply.send({ success: true, data: offers });
+    },
+  });
+
+  /**
+   * Envia uma proposta / oferta para um anúncio
+   */
+  fastify.post('/api/web/user/:publicId/market/offers', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'listingId', 'offeredItems'],
+        properties: {
+          token: { type: 'string' },
+          listingId: { type: 'string' },
+          message: { type: 'string', maxLength: 500 },
+          offeredItems: { type: 'object' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, listingId, message, offeredItems } = request.body as {
+        token: string;
+        listingId: string;
+        message?: string;
+        offeredItems: any;
+      };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const offer = await marketService.createOffer(session.userId, listingId, {
+        message,
+        offeredItems,
+      });
+
+      return reply.send({ success: true, data: offer });
+    },
+  });
+
+  /**
+   * Aceita uma oferta recebida
+   */
+  fastify.post('/api/web/user/:publicId/market/offers/:offerId/accept', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'offerId'],
+        properties: {
+          publicId: { type: 'string' },
+          offerId: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, offerId } = request.params as { publicId: string; offerId: string };
+      const { token } = request.body as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await marketService.acceptOffer(session.userId, offerId);
+      return reply.send(result);
+    },
+  });
+
+  /**
+   * Rejeita uma oferta recebida
+   */
+  fastify.post('/api/web/user/:publicId/market/offers/:offerId/reject', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'offerId'],
+        properties: {
+          publicId: { type: 'string' },
+          offerId: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, offerId } = request.params as { publicId: string; offerId: string };
+      const { token } = request.body as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const offer = await marketService.rejectOffer(session.userId, offerId);
+      return reply.send({ success: true, data: offer });
     },
   });
 };

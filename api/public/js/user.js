@@ -15,6 +15,18 @@ let cropperInstance = null;
 let activeSuggestCharacter = null;
 let pendingDivorceTarget = null;
 let activeReportCharacter = null;
+let activeSellCharacter = null;
+let activeOfferListing = null;
+
+let marketState = {
+  search: '',
+  sortBy: 'rarity',
+  page: 1,
+  limit: 12,
+  total: 0,
+  totalPages: 1,
+  loading: false
+};
 
 let catalogState = {
   search: '',
@@ -76,6 +88,8 @@ function setupEventListeners() {
         loadCatalogCharacters();
       } else if (targetId === 'tab-suggestions') {
         loadUserSuggestions();
+      } else if (targetId === 'tab-market') {
+        loadMarketTab();
       }
     });
   });
@@ -304,6 +318,75 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Alternância de subabas do modal de fazer oferta
+  const offerTabs = document.querySelectorAll('#modal-market-offer .retro-tab[data-offertab]');
+  offerTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      offerTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const targetId = tab.dataset.offertab;
+      document.querySelectorAll('#modal-market-offer .offertab-content').forEach(c => c.classList.add('hidden'));
+      const activeContent = document.getElementById(targetId);
+      if (activeContent) activeContent.classList.remove('hidden');
+    });
+  });
+
+  // Botão de ir para o harém criar anúncio
+  document.getElementById('btn-market-new-from-harem')?.addEventListener('click', () => {
+    switchTab('tab-harem');
+  });
+
+  // Busca nos classificados globais
+  let marketSearchTimer = null;
+  const marketSearchInput = document.getElementById('market-search-input');
+  if (marketSearchInput) {
+    marketSearchInput.addEventListener('input', () => {
+      clearTimeout(marketSearchTimer);
+      marketSearchTimer = setTimeout(() => {
+        marketState.search = marketSearchInput.value.trim();
+        marketState.page = 1;
+        loadGlobalMarket();
+      }, 350);
+    });
+  }
+
+  // Ordenação nos classificados globais
+  const marketSortSelect = document.getElementById('market-sort-select');
+  if (marketSortSelect) {
+    marketSortSelect.addEventListener('change', () => {
+      marketState.sortBy = marketSortSelect.value;
+      marketState.page = 1;
+      loadGlobalMarket();
+    });
+  }
+
+  // Botão de atualizar mercado
+  document.getElementById('btn-refresh-market')?.addEventListener('click', () => {
+    loadGlobalMarket();
+  });
+
+  // Paginação nos classificados globais
+  document.getElementById('btn-market-prev')?.addEventListener('click', () => {
+    if (marketState.page > 1) {
+      marketState.page--;
+      loadGlobalMarket();
+    }
+  });
+
+  document.getElementById('btn-market-next')?.addEventListener('click', () => {
+    if (marketState.page < marketState.totalPages) {
+      marketState.page++;
+      loadGlobalMarket();
+    }
+  });
+
+  // Botão de confirmar publicação do anúncio
+  document.getElementById('btn-confirm-sell')?.addEventListener('click', confirmPublishListing);
+
+  // Botão de submeter proposta de oferta
+  document.getElementById('btn-submit-offer')?.addEventListener('click', submitMarketOffer);
 }
 
 async function loadUserData() {
@@ -345,6 +428,7 @@ async function loadUserData() {
       renderPrivateHarem(harem);
       renderPrivateWishlist(userSessionData.wishlist || []);
       loadUserSuggestions();
+      updateMarketPendingBadge();
     } else {
       document.getElementById('btn-share-public')?.classList.add('hidden');
       document.getElementById('private-panel').classList.add('hidden');
@@ -439,6 +523,9 @@ function renderPrivateHarem(harem) {
         <div class="card-name">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+          <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openSellModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
+            <i class="fas fa-tag"></i> 💰 Vender
+          </button>
           <button class="btn-retro btn-sm ${entry.isFavorite ? 'btn-gold' : ''}" style="width: 100%;" onclick="toggleFavorite('${char.id}')">
             ${entry.isFavorite ? '💖 Favorita' : '🤍 Favoritar'}
           </button>
@@ -1130,4 +1217,591 @@ async function loadUserSuggestions() {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--accent-red); padding: 20px;">Erro ao carregar sugestões.</td></tr>`;
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* MÓDULO DE CLASSIFICADOS E MERCADO (PAINEL WEB)                             */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function switchTab(tabId) {
+  const tabBtn = document.querySelector(`.retro-tabs .retro-tab[data-tab="${tabId}"]`);
+  if (tabBtn) tabBtn.click();
+}
+
+function openSellModal(characterId, characterName, imageUrl, series) {
+  activeSellCharacter = { id: characterId, name: characterName };
+  document.getElementById('sell-modal-char-name').textContent = characterName;
+  document.getElementById('sell-modal-char-series').textContent = series || 'Sem série';
+  document.getElementById('sell-modal-char-img').src = imageUrl || '/media/characters/default.jpg';
+  document.getElementById('sell-modal-interest').value = '';
+  openModal('modal-market-sell');
+}
+
+async function confirmPublishListing() {
+  if (!activeSellCharacter) return;
+  const interestInput = document.getElementById('sell-modal-interest');
+  const interest = interestInput.value.trim();
+
+  if (!interest) {
+    Api.showToast('Por favor, informe o que você busca em troca.', '⚠️');
+    interestInput.focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirm-sell');
+  btn.disabled = true;
+
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/market/listings`, {
+      token: userSessionToken,
+      characterId: activeSellCharacter.id,
+      interest,
+    });
+
+    if (res.success) {
+      closeModal('modal-market-sell');
+      Api.showToast('Personagem anunciado nos classificados com sucesso!', '✨');
+      switchTab('tab-market');
+      loadMyListings();
+      loadGlobalMarket();
+      updateMarketPendingBadge();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao publicar anúncio.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao publicar anúncio.', '❌');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function updateMarketPendingBadge() {
+  if (!userSessionToken) return;
+  try {
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/my-listings?token=${encodeURIComponent(userSessionToken)}`);
+    if (res.success && Array.isArray(res.data)) {
+      let pendingCount = 0;
+      res.data.forEach(l => {
+        pendingCount += (l.offers || []).length;
+      });
+
+      const badge = document.getElementById('market-pending-badge');
+      if (badge) {
+        if (pendingCount > 0) {
+          badge.textContent = pendingCount;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+    }
+  } catch (e) {
+    // Silencioso
+  }
+}
+
+function loadMarketTab() {
+  loadMyListings();
+  loadGlobalMarket();
+  loadMySentOffers();
+}
+
+async function loadMyListings() {
+  const grid = document.getElementById('my-listings-grid');
+  if (!grid) return;
+
+  try {
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/my-listings?token=${encodeURIComponent(userSessionToken)}`);
+    if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
+      grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: var(--text-muted);">Você não possui nenhum anúncio ativo no momento. Vá ao seu Harém e clique em "Vender" para anunciar!</div>';
+      return;
+    }
+
+    grid.innerHTML = '';
+    res.data.forEach(listing => {
+      const char = listing.character;
+      const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
+      const pendingOffersCount = (listing.offers || []).length;
+
+      const card = document.createElement('div');
+      card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
+      card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
+
+      const hasOffers = pendingOffersCount > 0;
+      const offersBtnClass = hasOffers ? 'btn-gold' : '';
+      const offersBtnText = hasOffers
+        ? `<i class="fas fa-bell"></i> <strong>Ver Ofertas (${pendingOffersCount})</strong>`
+        : `<i class="fas fa-envelope-open"></i> Ver Ofertas (0)`;
+
+      card.innerHTML = `
+        <div class="card-img-wrapper">
+          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+          <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
+            ${rarity.emoji} ${rarity.label}
+          </div>
+          ${hasOffers ? `<div class="badge-married" style="background: #f59e0b; color: black; font-weight: 800;">${pendingOffersCount} 🫰</div>` : ''}
+        </div>
+        <div class="card-info">
+          <div class="card-name">${escapeHtml(char.name)}</div>
+          <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+          <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 6px 0; border: var(--border-retro);">
+            <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
+          </div>
+          <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+            <button class="btn-retro btn-sm ${offersBtnClass}" style="width: 100%;" onclick="openViewOffersModal('${listing.id}', '${escapeHtml(char.name)}')">
+              ${offersBtnText}
+            </button>
+            <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="cancelMyListing('${listing.id}')">
+              <i class="fas fa-times-circle"></i> Cancelar Anúncio
+            </button>
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  } catch (err) {
+    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: var(--accent-red);">Erro ao carregar seus anúncios.</div>';
+  }
+}
+
+async function cancelMyListing(listingId) {
+  if (!confirm('Deseja realmente cancelar este anúncio? Todas as ofertas pendentes nele serão canceladas.')) return;
+  try {
+    const res = await Api.delete(`/api/web/user/${encodeURIComponent(userPublicId)}/market/listings/${encodeURIComponent(listingId)}?token=${encodeURIComponent(userSessionToken)}`);
+    if (res.success) {
+      Api.showToast('Anúncio cancelado com sucesso.', 'ℹ️');
+      loadMyListings();
+      loadGlobalMarket();
+      updateMarketPendingBadge();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao cancelar anúncio.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao cancelar anúncio.', '❌');
+  }
+}
+
+async function openViewOffersModal(listingId, characterName) {
+  const container = document.getElementById('offers-list-container');
+  const title = document.getElementById('view-offers-char-title');
+  title.textContent = `Propostas para: ${characterName}`;
+  container.innerHTML = '<div style="text-align: center; padding: 20px;">Buscando ofertas...</div>';
+  openModal('modal-market-view-offers');
+
+  try {
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/listings/${encodeURIComponent(listingId)}/offers?token=${encodeURIComponent(userSessionToken)}`);
+    if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
+      container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">Nenhuma oferta recebida para este anúncio ainda.</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    res.data.forEach(offer => {
+      const offered = offer.offeredItems || {};
+      const buyerName = offer.buyer?.name || 'Jogador Anônimo';
+      const isPending = offer.status === 'PENDING';
+
+      let itemsHtml = '';
+      if (offered.isFree) {
+        itemsHtml = '<div style="color: #10b981; font-weight: 700;">🎁 Pediu de graça (Doação)</div>';
+      } else {
+        const parts = [];
+        if (Array.isArray(offered.waifuIds) && offered.waifuIds.length > 0) {
+          parts.push(`<div><strong>Waifus (${offered.waifuIds.length}):</strong> ${offered.waifuIds.map(w => `<span class="badge-tag" style="background:#8b5cf6;color:#fff;">${escapeHtml(w)}</span>`).join(' ')}</div>`);
+        }
+        if (Array.isArray(offered.fishes) && offered.fishes.length > 0) {
+          parts.push(`<div><strong>Peixes (${offered.fishes.length}):</strong> ${offered.fishes.map(f => `${escapeHtml(f.name || 'Peixe')} (${f.weight || 0}kg)`).join(', ')}</div>`);
+        }
+        if (Array.isArray(offered.fishingBuffs) && offered.fishingBuffs.length > 0) {
+          parts.push(`<div><strong>Buffs de Pesca (${offered.fishingBuffs.length}):</strong> ${offered.fishingBuffs.map(b => escapeHtml(b.originalName || b.type || 'Buff')).join(', ')}</div>`);
+        }
+        if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) {
+          parts.push(`<div><strong>Itens de Fazenda:</strong> ${offered.farmItems.map(it => `${it.amount}x ${escapeHtml(it.name || it.itemId)}`).join(', ')}</div>`);
+        }
+        itemsHtml = parts.join('<div style="margin-top: 4px;"></div>') || '<span style="color: var(--text-muted);">Nenhum item especificado</span>';
+      }
+
+      let statusBadge = `<span class="badge-tag" style="background: #eab308; color: #000;">Pendente</span>`;
+      if (offer.status === 'ACCEPTED') statusBadge = `<span class="badge-tag" style="background: #22c55e; color: #fff;">Aceita 🎉</span>`;
+      if (offer.status === 'REJECTED') statusBadge = `<span class="badge-tag" style="background: #64748b; color: #fff;">Negada</span>`;
+      if (offer.status === 'CANCELLED') statusBadge = `<span class="badge-tag" style="background: #ef4444; color: #fff;">Cancelada</span>`;
+
+      const card = document.createElement('div');
+      card.style.background = 'var(--bg-card)';
+      card.style.border = 'var(--border-retro)';
+      card.style.borderRadius = 'var(--radius-retro)';
+      card.style.padding = '12px 14px';
+
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-weight: 800; font-size: 14px;"><i class="fas fa-user"></i> ${escapeHtml(buyerName)}</span>
+          ${statusBadge}
+        </div>
+        <div style="font-size: 13px; margin-bottom: 8px;">
+          ${itemsHtml}
+        </div>
+        ${offer.message ? `<div style="font-size: 12px; color: var(--text-muted); font-style: italic; margin-bottom: 8px;">"${escapeHtml(offer.message)}"</div>` : ''}
+        ${offer.cancelReason ? `<div style="font-size: 12px; color: var(--accent-red); font-weight: bold; margin-bottom: 8px;">Motivo do cancelamento: ${escapeHtml(offer.cancelReason)}</div>` : ''}
+        ${isPending ? `
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button class="btn-retro btn-sm btn-gold" style="flex: 1;" onclick="acceptMarketOffer('${offer.id}', '${listingId}', '${escapeHtml(characterName)}')">
+              <i class="fas fa-check"></i> Aceitar Oferta
+            </button>
+            <button class="btn-retro btn-sm btn-danger" style="flex: 1;" onclick="rejectMarketOffer('${offer.id}', '${listingId}', '${escapeHtml(characterName)}')">
+              <i class="fas fa-times"></i> Negar
+            </button>
+          </div>
+        ` : ''}
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--accent-red);">Erro ao carregar propostas.</div>';
+  }
+}
+
+async function acceptMarketOffer(offerId, listingId, characterName) {
+  if (!confirm('Deseja aceitar esta oferta? Os itens e personagens serão transferidos imediatamente.')) return;
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/market/offers/${encodeURIComponent(offerId)}/accept`, {
+      token: userSessionToken,
+    });
+
+    if (res.success) {
+      Api.showToast('Oferta aceita com sucesso! A troca foi realizada.', '🎉');
+      closeModal('modal-market-view-offers');
+      loadUserData();
+      loadMarketTab();
+    } else {
+      // Se foi cancelada por falta de itens, avisa com destaque
+      alert(res.reason || 'Não foi possível aceitar a oferta.');
+      openViewOffersModal(listingId, characterName);
+      loadMyListings();
+      loadGlobalMarket();
+      updateMarketPendingBadge();
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao aceitar oferta.', '❌');
+  }
+}
+
+async function rejectMarketOffer(offerId, listingId, characterName) {
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/market/offers/${encodeURIComponent(offerId)}/reject`, {
+      token: userSessionToken,
+    });
+    if (res.success) {
+      Api.showToast('Oferta negada.', '👎');
+      openViewOffersModal(listingId, characterName);
+      loadMyListings();
+      updateMarketPendingBadge();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao negar oferta.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao negar oferta.', '❌');
+  }
+}
+
+async function loadGlobalMarket() {
+  const grid = document.getElementById('global-market-grid');
+  if (!grid) return;
+
+  grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 28px;">Buscando classificados globais...</div>';
+
+  try {
+    const query = new URLSearchParams({
+      search: marketState.search,
+      sortBy: marketState.sortBy,
+      page: marketState.page,
+      limit: marketState.limit,
+    });
+
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/listings?${query.toString()}`);
+    if (!res.success || !res.data || !Array.isArray(res.data.listings) || res.data.listings.length === 0) {
+      grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; color: var(--text-muted);">Nenhum anúncio encontrado nos classificados no momento.</div>';
+      document.getElementById('market-page-info').textContent = 'Página 1 de 1';
+      document.getElementById('btn-market-prev').disabled = true;
+      document.getElementById('btn-market-next').disabled = true;
+      return;
+    }
+
+    const { listings, total, page, totalPages } = res.data;
+    marketState.page = page;
+    marketState.totalPages = totalPages;
+
+    document.getElementById('market-page-info').textContent = `Página ${page} de ${totalPages} (${total} anúncios)`;
+    document.getElementById('btn-market-prev').disabled = page <= 1;
+    document.getElementById('btn-market-next').disabled = page >= totalPages;
+
+    grid.innerHTML = '';
+    listings.forEach(listing => {
+      const char = listing.character;
+      const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
+      const sellerName = listing.user?.name || 'Jogador';
+      const isOwnListing = Boolean(userSessionData && listing.user?.publicId === userSessionData.publicId);
+
+      const card = document.createElement('div');
+      card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
+      card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
+
+      card.innerHTML = `
+        <div class="card-img-wrapper">
+          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+          <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
+            ${rarity.emoji} ${rarity.label}
+          </div>
+          ${isOwnListing ? `<div class="badge-married" style="background: #3b82f6; color: white;">SEU ANÚNCIO</div>` : ''}
+        </div>
+        <div class="card-info">
+          <div class="card-name">${escapeHtml(char.name)}</div>
+          <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+            <i class="fas fa-user-tag"></i> Vendedor: <strong>${escapeHtml(sellerName)}</strong>
+          </div>
+          <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 8px 0; border: var(--border-retro);">
+            <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
+          </div>
+          <div class="card-actions" style="margin-top: 8px;">
+            ${isOwnListing ? `
+              <button class="btn-retro btn-sm" style="width: 100%; opacity: 0.8;" disabled>
+                <i class="fas fa-check"></i> Seu Personagem
+              </button>
+            ` : `
+              <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openOfferModal('${listing.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(listing.interest)}')">
+                <i class="fas fa-handshake"></i> Fazer Oferta
+              </button>
+            `}
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  } catch (err) {
+    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 28px; color: var(--accent-red);">Erro ao carregar classificados globais.</div>';
+  }
+}
+
+function openOfferModal(listingId, characterName, imageUrl, interest) {
+  activeOfferListing = { id: listingId, name: characterName };
+  document.getElementById('offer-target-name').textContent = characterName;
+  document.getElementById('offer-target-interest').textContent = `Procura: ${interest}`;
+  document.getElementById('offer-target-img').src = imageUrl || '/media/characters/default.jpg';
+  document.getElementById('offer-is-free-checkbox').checked = false;
+  toggleFreeOffer(false);
+  document.getElementById('offer-message-input').value = '';
+
+  // 1. Popula Waifus disponíveis do harém do comprador
+  const waifusList = document.getElementById('offer-waifus-list');
+  const harem = userSessionData?.harem || [];
+  if (harem.length === 0) {
+    waifusList.innerHTML = '<div style="grid-column: 1 / -1; font-size: 12px; color: var(--text-muted); padding: 8px;">Você não possui waifus no harém para oferecer.</div>';
+  } else {
+    waifusList.innerHTML = harem.map(item => {
+      const char = item.character;
+      return `
+        <label style="border: var(--border-retro); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; align-items: center; cursor: pointer; background: var(--bg-card); font-size: 11px; text-align: center;">
+          <img src="${char.imageUrl || '/media/characters/default.jpg'}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-bottom: 4px;">
+          <span style="font-weight: 700; max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(char.name)}</span>
+          <input type="checkbox" name="offer-waifu-cb" value="${char.id}" style="margin-top: 4px;">
+        </label>
+      `;
+    }).join('');
+  }
+
+  // 2. Popula Peixes da Pescaria
+  const fishesList = document.getElementById('offer-fishes-list');
+  const fishes = userSessionData?.inventory?.fishes || [];
+  if (fishes.length === 0) {
+    fishesList.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">Nenhum peixe na sua mochila de pesca no momento.</div>';
+  } else {
+    fishesList.innerHTML = fishes.map(fish => {
+      const rareTag = fish.is_rare || fish.isRare ? '⭐ RARO' : '';
+      return `
+        <label style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 6px 10px; border-radius: 4px; background: var(--bg-card); font-size: 12px; cursor: pointer;">
+          <span>🐟 <strong>${escapeHtml(fish.name)}</strong> (${fish.weight} kg) <span style="color:#eab308;font-weight:bold;">${rareTag}</span></span>
+          <input type="checkbox" name="offer-fish-cb" value="${fish.id}" data-name="${escapeHtml(fish.name)}" data-weight="${fish.weight}">
+        </label>
+      `;
+    }).join('');
+  }
+
+  // 3. Popula Buffs Permanentes de Pesca
+  const buffsList = document.getElementById('offer-buffs-list');
+  const buffs = userSessionData?.inventory?.buffs || [];
+  if (buffs.length === 0) {
+    buffsList.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">Nenhum buff de pesca permanente no seu inventário.</div>';
+  } else {
+    buffsList.innerHTML = buffs.map(b => {
+      return `
+        <label style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 6px 10px; border-radius: 4px; background: var(--bg-card); font-size: 12px; cursor: pointer;">
+          <span>⚡ <strong>${escapeHtml(b.original_name || b.originalName || b.type)}</strong> (${escapeHtml(b.type || 'buff')})</span>
+          <input type="checkbox" name="offer-buff-cb" value="${b.id}" data-name="${escapeHtml(b.original_name || b.originalName || b.type)}">
+        </label>
+      `;
+    }).join('');
+  }
+
+  // 4. Popula Itens da Fazenda (Jardim das Sombras)
+  const farmList = document.getElementById('offer-farm-list');
+  const farmItems = userSessionData?.inventory?.farmItems || [];
+  if (farmItems.length === 0) {
+    farmList.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">Nenhum item da fazenda disponível no momento.</div>';
+  } else {
+    farmList.innerHTML = farmItems.map(it => {
+      const maxQty = Number(it.quantity) || 1;
+      return `
+        <div style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 6px 10px; border-radius: 4px; background: var(--bg-card); font-size: 12px;">
+          <div>
+            🌱 <strong>${escapeHtml(it.name || it.itemId)}</strong>
+            <span style="color: var(--text-muted); margin-left: 6px;">(Em estoque: ${maxQty})</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', -1, ${maxQty})">-</button>
+            <input type="number" id="farm-qty-${it.itemId}" value="0" min="0" max="${maxQty}" style="width: 45px; text-align: center; border: var(--border-retro); border-radius: 4px;" readonly>
+            <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', 1, ${maxQty})">+</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  openModal('modal-market-offer');
+}
+
+function adjustOfferFarmQty(itemId, delta, max) {
+  const input = document.getElementById(`farm-qty-${itemId}`);
+  if (!input) return;
+  let val = parseInt(input.value, 10) || 0;
+  val = Math.max(0, Math.min(max, val + delta));
+  input.value = val;
+}
+
+function toggleFreeOffer(isFree) {
+  const area = document.getElementById('offer-items-selection-area');
+  if (area) {
+    area.style.opacity = isFree ? '0.35' : '1';
+    area.style.pointerEvents = isFree ? 'none' : 'auto';
+  }
+}
+
+async function submitMarketOffer() {
+  if (!activeOfferListing) return;
+
+  const isFree = document.getElementById('offer-is-free-checkbox').checked;
+  const message = document.getElementById('offer-message-input').value.trim();
+
+  const selectedWaifuIds = Array.from(document.querySelectorAll('input[name="offer-waifu-cb"]:checked')).map(cb => cb.value);
+  const selectedFishes = Array.from(document.querySelectorAll('input[name="offer-fish-cb"]:checked')).map(cb => ({
+    id: parseInt(cb.value, 10),
+    name: cb.dataset.name,
+    weight: parseFloat(cb.dataset.weight),
+  }));
+  const selectedBuffs = Array.from(document.querySelectorAll('input[name="offer-buff-cb"]:checked')).map(cb => ({
+    id: parseInt(cb.value, 10),
+    originalName: cb.dataset.name,
+  }));
+
+  const farmItems = [];
+  const farmList = userSessionData?.inventory?.farmItems || [];
+  farmList.forEach(it => {
+    const qtyInput = document.getElementById(`farm-qty-${it.itemId}`);
+    const qty = parseInt(qtyInput?.value, 10) || 0;
+    if (qty > 0) {
+      farmItems.push({
+        itemId: it.itemId,
+        name: it.name || it.itemId,
+        amount: qty,
+      });
+    }
+  });
+
+  if (!isFree && selectedWaifuIds.length === 0 && selectedFishes.length === 0 && selectedBuffs.length === 0 && farmItems.length === 0) {
+    Api.showToast('Selecione ao menos um item para oferecer ou marque "Pedir de graça".', '⚠️');
+    return;
+  }
+
+  const btn = document.getElementById('btn-submit-offer');
+  btn.disabled = true;
+
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/market/offers`, {
+      token: userSessionToken,
+      listingId: activeOfferListing.id,
+      message,
+      offeredItems: {
+        isFree,
+        waifuIds: selectedWaifuIds,
+        fishes: selectedFishes,
+        fishingBuffs: selectedBuffs,
+        farmItems,
+      },
+    });
+
+    if (res.success) {
+      closeModal('modal-market-offer');
+      Api.showToast('Sua oferta foi enviada ao vendedor!', '🚀');
+      loadMySentOffers();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao enviar oferta.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao enviar oferta.', '❌');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadMySentOffers() {
+  const tbody = document.getElementById('tbody-my-offers');
+  if (!tbody) return;
+
+  try {
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/my-offers?token=${encodeURIComponent(userSessionToken)}`);
+    if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">Você não enviou nenhuma oferta nos últimos 15 dias.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = res.data.map(offer => {
+      const dateStr = new Date(offer.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const charName = offer.listing?.character?.name || 'Personagem';
+      const series = offer.listing?.character?.series ? ` (${escapeHtml(offer.listing.character.series)})` : '';
+      const seller = offer.listing?.user?.name || 'Vendedor';
+
+      const offered = offer.offeredItems || {};
+      let summary = '';
+      if (offered.isFree) {
+        summary = '🎁 Pedido de graça (Doação)';
+      } else {
+        const parts = [];
+        if (Array.isArray(offered.waifuIds) && offered.waifuIds.length > 0) parts.push(`${offered.waifuIds.length} waifu(s)`);
+        if (Array.isArray(offered.fishes) && offered.fishes.length > 0) parts.push(`${offered.fishes.length} peixe(s)`);
+        if (Array.isArray(offered.fishingBuffs) && offered.fishingBuffs.length > 0) parts.push(`${offered.fishingBuffs.length} buff(s)`);
+        if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) parts.push(`${offered.farmItems.length} item(ns) da fazenda`);
+        summary = parts.join(', ') || 'Nenhum item';
+      }
+
+      let statusBadge = `<span class="badge-tag" style="background: #eab308; color: #000;">Pendente</span>`;
+      if (offer.status === 'ACCEPTED') statusBadge = `<span class="badge-tag" style="background: #22c55e; color: #fff;">Aceita 🎉</span>`;
+      if (offer.status === 'REJECTED') statusBadge = `<span class="badge-tag" style="background: #64748b; color: #fff;">Negada 👎</span>`;
+      if (offer.status === 'CANCELLED') {
+        const reasonTooltip = offer.cancelReason ? ` - Motivo: ${escapeHtml(offer.cancelReason)}` : '';
+        statusBadge = `<span class="badge-tag" style="background: #ef4444; color: #fff;" title="${escapeHtml(offer.cancelReason || '')}">Cancelada ⚠️${reasonTooltip}</span>`;
+      }
+
+      return `
+        <tr>
+          <td style="white-space: nowrap; font-size: 12px;">${dateStr}</td>
+          <td style="font-weight: 700;">${escapeHtml(charName)}${series}</td>
+          <td>${escapeHtml(seller)}</td>
+          <td style="font-size: 13px;">${summary}</td>
+          <td>${statusBadge}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-red); padding: 20px;">Erro ao carregar histórico de ofertas.</td></tr>';
+  }
+}
+
 
