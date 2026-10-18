@@ -43,6 +43,7 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
   });
 
   let createdReportSuggestionId = '';
+  let createdMultiReportId = '';
 
   afterAll(async () => {
     if (!adminToken) {
@@ -84,6 +85,15 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminToken}` },
       }).catch(() => {});
+    }
+
+    if (createdMultiReportId && adminToken) {
+      const res = await fetch(`${BASE_URL}/api/admin/multi-reports/${createdMultiReportId}/telegram`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const json = await res.json().catch(() => null);
+      console.log('Deleted multi-report telegram msg:', json);
     }
 
     // 2. Restaura dados do personagem original
@@ -210,6 +220,46 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     expect(json.data).toHaveProperty('suggestion');
     expect(json.data.suggestion.type).toBe('DELETE_CHARACTER');
     createdReportSuggestionId = json.data.suggestion.id;
+  });
+
+  it('POST /characters/multi-report deve registrar denúncia de múltiplos rolls e retornar ID', async () => {
+    const res = await fetch(`${BASE_URL}/characters/multi-report`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        slots: [
+          {
+            slot: 1,
+            characterId: testCharacterId,
+            characterName: originalCharacterData?.name || 'Teste Slot 1',
+            series: originalCharacterData?.series || 'Série Teste',
+            rarity: 'COMMON',
+          },
+          {
+            slot: 2,
+            characterId: 'fake-char-2',
+            characterName: 'Slot 2 Fake',
+            series: 'Série Fake',
+            rarity: 'RARE',
+          },
+        ],
+        reason: 'Denúncia de teste de múltiplos rolls',
+        userId: testPublicId,
+        userName: 'Tester Web',
+        source: 'Grupo de Testes',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data).toHaveProperty('report');
+    expect(json.data.report).toHaveProperty('id');
+    expect(json.data.report.slotsCount).toBe(2);
+    createdMultiReportId = json.data.report.id;
   });
 
   it('POST /api/admin/login deve autenticar com a senha única do .env', async () => {

@@ -338,6 +338,33 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
+   * Apaga a mensagem do Telegram de uma denúncia de múltiplos rolls
+   */
+  fastify.delete('/api/admin/multi-reports/:id/telegram', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Apaga a notificação enviada ao Telegram sobre a denúncia de múltiplos rolls',
+      tags: ['Admin (Web)'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const deleted = await suggestionService.deleteMultiReportTelegramNotification(id);
+      return reply.send({
+        success: true,
+        data: {
+          deleted,
+          message: deleted ? 'Mensagem apagada do Telegram com sucesso.' : 'Nenhuma mensagem encontrada ou erro ao apagar.',
+        },
+      });
+    },
+  });
+
+  /**
    * Deleta uma sugestão e remove a notificação do Telegram
    */
   fastify.delete('/api/admin/suggestions/:id', {

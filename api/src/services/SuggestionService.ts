@@ -223,15 +223,15 @@ export class SuggestionService {
   }
 
   /**
-   * Envia uma denúncia de exclusão para um personagem (botão 🔞 na home)
+   * Envia uma denúncia de exclusão para um personagem (botão 🔞 na home ou comando WhatsApp)
    */
-  async submitDeleteSuggestion(characterId: string, userId?: string, reason?: string) {
+  async submitDeleteSuggestion(characterId: string, userId?: string, reason?: string, explicitUserName?: string) {
     const character = await this.characterService.findCharacter(characterId);
     if (!character) {
       throw new DomainError('CHARACTER_NOT_FOUND', 'Personagem não encontrado.', 404);
     }
 
-    let userName = 'Anônimo na Web';
+    let userName = explicitUserName || 'Anônimo na Web';
     let resolvedUserId: string | null = null;
     if (userId) {
       const user = await this.prisma.user.findFirst({
@@ -240,7 +240,7 @@ export class SuggestionService {
       });
       if (user) {
         resolvedUserId = user.id;
-        if (user.name) userName = user.name;
+        if (!explicitUserName && user.name) userName = user.name;
       }
     }
 
@@ -616,6 +616,90 @@ export class SuggestionService {
     return this.prisma.characterSuggestion.delete({
       where: { id: suggestionId },
     });
+  }
+
+  /**
+   * Apaga a notificação enviada ao Telegram de uma denúncia de múltiplos rolls
+   */
+  async deleteMultiReportTelegramNotification(reportId: string): Promise<boolean> {
+    return this.telegramService.deleteMultiReportMessage(reportId, this.redis);
+  }
+
+  /**
+   * Submete denúncia de múltiplos personagens (rolls múltiplos) e notifica o Telegram
+   */
+  async submitMultiRollReport(data: {
+    slots: Array<{
+      slot: number;
+      characterId?: string | null;
+      characterName?: string | null;
+      series?: string | null;
+      rarity?: string | null;
+      imageUrl?: string | null;
+    }>;
+    gridImageBase64?: string | null;
+    reason?: string | null;
+    userId?: string | null;
+    userName?: string | null;
+    source?: string | null;
+  }) {
+    const reportId = randomUUID().replace(/-/g, '').slice(0, 12);
+
+    await this.telegramService.notifyMultiRollReport({
+      id: reportId,
+      slots: (data.slots || []).map((s) => ({
+        slot: s.slot,
+        characterId: s.characterId || null,
+        characterName: s.characterName || null,
+        series: s.series || null,
+        rarity: s.rarity || 'COMMON',
+        imageUrl: s.imageUrl || null,
+        removed: false,
+      })),
+      gridImageBase64: data.gridImageBase64,
+      reason: data.reason,
+      userId: data.userId,
+      userName: data.userName,
+      source: data.source,
+    });
+
+    return { id: reportId, slotsCount: (data.slots || []).length };
+  }
+
+  /**
+   * Desativa um personagem do catálogo a partir de uma moderação via Telegram
+   */
+  async deactivateCharacter(characterId: string, reason = 'Denúncia', moderatorName = 'moderator') {
+    const cleanId = String(characterId).trim();
+    const character = await this.prisma.character.findFirst({
+      where: {
+        OR: [
+          { id: cleanId },
+          { id: cleanId.toLowerCase() },
+          { name: { equals: cleanId, mode: 'insensitive' } },
+        ],
+      },
+    });
+    if (!character) return null;
+
+    await this.prisma.character.update({
+      where: { id: character.id },
+      data: { isActive: false },
+    });
+
+    await this.prisma.characterSuggestion.create({
+      data: {
+        characterId: character.id,
+        type: 'DELETE_CHARACTER',
+        status: 'APPROVED',
+        reason,
+        reviewedBy: moderatorName,
+        reviewedAt: new Date(),
+      },
+    }).catch(() => {});
+
+    await this.invalidateCharacterCaches();
+    return character;
   }
 
   /**

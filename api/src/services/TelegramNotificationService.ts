@@ -24,6 +24,24 @@ export interface SuggestionNotifyData {
   } | null;
 }
 
+export interface MultiRollReportData {
+  id: string;
+  slots: Array<{
+    slot: number;
+    characterId?: string | null;
+    characterName?: string | null;
+    series?: string | null;
+    rarity?: string | null;
+    imageUrl?: string | null;
+    removed?: boolean;
+  }>;
+  gridImageBase64?: string | null;
+  reason?: string | null;
+  userName?: string | null;
+  userId?: string | null;
+  source?: string | null;
+}
+
 export class TelegramNotificationService {
   private botToken?: string;
   private chatId?: string;
@@ -121,6 +139,123 @@ export class TelegramNotificationService {
   }
 
   /**
+   * Constrói o teclado inline para denúncia de múltiplos rolls (1, 2, 3...)
+   */
+  buildMultiRollKeyboard(reportId: string, slots: Array<{ slot: number; removed?: boolean }>): any {
+    const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+    const rows: any[][] = [];
+    let currentRow: any[] = [];
+
+    slots.forEach((s) => {
+      const numEmoji = numberEmojis[s.slot - 1] || `${s.slot}️⃣`;
+      const isRemoved = Boolean(s.removed);
+
+      currentRow.push({
+        text: isRemoved ? `${numEmoji} ❌` : numEmoji,
+        callback_data: isRemoved ? `mr_done:${reportId}:${s.slot}` : `mr_del:${reportId}:${s.slot}`,
+      });
+
+      if (currentRow.length === 5) {
+        rows.push(currentRow);
+        currentRow = [];
+      }
+    });
+
+    if (currentRow.length > 0) {
+      rows.push(currentRow);
+    }
+
+    rows.push([
+      { text: '❌ Descartar Denúncia', callback_data: `mr_ign:${reportId}` },
+      { text: '🌐 Painel Admin', url: `${config.PUBLIC_BASE_URL}/admin` },
+    ]);
+
+    return { inline_keyboard: rows };
+  }
+
+  /**
+   * Notifica moderação sobre denúncia de múltiplos rolls
+   */
+  async notifyMultiRollReport(data: MultiRollReportData): Promise<void> {
+    if (!this.isConfigured) return;
+
+    try {
+      const title = '🚨 <b>Denúncia de Rolls Múltiplos Waifuletes</b> 🚨';
+      let text = `${title}\n\n`;
+      text += `👤 <b>Denunciante:</b> ${this.escapeHtml(data.userName || 'Anônimo')}\n`;
+      if (data.source) {
+        text += `👥 <b>Origem:</b> ${this.escapeHtml(data.source)}\n`;
+      }
+      text += `🎲 <b>Total de Personagens:</b> ${data.slots.length}\n\n`;
+
+      const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+      const rarityEmoji: Record<string, string> = {
+        COMMON: '⚪', COMUM: '⚪',
+        UNCOMMON: '🟢', INCOMUM: '🟢',
+        RARE: '🔵', RARO: '🔵',
+        EPIC: '🟣', EPICO: '🟣', ÉPICO: '🟣',
+        LEGENDARY: '🟡', LENDARIO: '🟡', LENDÁRIO: '🟡',
+      };
+
+      data.slots.forEach((s) => {
+        const numEmoji = numberEmojis[s.slot - 1] || `${s.slot}️⃣`;
+        const normRarity = String(s.rarity || 'COMMON').toUpperCase();
+        const emoji = rarityEmoji[normRarity] || '⚪';
+        const charName = this.escapeHtml(s.characterName || s.characterId || `Personagem #${s.slot}`);
+        const series = s.series ? ` — ${this.escapeHtml(s.series)}` : '';
+        const charId = s.characterId ? ` (<code>${this.escapeHtml(s.characterId)}</code>)` : '';
+        const statusMark = s.removed ? ' <i>(Removido)</i>' : '';
+
+        text += `${numEmoji} ${emoji} [${normRarity}] <b>${charName}</b>${series}${charId}${statusMark}\n`;
+      });
+
+      text += `\n<i>Clique no número correspondente abaixo para remover o personagem do catálogo:</i>`;
+
+      const replyMarkup = this.buildMultiRollKeyboard(data.id, data.slots);
+
+      let imageBuffer: Buffer | null = null;
+      if (data.gridImageBase64) {
+        try {
+          const cleanB64 = data.gridImageBase64.replace(/^data:image\/\w+;base64,/, '');
+          imageBuffer = Buffer.from(cleanB64, 'base64');
+        } catch (_) {}
+      }
+
+      let sentInfo: { messageId: number; chatId: string } | null = null;
+      if (imageBuffer && imageBuffer.length > 0) {
+        sentInfo = await this.sendPhotoWithBuffer(imageBuffer, text, replyMarkup);
+      } else {
+        sentInfo = await this.sendMessage(text, replyMarkup);
+      }
+
+      if (sentInfo && this.redis) {
+        await this.redis.set(
+          `telegram:multireport:${data.id}:msg`,
+          JSON.stringify(sentInfo),
+          'EX',
+          7 * 86400
+        );
+        await this.redis.set(
+          `telegram:multireport:${data.id}:data`,
+          JSON.stringify({
+            id: data.id,
+            slots: data.slots,
+            userName: data.userName,
+            source: data.source,
+            reason: data.reason,
+            chatId: sentInfo.chatId,
+            messageId: sentInfo.messageId,
+          }),
+          'EX',
+          7 * 86400
+        );
+      }
+    } catch (err: any) {
+      console.error('Falha ao enviar notificação de multi-roll para o Telegram:', err?.message || err);
+    }
+  }
+
+  /**
    * Processa callback_query disparada ao clicar nos botões inline do Telegram
    */
   async handleCallback(callbackQuery: any, suggestionService: any): Promise<void> {
@@ -161,6 +296,70 @@ export class TelegramNotificationService {
         // Atualiza mensagem no Telegram
         const appendText = `\n\n❌ <b>RECUSADA</b> por ${this.escapeHtml(moderatorName)} em ${new Date().toLocaleString('pt-BR')}`;
         await this.updateTelegramMessage(chatId, messageId, message, appendText);
+      } else if (data.startsWith('mr_del:')) {
+        const parts = data.replace('mr_del:', '').split(':');
+        const reportId = parts[0];
+        const slotNumber = parseInt(parts[1], 10);
+
+        if (!this.redis) {
+          await this.answerCallback(queryId, 'Armazenamento temporário indisponível.');
+          return;
+        }
+
+        const raw = await this.redis.get(`telegram:multireport:${reportId}:data`);
+        if (!raw) {
+          await this.answerCallback(queryId, 'Denúncia expirada ou não encontrada.');
+          return;
+        }
+
+        const reportData = JSON.parse(raw);
+        const slotItem = reportData.slots.find((s: any) => s.slot === slotNumber);
+
+        if (!slotItem) {
+          await this.answerCallback(queryId, 'Slot não encontrado na denúncia.');
+          return;
+        }
+
+        if (slotItem.removed) {
+          await this.answerCallback(queryId, 'Este personagem já foi removido.');
+          return;
+        }
+
+        if (!slotItem.characterId) {
+          await this.answerCallback(queryId, 'ID do personagem não identificado neste slot.');
+          return;
+        }
+
+        await suggestionService.deactivateCharacter(
+          slotItem.characterId,
+          `Denúncia em multi-roll (Slot #${slotNumber}) via ${reportData.source || 'WhatsApp'}`,
+          `telegram:${moderatorName}`
+        );
+
+        slotItem.removed = true;
+        await this.redis.set(
+          `telegram:multireport:${reportId}:data`,
+          JSON.stringify(reportData),
+          'EX',
+          7 * 86400
+        );
+
+        await this.answerCallback(
+          queryId,
+          `🗑️ Personagem #${slotNumber} (${slotItem.characterName || slotItem.characterId}) removido!`
+        );
+
+        const newMarkup = this.buildMultiRollKeyboard(reportId, reportData.slots);
+        const appendText = `\n⚠️ Personagem #${slotNumber} (${this.escapeHtml(slotItem.characterName || slotItem.characterId)}) removido por ${this.escapeHtml(moderatorName)} às ${new Date().toLocaleTimeString('pt-BR')}.`;
+        await this.updateTelegramMessage(chatId, messageId, message, appendText, newMarkup);
+      } else if (data.startsWith('mr_done:')) {
+        await this.answerCallback(queryId, 'Este personagem já foi removido.');
+      } else if (data.startsWith('mr_ign:')) {
+        const reportId = data.replace('mr_ign:', '');
+        await this.answerCallback(queryId, 'Denúncia finalizada e descartada.');
+
+        const appendText = `\n\n📁 <b>Denúncia finalizada</b> por ${this.escapeHtml(moderatorName)} em ${new Date().toLocaleString('pt-BR')}`;
+        await this.updateTelegramMessage(chatId, messageId, message, appendText, { inline_keyboard: [] });
       } else {
         await this.answerCallback(queryId, 'Comando não reconhecido.');
       }
@@ -325,6 +524,36 @@ export class TelegramNotificationService {
     return false;
   }
 
+  /**
+   * Apaga a mensagem enviada ao Telegram referente a uma denúncia de multi-roll
+   */
+  async deleteMultiReportMessage(reportId: string, redis?: Redis): Promise<boolean> {
+    const r = redis || this.redis;
+    if (!this.botToken || !r) return false;
+
+    try {
+      const key = `telegram:multireport:${reportId}:msg`;
+      let raw: string | null = null;
+      for (let i = 0; i < 5; i++) {
+        raw = await r.get(key);
+        if (raw) break;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      if (!raw) return false;
+
+      const { chatId, messageId } = JSON.parse(raw);
+      if (chatId && messageId) {
+        const deleted = await this.deleteMessage(chatId, messageId);
+        await r.del(key);
+        await r.del(`telegram:multireport:${reportId}:data`);
+        return deleted;
+      }
+    } catch (err: any) {
+      console.error('Erro ao deletar mensagem de multi-report do Telegram:', err?.message || err);
+    }
+    return false;
+  }
+
   private async answerCallback(callbackQueryId: string, text: string): Promise<void> {
     const url = `https://api.telegram.org/bot${this.botToken}/answerCallbackQuery`;
     await fetch(url, {
@@ -338,7 +567,14 @@ export class TelegramNotificationService {
     });
   }
 
-  private async updateTelegramMessage(chatId: string | number, messageId: number, originalMsg: any, appendText: string): Promise<void> {
+  private async updateTelegramMessage(
+    chatId: string | number,
+    messageId: number,
+    originalMsg: any,
+    appendText: string,
+    newReplyMarkup?: any
+  ): Promise<void> {
+    const markup = newReplyMarkup !== undefined ? newReplyMarkup : { inline_keyboard: [] };
     const isPhoto = Boolean(originalMsg?.photo);
     if (isPhoto) {
       const originalCaption = originalMsg?.caption || '';
@@ -352,7 +588,7 @@ export class TelegramNotificationService {
           message_id: messageId,
           caption: newCaption,
           parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [] },
+          reply_markup: markup,
         }),
       });
     } else {
@@ -367,7 +603,7 @@ export class TelegramNotificationService {
           message_id: messageId,
           text: newText,
           parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [] },
+          reply_markup: markup,
         }),
       });
     }

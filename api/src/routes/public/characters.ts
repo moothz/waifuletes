@@ -161,7 +161,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
     },
     handler: async (request, reply) => {
       const { id } = request.params as { id: string };
-      const { reason, userId, characterId } = (request.body as any) || {};
+      const { reason, userId, characterId, userName } = (request.body as any) || {};
       const targetCharacterId = id || characterId;
 
       const suggestionService = new (await import('../../services/SuggestionService.js')).SuggestionService(
@@ -170,13 +170,65 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
         characterService
       );
 
-      const suggestion = await suggestionService.submitDeleteSuggestion(targetCharacterId, userId, reason);
+      const suggestion = await suggestionService.submitDeleteSuggestion(targetCharacterId, userId, reason, userName);
 
       return reply.send({
         success: true,
         data: {
           message: 'Personagem denunciado com sucesso! A equipe de moderação irá avaliar.',
           suggestion,
+        },
+      });
+    },
+  });
+
+  fastify.post('/characters/multi-report', {
+    schema: {
+      description: 'Reporta/denuncia múltiplos personagens de um roll para moderação no Telegram com botões interativos',
+      tags: ['Personagens (Público)'],
+      body: {
+        type: 'object',
+        required: ['slots'],
+        properties: {
+          slots: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['slot'],
+              properties: {
+                slot: { type: 'integer' },
+                characterId: { type: 'string' },
+                characterName: { type: 'string' },
+                series: { type: 'string' },
+                rarity: { type: 'string' },
+                imageUrl: { type: 'string' },
+              },
+            },
+          },
+          gridImageBase64: { type: 'string' },
+          reason: { type: 'string' },
+          userId: { type: 'string' },
+          userName: { type: 'string' },
+          source: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const body = request.body as any;
+
+      const suggestionService = new (await import('../../services/SuggestionService.js')).SuggestionService(
+        fastify.prisma,
+        fastify.redis,
+        characterService
+      );
+
+      const report = await suggestionService.submitMultiRollReport(body);
+
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Denúncia de múltiplos rolls encaminhada para a moderação no Telegram!',
+          report,
         },
       });
     },
@@ -194,11 +246,12 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
           reason: { type: 'string' },
           userId: { type: 'string' },
           reportedBy: { type: 'string' },
+          userName: { type: 'string' },
         },
       },
     },
     handler: async (request, reply) => {
-      const { characterId, id, reason, userId, reportedBy } = (request.body as any) || {};
+      const { characterId, id, reason, userId, reportedBy, userName } = (request.body as any) || {};
       const targetCharacterId = characterId || id;
 
       if (!targetCharacterId) {
@@ -214,7 +267,12 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
         characterService
       );
 
-      const suggestion = await suggestionService.submitDeleteSuggestion(targetCharacterId, userId || reportedBy, reason);
+      const suggestion = await suggestionService.submitDeleteSuggestion(
+        targetCharacterId,
+        userId || reportedBy,
+        reason,
+        userName
+      );
 
       return reply.send({
         success: true,
