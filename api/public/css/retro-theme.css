@@ -102,10 +102,30 @@ body.dark-mode .retro-tabs .retro-tab.active {
   border-bottom: 2px solid #7c3aed !important;
 }
 
+body.dark-mode .pill-group {
+  background: #170d26 !important;
+  border-color: #9333ea !important;
+}
+
+body.dark-mode .retro-pill {
+  color: #c4b5fd;
+}
+
+body.dark-mode .retro-pill:hover {
+  color: #ffffff;
+  background: #270f52;
+}
+
 body.dark-mode .retro-pill.active {
   background: #7c3aed !important;
   color: #ffffff !important;
   border-color: #c084fc !important;
+}
+
+body.dark-mode .page-indicator {
+  background: #27163f !important;
+  color: #f5f3ff !important;
+  border-color: #9333ea !important;
 }
 
 body.dark-mode .retro-table thead tr {
