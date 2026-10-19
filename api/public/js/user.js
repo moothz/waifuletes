@@ -970,7 +970,7 @@ async function loadCatalogCharacters() {
           <div class="card-name" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
           <div class="card-series" title="${escapeHtml(char.series || 'Sem série')}">${escapeHtml(char.series || 'Sem série')}</div>
           <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-            <button class="btn-retro btn-sm ${isAlreadyWish ? '' : 'btn-gold'}" style="width: 100%;" ${isAlreadyWish ? 'disabled' : ''} onclick="addToWishlist('${char.id}', this, event)">
+            <button class="btn-retro btn-sm ${isAlreadyWish ? 'btn-wish-active' : 'btn-gold'}" style="width: 100%;" onclick="toggleWishlist('${char.id}', this, event)" title="${isAlreadyWish ? 'Clique para remover da Wishlist' : 'Adicionar à Wishlist'}">
               ${isAlreadyWish ? '<i class="fas fa-check"></i> Na Wishlist' : '<i class="fas fa-star"></i> + Wishlist'}
             </button>
             ${isMarried && spousePublicId !== userSessionData?.publicId ? `
@@ -1092,51 +1092,110 @@ async function executeDivorce() {
   }
 }
 
-async function addToWishlist(charId, btn, event) {
+async function toggleWishlist(charId, btn, event) {
   if (event) {
     event.preventDefault();
     event.stopPropagation();
   }
+
+  if (!userSessionToken || !userPublicId) {
+    openModal('modal-public-offer-help');
+    return;
+  }
+
+  const isAlreadyWish = Array.isArray(userSessionData?.wishlist) &&
+    userSessionData.wishlist.some(w => (w.character?.id || w.characterId) === charId);
+
+  const card = btn.closest('.waifu-card');
+  const wishesSpan = card ? card.querySelector('.badge-wishes span:last-child') : null;
+
+  btn.disabled = true;
+
   try {
-    const res = await Api.post(`/api/web/user/${userPublicId}/wishlist`, {
-      token: userSessionToken,
-      characterId: charId,
-      isStarWish: false,
-    });
-
-    if (!res.success) {
-      Api.showToast(res.error?.message || 'Falha ao adicionar.', '❌');
-      return;
-    }
-
-    btn.disabled = true;
-    btn.className = 'btn-retro btn-sm';
-    btn.innerHTML = '<i class="fas fa-check"></i> Na Wishlist';
-
-    // Atualiza estado local da wishlist sem recarregar o catálogo (evita pulo da página)
-    if (userSessionData) {
-      if (!Array.isArray(userSessionData.wishlist)) {
-        userSessionData.wishlist = [];
+    if (isAlreadyWish) {
+      // 1. Remover da Wishlist
+      const res = await Api.delete(`/api/web/user/${userPublicId}/wishlist/${encodeURIComponent(charId)}?token=${encodeURIComponent(userSessionToken)}`);
+      if (!res.success) {
+        Api.showToast(res.error?.message || 'Falha ao remover da wishlist.', '❌');
+        return;
       }
-      userSessionData.wishlist.push({
-        id: res.data?.entry?.id || charId,
+
+      btn.className = 'btn-retro btn-sm btn-gold';
+      btn.innerHTML = '<i class="fas fa-star"></i> + Wishlist';
+      btn.title = 'Adicionar à Wishlist';
+
+      if (userSessionData) {
+        userSessionData.wishlist = (userSessionData.wishlist || []).filter(w => (w.character?.id || w.characterId) !== charId);
+        const countEl = document.getElementById('wishlist-count');
+        if (countEl) countEl.textContent = userSessionData.wishlist.length;
+
+        const bonusPct = Math.min(100, (userSessionData.wishlist.length / 1000) * 100);
+        const bonusFormatted = Number.isInteger(bonusPct) ? bonusPct : bonusPct.toFixed(1);
+        const bonusEl = document.getElementById('wishlist-bonus-val');
+        if (bonusEl) bonusEl.textContent = `+${bonusFormatted}%`;
+      }
+
+      if (wishesSpan) {
+        const cur = Math.max(0, parseInt(wishesSpan.textContent.trim(), 10) - 1);
+        wishesSpan.textContent = cur;
+      }
+
+      const wishTabCard = document.getElementById(`wish-card-${charId}`);
+      if (wishTabCard) wishTabCard.remove();
+
+      Api.showToast('Personagem removido da sua Wishlist.', '🗑️');
+    } else {
+      // 2. Adicionar à Wishlist
+      const res = await Api.post(`/api/web/user/${userPublicId}/wishlist`, {
+        token: userSessionToken,
         characterId: charId,
         isStarWish: false,
-        character: { id: charId },
       });
-      const countEl = document.getElementById('wishlist-count');
-      if (countEl) countEl.textContent = userSessionData.wishlist.length;
 
-      const bonusPct = Math.min(100, (userSessionData.wishlist.length / 1000) * 100);
-      const bonusFormatted = Number.isInteger(bonusPct) ? bonusPct : bonusPct.toFixed(1);
-      const bonusEl = document.getElementById('wishlist-bonus-val');
-      if (bonusEl) bonusEl.textContent = `+${bonusFormatted}%`;
+      if (!res.success) {
+        Api.showToast(res.error?.message || 'Falha ao adicionar.', '❌');
+        return;
+      }
+
+      btn.className = 'btn-retro btn-sm btn-wish-active';
+      btn.innerHTML = '<i class="fas fa-check"></i> Na Wishlist';
+      btn.title = 'Clique para remover da Wishlist';
+
+      if (userSessionData) {
+        if (!Array.isArray(userSessionData.wishlist)) {
+          userSessionData.wishlist = [];
+        }
+        userSessionData.wishlist.push({
+          id: res.data?.entry?.id || charId,
+          characterId: charId,
+          isStarWish: false,
+          character: { id: charId },
+        });
+        const countEl = document.getElementById('wishlist-count');
+        if (countEl) countEl.textContent = userSessionData.wishlist.length;
+
+        const bonusPct = Math.min(100, (userSessionData.wishlist.length / 1000) * 100);
+        const bonusFormatted = Number.isInteger(bonusPct) ? bonusPct : bonusPct.toFixed(1);
+        const bonusEl = document.getElementById('wishlist-bonus-val');
+        if (bonusEl) bonusEl.textContent = `+${bonusFormatted}%`;
+      }
+
+      if (wishesSpan) {
+        const cur = (parseInt(wishesSpan.textContent.trim(), 10) || 0) + 1;
+        wishesSpan.textContent = cur;
+      }
+
+      Api.showToast('Adicionado à sua Wishlist com sucesso!', '✨');
     }
-
-    Api.showToast('Adicionado à sua Wishlist com sucesso!', '✨');
   } catch (err) {
-    Api.showToast('Erro de comunicação ao adicionar à wishlist.', '❌');
+    Api.showToast('Erro de comunicação ao atualizar wishlist.', '❌');
+  } finally {
+    btn.disabled = false;
   }
+}
+
+async function addToWishlist(charId, btn, event) {
+  return toggleWishlist(charId, btn, event);
 }
 
 async function removeFromWishlist(charId) {
@@ -1435,7 +1494,7 @@ function getLocalBuffDescription(type) {
   return LOCAL_BUFF_DESCRIPTIONS[type] || 'Buff permanente de pesca';
 }
 
-async function openWaifuPreview(charId, charName, charImg, series, rarity) {
+async function openWaifuPreview(charId, charName, charImg, series, rarity, gender) {
   const modal = document.getElementById('modal-waifu-preview');
   if (!modal) return;
   document.getElementById('waifu-preview-name').textContent = charName || charId;
@@ -1448,9 +1507,29 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity) {
     rarityEl.textContent = '';
   }
 
+  const genderEl = document.getElementById('waifu-preview-gender');
+  const formatGender = (g) => {
+    if (g === 'FEMALE') return '<span style="color:#ec4899;">♀ Feminino</span>';
+    if (g === 'MALE') return '<span style="color:#3b82f6;">♂ Masculino</span>';
+    return '<span style="color:#8b5cf6;">⚧ Outro</span>';
+  };
+
+  if (gender && genderEl) {
+    genderEl.innerHTML = formatGender(gender);
+  } else if (genderEl) {
+    genderEl.innerHTML = '';
+  }
+
   if (charImg && charImg !== '/media/characters/default.jpg') {
     document.getElementById('waifu-preview-img').src = charImg;
     openModal('modal-waifu-preview');
+    if (!gender) {
+      Api.get(`/api/characters/${encodeURIComponent(charId)}`).then(res => {
+        if (res?.data?.gender && genderEl) {
+          genderEl.innerHTML = formatGender(res.data.gender);
+        }
+      }).catch(() => {});
+    }
   } else {
     document.getElementById('waifu-preview-img').src = '/media/characters/default.jpg';
     openModal('modal-waifu-preview');
@@ -1464,6 +1543,9 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity) {
         if (char.baseRarity && RARITY_CONFIG[char.baseRarity]) {
           const r = RARITY_CONFIG[char.baseRarity];
           rarityEl.innerHTML = `<span style="color:${r.color}; font-weight:800;">${r.emoji} ${r.label}</span>`;
+        }
+        if (char.gender && genderEl) {
+          genderEl.innerHTML = formatGender(char.gender);
         }
       }
     } catch {

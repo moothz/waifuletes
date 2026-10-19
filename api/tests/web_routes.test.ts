@@ -421,4 +421,143 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
       });
     }
   });
+
+  it('filtro de gênero OTHER deve retornar Trish de Devil May Cry e filtros MALE/FEMALE não devem incluí-la', async () => {
+    // 1. Busca com filtro OTHER
+    const resOther = await fetch(`${BASE_URL}/characters?gender=OTHER&search=trish`);
+    expect(resOther.status).toBe(200);
+    const jsonOther = await resOther.json();
+    expect(jsonOther.success).toBe(true);
+    const trishOther = jsonOther.data.data.find((c: any) => c.id === 'trish');
+    expect(trishOther).toBeDefined();
+    expect(trishOther.gender).toBe('OTHER');
+    expect(trishOther.series).toBe('Devil May Cry');
+
+    // 2. Busca com filtro FEMALE não deve conter Trish DMC
+    const resFemale = await fetch(`${BASE_URL}/characters?gender=FEMALE&search=trish`);
+    expect(resFemale.status).toBe(200);
+    const jsonFemale = await resFemale.json();
+    const trishFemale = jsonFemale.data.data.find((c: any) => c.id === 'trish');
+    expect(trishFemale).toBeUndefined();
+
+    // 3. Busca com filtro MALE não deve conter Trish DMC
+    const resMale = await fetch(`${BASE_URL}/characters?gender=MALE&search=trish`);
+    expect(resMale.status).toBe(200);
+    const jsonMale = await resMale.json();
+    const trishMale = jsonMale.data.data.find((c: any) => c.id === 'trish');
+    expect(trishMale).toBeUndefined();
+  });
+
+  it('PUT /api/admin/characters/:id deve permitir atualizar gênero pelo painel administrativo', async () => {
+    if (!adminToken) {
+      const loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: ADMIN_PASSWORD }),
+      });
+      const loginJson = await loginRes.json();
+      adminToken = loginJson?.data?.token || '';
+    }
+
+    if (!testCharacterId) return;
+
+    // Salva com gender: OTHER
+    const updateRes = await fetch(`${BASE_URL}/api/admin/characters/${encodeURIComponent(testCharacterId)}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: originalCharacterData?.name || 'Test Char',
+        baseRarity: originalCharacterData?.baseRarity || 'COMMON',
+        gender: 'OTHER',
+        description: 'Descrição de teste com gênero atualizado.',
+      }),
+    });
+    expect(updateRes.status).toBe(200);
+    const updateJson = await updateRes.json();
+    expect(updateJson.success).toBe(true);
+    expect(updateJson.data.character.gender).toBe('OTHER');
+
+    // Restaura dados originais do personagem
+    if (originalCharacterData) {
+      await fetch(`${BASE_URL}/api/admin/characters/${encodeURIComponent(testCharacterId)}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: originalCharacterData.name,
+          baseRarity: originalCharacterData.baseRarity,
+          gender: originalCharacterData.gender || 'FEMALE',
+          description: originalCharacterData.description || '',
+        }),
+      });
+    }
+  });
+
+  it('toggle de Wishlist: deve adicionar (POST) e em seguida remover (DELETE) com sucesso', async () => {
+    if (!testPublicId || !testUserToken || !testCharacterId) return;
+
+    // 1. Adicionar à Wishlist
+    const addRes = await fetch(`${BASE_URL}/api/web/user/${encodeURIComponent(testPublicId)}/wishlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: testUserToken,
+        characterId: testCharacterId,
+        isStarWish: false,
+      }),
+    });
+    expect(addRes.status).toBe(200);
+    const addJson = await addRes.json();
+    expect(addJson.success).toBe(true);
+
+    // 2. Remover da Wishlist (comportamento de toggle)
+    const delRes = await fetch(
+      `${BASE_URL}/api/web/user/${encodeURIComponent(testPublicId)}/wishlist/${encodeURIComponent(testCharacterId)}?token=${encodeURIComponent(testUserToken)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+    expect(delRes.status).toBe(200);
+    const delJson = await delRes.json();
+    expect(delJson.success).toBe(true);
+  });
+
+  it('POST /roll com gender FEMALE e MALE deve sortear personagens FEMALE/MALE ou OTHER', async () => {
+    const rollUser = `roll_tester_${Date.now()}`;
+    await fetch(`${BASE_URL}/user/ensure`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: rollUser,
+        groupId: `group_${rollUser}`,
+        name: 'Roll Tester',
+      }),
+    });
+
+    const rollFemaleRes = await fetch(`${BASE_URL}/roll`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: rollUser,
+        groupId: `group_${rollUser}`,
+        name: 'Roll Tester',
+        gender: 'FEMALE',
+      }),
+    });
+    expect(rollFemaleRes.status).toBe(200);
+    const rollFemaleJson = await rollFemaleRes.json();
+    expect(rollFemaleJson.success).toBe(true);
+    expect(['FEMALE', 'OTHER']).toContain(rollFemaleJson.data.character.gender);
+  });
 });

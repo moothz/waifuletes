@@ -296,6 +296,31 @@ body.dark-mode .badge-wishes {
   color: #ffffff;
 }
 
+.btn-wish-active {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #16a34a;
+  font-weight: 700;
+}
+
+.btn-wish-active:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #ef4444;
+}
+
+body.dark-mode .btn-wish-active {
+  background: #14532d !important;
+  color: #86efac !important;
+  border-color: #22c55e !important;
+}
+
+body.dark-mode .btn-wish-active:hover {
+  background: #7f1d1d !important;
+  color: #fca5a5 !important;
+  border-color: #ef4444 !important;
+}
+
 /* ========================================================
    HERO / BANNER CENTRALIZADO
    ======================================================== */

@@ -392,6 +392,8 @@ async function openEditCharacterModal(charId) {
     currentEditingCharacterId = char.id;
     document.getElementById('edit-name').value = char.name || '';
     document.getElementById('edit-rarity').value = char.baseRarity || 'COMMON';
+    const genderEl = document.getElementById('edit-gender');
+    if (genderEl) genderEl.value = char.gender || 'OTHER';
     document.getElementById('edit-description').value = char.description || '';
     document.getElementById('edit-file-input').value = '';
     document.getElementById('admin-cropper-container').classList.add('hidden');
@@ -413,6 +415,7 @@ async function handleSaveCharacterEdit(e) {
 
   const name = document.getElementById('edit-name').value.trim();
   const baseRarity = document.getElementById('edit-rarity').value;
+  const gender = document.getElementById('edit-gender')?.value || 'OTHER';
   const description = document.getElementById('edit-description').value.trim();
 
   const doSave = async (imageBlob = null) => {
@@ -423,10 +426,11 @@ async function handleSaveCharacterEdit(e) {
       payload = new FormData();
       payload.append('name', name);
       payload.append('baseRarity', baseRarity);
+      payload.append('gender', gender);
       payload.append('description', description);
       payload.append('image', imageBlob, 'admin_crop.png');
     } else {
-      payload = { name, baseRarity, description };
+      payload = { name, baseRarity, gender, description };
     }
 
     try {

@@ -8,7 +8,7 @@ import { SuggestionService } from '../../services/SuggestionService.js';
 import { CharacterService } from '../../services/CharacterService.js';
 import { CooldownService } from '../../services/CooldownService.js';
 import { MarryService } from '../../services/MarryService.js';
-import { Prisma, Rarity, SuggestionStatus, SuggestionType } from '@prisma/client';
+import { Prisma, Rarity, Gender, SuggestionStatus, SuggestionType } from '@prisma/client';
 
 export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
   const webSessionService = new WebSessionService(fastify.redis, fastify.prisma);
@@ -143,6 +143,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       let name = character.name;
       let description = character.description;
       let baseRarity = character.baseRarity;
+      let gender = character.gender;
       let newImageBuffer: Buffer | null = null;
 
       if (request.isMultipart()) {
@@ -152,6 +153,9 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
             if (part.fieldname === 'name' && part.value) name = String(part.value).trim();
             if (part.fieldname === 'description') description = String(part.value).trim();
             if (part.fieldname === 'baseRarity' && part.value) baseRarity = String(part.value) as Rarity;
+            if (part.fieldname === 'gender' && ['FEMALE', 'MALE', 'OTHER'].includes(String(part.value))) {
+              gender = String(part.value) as Gender;
+            }
           } else if (part.type === 'file' && part.fieldname === 'image') {
             newImageBuffer = await part.toBuffer();
           }
@@ -161,6 +165,9 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         if (body.name) name = String(body.name).trim();
         if (body.description !== undefined) description = String(body.description).trim();
         if (body.baseRarity) baseRarity = body.baseRarity as Rarity;
+        if (body.gender && ['FEMALE', 'MALE', 'OTHER'].includes(body.gender)) {
+          gender = body.gender as Gender;
+        }
         if (body.imageBase64) {
           newImageBuffer = Buffer.from(body.imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
         }
@@ -186,6 +193,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
           name,
           description,
           baseRarity,
+          gender,
           imageUrls: updatedImageUrls,
         },
       });

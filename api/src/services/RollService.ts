@@ -149,7 +149,13 @@ export class RollService {
       // 4. Filtrar candidatos elegíveis
       let candidates = this.inMemoryPool;
       if (genderFilter) {
-        candidates = candidates.filter((c) => c.gender === genderFilter);
+        if (genderFilter === 'FEMALE') {
+          candidates = candidates.filter((c) => c.gender === 'FEMALE' || c.gender === 'OTHER');
+        } else if (genderFilter === 'MALE') {
+          candidates = candidates.filter((c) => c.gender === 'MALE' || c.gender === 'OTHER');
+        } else {
+          candidates = candidates.filter((c) => c.gender === genderFilter);
+        }
       }
       if (disabledIds.size > 0) {
         candidates = candidates.filter((c) => !disabledIds.has(c.id));
