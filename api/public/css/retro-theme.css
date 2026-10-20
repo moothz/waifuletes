@@ -366,27 +366,64 @@ body.dark-mode .btn-wish-active:hover {
   margin-bottom: 16px;
 }
 
+.form-group {
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.retro-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text-main);
+}
+
 .search-input-group i {
   position: absolute;
   left: 14px;
   color: var(--text-muted);
   font-size: 16px;
+  pointer-events: none;
 }
 
 .retro-input {
   width: 100%;
-  padding: 10px 14px 10px 42px;
-  font-size: 15px;
+  padding: 8px 12px;
+  font-size: 14px;
   font-weight: 600;
   background: var(--bg-card-subtle);
   border: var(--border-retro);
   border-radius: var(--radius-retro);
   color: var(--text-main);
   outline: none;
-  transition: background 0.15s;
+  box-sizing: border-box;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-.retro-input:focus {
+.search-input-group .retro-input {
+  padding-left: 42px;
+}
+
+.retro-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 500;
+  line-height: 1.5;
+  background: var(--bg-card-subtle);
+  border: var(--border-retro);
+  border-radius: var(--radius-retro);
+  color: var(--text-main);
+  outline: none;
+  box-sizing: border-box;
+  resize: vertical;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.retro-input:focus,
+.retro-textarea:focus {
   background: #ffffff;
   border-color: #000;
 }
