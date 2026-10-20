@@ -5,13 +5,20 @@ import { config } from '../config.js';
 
 export interface SuggestionNotifyData {
   id: string;
-  type: 'RARITY' | 'IMAGE' | 'NEW_CHARACTER' | 'DELETE_CHARACTER';
+  type: 'RARITY' | 'IMAGE' | 'NEW_CHARACTER' | 'DELETE_CHARACTER' | 'EDIT';
   characterId?: string | null;
   characterName?: string | null;
   series?: string | null;
   description?: string | null;
   currentRarity?: string | null;
   suggestedRarity?: string | null;
+  suggestedName?: string | null;
+  suggestedSeries?: string | null;
+  suggestedGender?: string | null;
+  suggestedDescription?: string | null;
+  suggestedTags?: string[] | null;
+  photoAction?: 'ADD' | 'DELETE' | 'REPLACE' | null;
+  targetPhoto?: string | null;
   reason?: string | null;
   imageUrl?: string | null;
   userName?: string | null;
@@ -64,9 +71,14 @@ export class TelegramNotificationService {
     try {
       let title = '💡 <b>Nova Sugestão de Usuário</b>';
       if (data.type === 'NEW_CHARACTER') title = '✨ <b>Nova Sugestão de Personagem!</b>';
-      if (data.type === 'IMAGE') title = '🖼️ <b>Nova Sugestão de Foto!</b>';
+      if (data.type === 'IMAGE') {
+        if (data.photoAction === 'DELETE') title = '🗑️ <b>Sugestão de Exclusão de Foto!</b>';
+        else if (data.photoAction === 'REPLACE') title = '🔄 <b>Sugestão de Substituição de Foto!</b>';
+        else title = '🖼️ <b>Nova Sugestão de Foto!</b>';
+      }
       if (data.type === 'RARITY') title = '⭐ <b>Sugestão de Alteração de Raridade!</b>';
       if (data.type === 'DELETE_CHARACTER') title = '🔞 <b>Denúncia de Personagem (Exclusão)!</b>';
+      if (data.type === 'EDIT') title = '📝 <b>Sugestão de Edição de Dados do Personagem!</b>';
 
       let text = `${title}\n\n`;
 
@@ -79,10 +91,26 @@ export class TelegramNotificationService {
         }
       } else if (data.character) {
         text += `👤 <b>Personagem:</b> ${this.escapeHtml(data.character.name)} (<code>${data.character.id}</code>)\n`;
-        text += `📺 <b>Série:</b> ${this.escapeHtml(data.character.series)}\n`;
+        text += `📺 <b>Série Atual:</b> ${this.escapeHtml(data.character.series)}\n`;
         text += `⭐ <b>Raridade Atual:</b> ${data.character.baseRarity}\n`;
+
         if (data.type === 'RARITY') {
           text += `🎯 <b>Raridade Sugerida:</b> <b>${data.suggestedRarity}</b>\n`;
+        } else if (data.type === 'EDIT') {
+          if (data.suggestedName) text += `✏️ <b>Nome Sugerido:</b> <b>${this.escapeHtml(data.suggestedName)}</b>\n`;
+          if (data.suggestedSeries) text += `📺 <b>Série Sugerida:</b> <b>${this.escapeHtml(data.suggestedSeries)}</b>\n`;
+          if (data.suggestedGender) text += `⚧ <b>Gênero Sugerido:</b> <b>${data.suggestedGender}</b>\n`;
+          if (data.suggestedRarity) text += `⭐ <b>Raridade Sugerida:</b> <b>${data.suggestedRarity}</b>\n`;
+          if (data.suggestedDescription) text += `📝 <b>Descrição Sugerida:</b> <i>${this.escapeHtml(data.suggestedDescription)}</i>\n`;
+          if (data.suggestedTags && data.suggestedTags.length > 0) text += `🏷️ <b>Tags:</b> ${data.suggestedTags.join(', ')}\n`;
+        } else if (data.type === 'IMAGE') {
+          if (data.photoAction === 'DELETE') {
+            text += `⚠️ <b>Ação:</b> Excluir foto apontada como errada/ruim\n`;
+            if (data.targetPhoto) text += `🖼️ <b>Foto Alvo:</b> <code>${this.escapeHtml(data.targetPhoto)}</code>\n`;
+          } else if (data.photoAction === 'REPLACE') {
+            text += `🔄 <b>Ação:</b> Substituir foto errada pela nova foto enviada\n`;
+            if (data.targetPhoto) text += `🖼️ <b>Foto Antiga:</b> <code>${this.escapeHtml(data.targetPhoto)}</code>\n`;
+          }
         }
       }
 

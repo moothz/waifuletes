@@ -200,36 +200,48 @@
 
   <!-- Modal de Edição de Personagem -->
   <div class="modal-overlay hidden" id="modal-edit-char">
-    <div class="modal-box" style="max-width: 620px;">
+    <div class="modal-box" style="max-width: 680px; max-height: 85vh; overflow-y: auto;">
       <div class="modal-header">
         <span class="modal-title">✏️ Editar Personagem</span>
         <button class="modal-close" onclick="closeModal('modal-edit-char')">&times;</button>
       </div>
       <div class="modal-body">
         <form id="edit-char-form">
-          <div style="margin-bottom: 14px;">
-            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Nome:</label>
-            <input type="text" id="edit-name" class="retro-input" style="padding-left: 12px;" required>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div>
+              <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Nome:</label>
+              <input type="text" id="edit-name" class="retro-input" style="padding-left: 12px;" required>
+            </div>
+            <div>
+              <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Série / Obra / Anime:</label>
+              <input type="text" id="edit-series" class="retro-input" style="padding-left: 12px;" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div>
+              <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Raridade Base:</label>
+              <select id="edit-rarity" class="retro-select" style="width: 100%;">
+                <option value="COMMON">⚪ Comum</option>
+                <option value="UNCOMMON">🟢 Incomum</option>
+                <option value="RARE">🔵 Raro</option>
+                <option value="EPIC">🟣 Épico</option>
+                <option value="LEGENDARY">⭐ Lendário</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Gênero / Sexo:</label>
+              <select id="edit-gender" class="retro-select" style="width: 100%;">
+                <option value="FEMALE">♀ Feminino</option>
+                <option value="MALE">♂ Masculino</option>
+                <option value="OTHER">⚧ Outro</option>
+              </select>
+            </div>
           </div>
 
           <div style="margin-bottom: 14px;">
-            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Raridade Base:</label>
-            <select id="edit-rarity" class="retro-select" style="width: 100%;">
-              <option value="COMMON">⚪ Comum</option>
-              <option value="UNCOMMON">🟢 Incomum</option>
-              <option value="RARE">🔵 Raro</option>
-              <option value="EPIC">🟣 Épico</option>
-              <option value="LEGENDARY">⭐ Lendário</option>
-            </select>
-          </div>
-
-          <div style="margin-bottom: 14px;">
-            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Gênero:</label>
-            <select id="edit-gender" class="retro-select" style="width: 100%;">
-              <option value="FEMALE">♀ Feminino</option>
-              <option value="MALE">♂ Masculino</option>
-              <option value="OTHER">⚧ Outro</option>
-            </select>
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Tags (separadas por vírgula):</label>
+            <input type="text" id="edit-tags" class="retro-input" style="padding-left: 12px;" placeholder="Ex: anime, waifu, tsundere, protagonista">
           </div>
 
           <div style="margin-bottom: 14px;">
@@ -237,28 +249,55 @@
             <textarea id="edit-description" class="retro-input" rows="3" style="padding-left: 12px;"></textarea>
           </div>
 
-          <!-- Troca de Foto com Cropper -->
-          <div style="margin-bottom: 14px; border-top: 1px dashed #cbd5e1; padding-top: 14px;">
-            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 4px;">Alterar Foto Oficial (Opcional):</label>
-            <input type="file" id="edit-file-input" accept="image/*" class="retro-input" style="padding-left: 12px;">
+          <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1.5px solid #2d241e; border-radius: 4px; padding: 8px 12px;">
+            <input type="checkbox" id="edit-active" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="edit-active" style="font-weight: 700; font-size: 13px; cursor: pointer; margin: 0;">
+              Personagem Ativo (disponível no catálogo e rolls)
+            </label>
+          </div>
 
-            <div id="admin-cropper-container" class="hidden" style="margin-top: 12px;">
-              <div class="cropper-img-box">
-                <img id="admin-cropper-img" src="" alt="Recorte Admin" style="max-width: 100%;">
+          <!-- Gerenciador de Fotos Oficiais -->
+          <div style="margin-bottom: 14px; border-top: 2px dashed #2d241e; padding-top: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <label style="font-weight: 800; font-size: 14px; margin: 0;">
+                📸 Fotos Cadastradas (<span id="admin-photos-count">0</span>):
+              </label>
+              <button type="button" class="btn-retro btn-sm btn-gold" id="btn-admin-add-photo" onclick="triggerAdminAddPhoto()">
+                <i class="fas fa-plus"></i> Adicionar Foto
+              </button>
+            </div>
+
+            <!-- Lista / Grid de Fotos -->
+            <div id="admin-photos-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px;">
+              <!-- Miniaturas dinâmicas aqui -->
+            </div>
+
+            <!-- Cropper e Upload de Imagem -->
+            <div id="admin-photo-upload-section" class="hidden" style="background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px; margin-top: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span id="admin-photo-action-title" style="font-weight: 800; font-size: 13px;">📸 Nova Foto:</span>
+                <button type="button" class="btn-retro btn-sm" onclick="cancelAdminPhotoUpload()" style="padding: 2px 8px; font-size: 11px;">Cancelar</button>
               </div>
-              <div class="cropper-preview-container">
-                <div>
-                  <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Pré-visualização (225x350):</span>
-                  <div class="crop-preview-box" id="admin-crop-preview"></div>
+              <input type="file" id="edit-file-input" accept="image/*" class="retro-input" style="padding-left: 12px;">
+
+              <div id="admin-cropper-container" class="hidden" style="margin-top: 12px;">
+                <div class="cropper-img-box">
+                  <img id="admin-cropper-img" src="" alt="Recorte Admin" style="max-width: 100%;">
+                </div>
+                <div class="cropper-preview-container">
+                  <div>
+                    <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Pré-visualização (225x350):</span>
+                    <div class="crop-preview-box" id="admin-crop-preview"></div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="modal-footer" style="padding: 12px 0 0 0; background: transparent;">
+          <div class="modal-footer" style="padding: 12px 0 0 0; background: transparent; border-top: 1px solid #cbd5e1;">
             <button type="button" class="btn-retro btn-sm" onclick="closeModal('modal-edit-char')">Cancelar</button>
             <button type="submit" class="btn-retro btn-primary btn-sm" id="btn-save-edit">
-              <i class="fas fa-save"></i> Salvar Alterações
+              <i class="fas fa-save"></i> Salvar Todas as Alterações
             </button>
           </div>
         </form>

@@ -11,6 +11,9 @@ const RARITY_CONFIG = {
 let adminToken = localStorage.getItem('waifu_admin_token') || '';
 let adminCropperInstance = null;
 let currentEditingCharacterId = null;
+let currentEditingImages = [];
+let adminPhotoAction = 'ADD';
+let adminTargetPhoto = null;
 
 const catalogState = {
   search: '',
@@ -380,6 +383,108 @@ async function loadAdminCatalog() {
   }
 }
 
+function renderAdminPhotosGrid() {
+  const container = document.getElementById('admin-photos-grid');
+  const countEl = document.getElementById('admin-photos-count');
+  if (countEl) countEl.textContent = currentEditingImages.length;
+  if (!container) return;
+
+  container.innerHTML = '';
+  if (currentEditingImages.length === 0) {
+    container.innerHTML = '<div style="grid-column: 1 / -1; font-size: 12px; color: #64748b; font-style: italic; padding: 10px; background: #fff; border: 1px dashed #cbd5e1; border-radius: 4px; text-align: center;">Nenhuma foto cadastrada.</div>';
+    return;
+  }
+
+  currentEditingImages.forEach((imgUrl, idx) => {
+    const isPrimary = idx === 0;
+    const item = document.createElement('div');
+    item.style.position = 'relative';
+    item.style.border = isPrimary ? '2px solid #eab308' : '1.5px solid #2d241e';
+    item.style.borderRadius = '4px';
+    item.style.overflow = 'hidden';
+    item.style.background = '#111';
+    item.style.boxShadow = isPrimary ? '0 0 6px rgba(234, 179, 8, 0.4)' : 'none';
+
+    item.innerHTML = `
+      <div style="aspect-ratio: 9/14; width: 100%; position: relative;">
+        <img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg'">
+        ${isPrimary ? '<span style="position: absolute; top: 4px; left: 4px; background: #eab308; color: #000; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 3px; border: 1px solid #000;">⭐ Principal</span>' : ''}
+      </div>
+      <div style="padding: 4px; background: #fff; border-top: 1px solid #2d241e; display: flex; flex-direction: column; gap: 3px;">
+        ${!isPrimary ? `
+          <button type="button" class="btn-retro btn-sm btn-gold" style="padding: 2px 4px; font-size: 10px; width: 100%;" onclick="adminSetPrimaryPhoto(${idx})">
+            ⭐ Tornar Principal
+          </button>
+        ` : ''}
+        <button type="button" class="btn-retro btn-sm" style="padding: 2px 4px; font-size: 10px; width: 100%;" onclick="triggerAdminReplacePhoto('${escapeAttr(imgUrl)}', ${idx})">
+          🔄 Substituir
+        </button>
+        <button type="button" class="btn-retro btn-sm btn-danger" style="padding: 2px 4px; font-size: 10px; width: 100%;" onclick="adminDeletePhoto(${idx})">
+          🗑️ Excluir
+        </button>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function triggerAdminAddPhoto() {
+  adminPhotoAction = 'ADD';
+  adminTargetPhoto = null;
+  const section = document.getElementById('admin-photo-upload-section');
+  const title = document.getElementById('admin-photo-action-title');
+  if (title) title.innerHTML = '➕ <b>Adicionar Nova Foto Oficial:</b>';
+  if (section) section.classList.remove('hidden');
+  const input = document.getElementById('edit-file-input');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+function triggerAdminReplacePhoto(photoUrl, index) {
+  adminPhotoAction = 'REPLACE';
+  adminTargetPhoto = photoUrl;
+  const section = document.getElementById('admin-photo-upload-section');
+  const title = document.getElementById('admin-photo-action-title');
+  if (title) title.innerHTML = `🔄 <b>Substituir Foto #${index + 1}:</b>`;
+  if (section) section.classList.remove('hidden');
+  const input = document.getElementById('edit-file-input');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+function cancelAdminPhotoUpload() {
+  const section = document.getElementById('admin-photo-upload-section');
+  if (section) section.classList.add('hidden');
+  const container = document.getElementById('admin-cropper-container');
+  if (container) container.classList.add('hidden');
+  if (adminCropperInstance) {
+    adminCropperInstance.destroy();
+    adminCropperInstance = null;
+  }
+  const input = document.getElementById('edit-file-input');
+  if (input) input.value = '';
+}
+
+function adminDeletePhoto(index) {
+  if (index >= 0 && index < currentEditingImages.length) {
+    if (!confirm('Deseja realmente remover esta foto da lista do personagem?')) return;
+    currentEditingImages.splice(index, 1);
+    renderAdminPhotosGrid();
+  }
+}
+
+function adminSetPrimaryPhoto(index) {
+  if (index > 0 && index < currentEditingImages.length) {
+    const selected = currentEditingImages.splice(index, 1)[0];
+    currentEditingImages.unshift(selected);
+    renderAdminPhotosGrid();
+  }
+}
+
 async function openEditCharacterModal(charId) {
   try {
     const res = await Api.get(`/characters/${encodeURIComponent(charId)}`);
@@ -391,17 +496,21 @@ async function openEditCharacterModal(charId) {
 
     currentEditingCharacterId = char.id;
     document.getElementById('edit-name').value = char.name || '';
+    const seriesEl = document.getElementById('edit-series');
+    if (seriesEl) seriesEl.value = char.series || '';
     document.getElementById('edit-rarity').value = char.baseRarity || 'COMMON';
     const genderEl = document.getElementById('edit-gender');
-    if (genderEl) genderEl.value = char.gender || 'OTHER';
+    if (genderEl) genderEl.value = char.gender || 'FEMALE';
     document.getElementById('edit-description').value = char.description || '';
-    document.getElementById('edit-file-input').value = '';
-    document.getElementById('admin-cropper-container').classList.add('hidden');
+    const tagsEl = document.getElementById('edit-tags');
+    if (tagsEl) tagsEl.value = Array.isArray(char.tags) ? char.tags.join(', ') : (char.tags || '');
+    const activeEl = document.getElementById('edit-active');
+    if (activeEl) activeEl.checked = char.isActive !== false;
 
-    if (adminCropperInstance) {
-      adminCropperInstance.destroy();
-      adminCropperInstance = null;
-    }
+    // Carrega galeria de fotos
+    currentEditingImages = Array.isArray(char.imageUrls) ? [...char.imageUrls] : (char.imageUrl ? [char.imageUrl] : []);
+    renderAdminPhotosGrid();
+    cancelAdminPhotoUpload();
 
     openModal('modal-edit-char');
   } catch (err) {
@@ -414,9 +523,13 @@ async function handleSaveCharacterEdit(e) {
   if (!currentEditingCharacterId) return;
 
   const name = document.getElementById('edit-name').value.trim();
+  const series = document.getElementById('edit-series')?.value.trim() || '';
   const baseRarity = document.getElementById('edit-rarity').value;
   const gender = document.getElementById('edit-gender')?.value || 'OTHER';
   const description = document.getElementById('edit-description').value.trim();
+  const tagsStr = document.getElementById('edit-tags')?.value.trim() || '';
+  const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+  const isActive = document.getElementById('edit-active')?.checked ?? true;
 
   const doSave = async (imageBlob = null) => {
     let payload;
@@ -425,12 +538,29 @@ async function handleSaveCharacterEdit(e) {
     if (imageBlob) {
       payload = new FormData();
       payload.append('name', name);
+      payload.append('series', series);
       payload.append('baseRarity', baseRarity);
       payload.append('gender', gender);
       payload.append('description', description);
+      payload.append('tags', tags.join(','));
+      payload.append('isActive', isActive ? 'true' : 'false');
+      payload.append('imageUrls', JSON.stringify(currentEditingImages));
+      payload.append('photoAction', adminPhotoAction);
+      if (adminTargetPhoto) {
+        payload.append('targetPhoto', adminTargetPhoto);
+      }
       payload.append('image', imageBlob, 'admin_crop.png');
     } else {
-      payload = { name, baseRarity, gender, description };
+      payload = {
+        name,
+        series,
+        baseRarity,
+        gender,
+        description,
+        tags,
+        isActive,
+        imageUrls: currentEditingImages,
+      };
     }
 
     try {
@@ -441,7 +571,7 @@ async function handleSaveCharacterEdit(e) {
       }
 
       closeModal('modal-edit-char');
-      Api.showToast('Personagem atualizado com sucesso!', '💾');
+      Api.showToast('Personagem e fotos atualizados com sucesso!', '💾');
       loadAdminCatalog();
     } catch (err) {
       Api.showToast('Erro de comunicação ao salvar alterações.', '❌');
@@ -530,29 +660,101 @@ function createSuggestionItem(s) {
         </div>
       </div>
     `;
-  } else if (s.type === 'IMAGE') {
+  } else if (s.type === 'EDIT') {
     bodyContent = `
-      <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
-        <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
-          <div>
-            <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Atual:</span>
-            <div style="width: 100px; aspect-ratio: 9/14; border: 1.5px solid #2d241e; border-radius: 4px; overflow: hidden;">
-              <img src="${char.imageUrl || '/media/characters/default.jpg'}" style="width: 100%; height: 100%; object-fit: cover;">
-            </div>
+      <div style="margin: 10px 0; background: #eff6ff; border: 1.5px solid #3b82f6; border-radius: 6px; padding: 12px;">
+        <div style="font-weight: 800; font-size: 14px; margin-bottom: 8px; color: #1e40af;">
+          📝 Sugestão de Edição de Dados do Personagem
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 13px;">
+          ${s.suggestedName ? `<div><strong>Nome:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.name || '')}</span> ➡️ <strong style="color: #2563eb;">${escapeHtml(s.suggestedName)}</strong></div>` : ''}
+          ${s.suggestedSeries ? `<div><strong>Série:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.series || '')}</span> ➡️ <strong style="color: #2563eb;">${escapeHtml(s.suggestedSeries)}</strong></div>` : ''}
+          ${s.suggestedGender ? `<div><strong>Gênero:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.gender || ''}</span> ➡️ <strong style="color: #2563eb;">${s.suggestedGender}</strong></div>` : ''}
+          ${s.suggestedRarity ? `<div><strong>Raridade:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.baseRarity || ''}</span> ➡️ <strong style="color: #2563eb;">${s.suggestedRarity}</strong></div>` : ''}
+          ${s.suggestedTags && s.suggestedTags.length > 0 ? `<div><strong>Tags:</strong> <strong style="color: #2563eb;">${s.suggestedTags.join(', ')}</strong></div>` : ''}
+        </div>
+        ${s.suggestedDescription ? `
+          <div style="margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #bfdbfe;">
+            <strong>Nova Descrição Sugerida:</strong><br>${escapeHtml(s.suggestedDescription)}
           </div>
-          <div>
-            <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Sugerida (Recortada):</span>
-            <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #e11d48; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
-              <img src="${s.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;">
-            </div>
-          </div>
-          <div style="flex: 1; min-width: 200px;">
-            <span style="font-size: 13px; font-weight: 700;">Comentário:</span>
-            <p style="font-size: 13px; color: #475569; margin-top: 4px;"><em>"${escapeHtml(s.reason || 'Sem comentário')}"</em></p>
-          </div>
+        ` : ''}
+        <div style="margin-top: 8px; font-size: 13px; font-weight: 600; color: #334155;">
+          <strong>Justificativa do Usuário:</strong> <em>"${escapeHtml(s.reason || 'Sem justificativa')}"</em>
         </div>
       </div>
     `;
+  } else if (s.type === 'IMAGE') {
+    const act = s.actionData?.action;
+    const target = s.actionData?.targetPhoto;
+    if (act === 'DELETE') {
+      const targetSrc = target ? (target.startsWith('http') ? target : `/media/${target}`) : (char.imageUrl || '/media/characters/default.jpg');
+      bodyContent = `
+        <div style="margin: 10px 0; background: #fef2f2; border: 1.5px solid #ef4444; border-radius: 6px; padding: 12px;">
+          <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+            <div>
+              <span style="font-size: 12px; font-weight: 800; color: #dc2626; display: block; margin-bottom: 4px;">⚠️ Foto Apontada para Remoção:</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #ef4444; border-radius: 4px; overflow: hidden;">
+                <img src="${targetSrc}" style="width: 100%; height: 100%; object-fit: cover;">
+              </div>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+              <span style="background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">🗑️ SUGESTÃO DE EXCLUSÃO DE FOTO</span>
+              <p style="font-size: 13px; color: #475569; margin-top: 8px;"><strong>Motivo informado:</strong> <em>"${escapeHtml(s.reason || 'Foto incorreta ou com problema.')}"</em></p>
+              <div style="margin-top: 8px; font-size: 12px; color: #b91c1c; font-weight: bold; background: #fee2e2; padding: 6px 10px; border-radius: 4px; border: 1px solid #fca5a5;">
+                Ao aceitar, esta foto específica será desvinculada do personagem.
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (act === 'REPLACE') {
+      const targetSrc = target ? (target.startsWith('http') ? target : `/media/${target}`) : (char.imageUrl || '/media/characters/default.jpg');
+      bodyContent = `
+        <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
+          <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+            <div>
+              <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Antiga (a substituir):</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 1.5px solid #2d241e; border-radius: 4px; overflow: hidden; opacity: 0.7;">
+                <img src="${targetSrc}" style="width: 100%; height: 100%; object-fit: cover;">
+              </div>
+            </div>
+            <div>
+              <span style="font-size: 12px; font-weight: 800; color: #22c55e; display: block; margin-bottom: 4px;">✨ Nova Foto Sugerida:</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #22c55e; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
+                <img src="${s.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;">
+              </div>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+              <span style="background: #3b82f6; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">🔄 SUGESTÃO DE SUBSTITUIÇÃO</span>
+              <p style="font-size: 13px; color: #475569; margin-top: 8px;"><strong>Motivo informado:</strong> <em>"${escapeHtml(s.reason || 'Substituição de foto.')}"</em></p>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      bodyContent = `
+        <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
+          <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+            <div>
+              <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Atual:</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 1.5px solid #2d241e; border-radius: 4px; overflow: hidden;">
+                <img src="${char.imageUrl || '/media/characters/default.jpg'}" style="width: 100%; height: 100%; object-fit: cover;">
+              </div>
+            </div>
+            <div>
+              <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Sugerida (Recortada):</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #e11d48; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
+                <img src="${s.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;">
+              </div>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+              <span style="font-size: 13px; font-weight: 700;">Comentário:</span>
+              <p style="font-size: 13px; color: #475569; margin-top: 4px;"><em>"${escapeHtml(s.reason || 'Sem comentário')}"</em></p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
   } else if (s.type === 'NEW_CHARACTER') {
     bodyContent = `
       <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
@@ -878,4 +1080,11 @@ function closeModal(id) {
 
 function escapeHtml(str) {
   return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function escapeAttr(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;');
 }

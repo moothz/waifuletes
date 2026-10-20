@@ -24,7 +24,9 @@ const envSchema = z.object({
 
   COOLDOWN_ROLL_SECONDS: z.coerce.number().default(600), // 10 min
   COOLDOWN_CLAIM_SECONDS: z.coerce.number().default(7200), // 2 horas
-  COOLDOWN_DAILY_SECONDS: z.coerce.number().default(72000), // 20 horas
+  COOLDOWN_DAILY_SECONDS: z.coerce.number().default(72000), // Fallback legado
+  DAILY_RESET_HOUR_UTC: z.coerce.number().default(7), // 07:00 UTC = 04:00 BRT (Horário de Brasília)
+  DAILY_RESET_MINUTE_UTC: z.coerce.number().default(0),
   CLAIM_LOCK_SECONDS: z.coerce.number().default(300), // 5 min
 
   ROLL_MAX_BASE: z.coerce.number().default(9),

@@ -212,6 +212,7 @@ enum SuggestionType {
   IMAGE
   NEW_CHARACTER
   DELETE_CHARACTER
+  EDIT
 }
 
 enum SuggestionStatus {
@@ -231,6 +232,11 @@ model CharacterSuggestion {
   description     String?
   currentRarity   Rarity?
   suggestedRarity Rarity?
+  suggestedName   String?
+  suggestedSeries String?
+  suggestedDescription String?
+  suggestedGender Gender?
+  suggestedTags   String[]         @default([])
   reason          String?
   imageUrl        String?
   reviewedAt      DateTime?

@@ -10,8 +10,10 @@ export class KakeraService {
   ) {}
 
   async claimDaily(userId: string) {
-    // 1. Reserva atômica do cooldown diário no Redis com SET ... NX
-    const lockAcquired = await this.cooldownService.acquireDailyLock(userId);
+    const cycleInfo = this.cooldownService.getDailyCycleInfo();
+
+    // 1. Reserva atômica do cooldown diário no Redis com SET ... NX até as 04:00
+    const lockAcquired = await this.cooldownService.acquireDailyLock(userId, cycleInfo.secondsUntilReset);
     if (!lockAcquired) {
       const cooldown = await this.cooldownService.getDailyCooldown(userId);
       const hours = Math.floor(cooldown.remainingSeconds / 3600);
@@ -20,25 +22,41 @@ export class KakeraService {
         success: false,
         error: {
           code: 'DAILY_COOLDOWN_ACTIVE',
-          message: `Você já resgatou sua recompensa diária! Volte em ${hours > 0 ? `${hours}h ` : ''}${mins}min.`,
+          message: `Você já resgatou sua recompensa diária hoje! O próximo resgate reseta às 04:00 (em ${hours > 0 ? `${hours}h ` : ''}${mins}min).`,
           remainingSeconds: cooldown.remainingSeconds,
-          retryAfter: cooldown.retryAfter,
+          retryAfter: cooldown.retryAfter || cycleInfo.nextReset,
         },
       };
     }
 
-    // 2. Consulta última transação de recompensa diária para calcular streak
+    // 2. Consulta última transação de recompensa diária para calcular streak e double-check de segurança
     const lastDailyTx = await this.prisma.kakeraTransaction.findFirst({
       where: { userId, reason: 'DAILY_REWARD' },
       orderBy: { createdAt: 'desc' },
     });
 
+    // Se o banco já tiver transação no ciclo atual (ex: caso o Redis tenha sido resetado), bloqueia e restaura cooldown
+    if (lastDailyTx && new Date(lastDailyTx.createdAt).getTime() >= cycleInfo.currentCycleStart.getTime()) {
+      await this.cooldownService.setDailyCooldown(userId, cycleInfo.secondsUntilReset);
+      const cooldown = await this.cooldownService.getDailyCooldown(userId);
+      const hours = Math.floor(cooldown.remainingSeconds / 3600);
+      const mins = Math.ceil((cooldown.remainingSeconds % 3600) / 60);
+      return {
+        success: false,
+        error: {
+          code: 'DAILY_COOLDOWN_ACTIVE',
+          message: `Você já resgatou sua recompensa diária hoje! O próximo resgate reseta às 04:00 (em ${hours > 0 ? `${hours}h ` : ''}${mins}min).`,
+          remainingSeconds: cooldown.remainingSeconds,
+          retryAfter: cooldown.retryAfter || cycleInfo.nextReset,
+        },
+      };
+    }
+
     let currentStreak = 1;
     if (lastDailyTx) {
-      const msSinceLast = Date.now() - new Date(lastDailyTx.createdAt).getTime();
-      const hoursSinceLast = msSinceLast / (1000 * 3600);
-      // Janela de combo: entre 20h e 40h desde o último resgate
-      if (hoursSinceLast >= 20 && hoursSinceLast <= 40) {
+      const txTime = new Date(lastDailyTx.createdAt).getTime();
+      // Sequência válida: coletou no ciclo imediatamente anterior (entre previousCycleStart e currentCycleStart)
+      if (txTime >= cycleInfo.previousCycleStart.getTime() && txTime < cycleInfo.currentCycleStart.getTime()) {
         const prevMetadata = lastDailyTx.metadata as any;
         const prevStreak = typeof prevMetadata?.streak === 'number' ? prevMetadata.streak : 1;
         currentStreak = Math.min(7, prevStreak + 1);
@@ -101,11 +119,11 @@ export class KakeraService {
         return updatedUser;
       });
 
-      const nextDailyAt = new Date(Date.now() + config.COOLDOWN_DAILY_SECONDS * 1000);
+      const nextDailyAt = cycleInfo.nextReset;
 
       let msg = currentStreak > 1
         ? `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! 🔥 Sequência Diária: Dia ${currentStreak}/7 (+${bonusPercent}% bônus)!`
-        : `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! Volte amanhã para manter sua sequência!`;
+        : `Você recebeu ${amount} ${config.CURRENCY_NAME} ${config.CURRENCY_EMOJI}! Volte amanhã após as 04:00 para manter sua sequência!`;
 
       if (wishlistBonusAmount > 0) {
         msg += ` 🌟 (+${wishlistBonusAmount} de Bônus Wishlist: ${wishlistCount}/1000)`;

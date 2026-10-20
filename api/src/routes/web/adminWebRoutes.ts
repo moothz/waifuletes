@@ -141,9 +141,16 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       let name = character.name;
+      let series = character.series;
       let description = character.description;
       let baseRarity = character.baseRarity;
       let gender = character.gender;
+      let tags = character.tags;
+      let rank = character.rank;
+      let isActive = character.isActive;
+      let customImageUrls: string[] | null = null;
+      let photoAction: 'ADD' | 'REPLACE' = 'ADD';
+      let targetPhoto: string | null = null;
       let newImageBuffer: Buffer | null = null;
 
       if (request.isMultipart()) {
@@ -151,29 +158,84 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         for await (const part of parts) {
           if (part.type === 'field') {
             if (part.fieldname === 'name' && part.value) name = String(part.value).trim();
+            if (part.fieldname === 'series' && part.value) series = String(part.value).trim();
             if (part.fieldname === 'description') description = String(part.value).trim();
             if (part.fieldname === 'baseRarity' && part.value) baseRarity = String(part.value) as Rarity;
             if (part.fieldname === 'gender' && ['FEMALE', 'MALE', 'OTHER'].includes(String(part.value))) {
               gender = String(part.value) as Gender;
             }
-          } else if (part.type === 'file' && part.fieldname === 'image') {
+            if (part.fieldname === 'tags') {
+              const val = String(part.value);
+              tags = val ? val.split(',').map((t) => t.trim()).filter(Boolean) : [];
+            }
+            if (part.fieldname === 'rank' && part.value !== undefined) {
+              const r = Number(part.value);
+              rank = isNaN(r) ? null : r;
+            }
+            if (part.fieldname === 'isActive' && part.value !== undefined) {
+              isActive = String(part.value) === 'true' || String(part.value) === '1';
+            }
+            if (part.fieldname === 'photoAction') {
+              photoAction = String(part.value).toUpperCase() === 'REPLACE' ? 'REPLACE' : 'ADD';
+            }
+            if (part.fieldname === 'targetPhoto') {
+              targetPhoto = String(part.value).trim();
+            }
+            if (part.fieldname === 'imageUrls') {
+              try {
+                const parsed = JSON.parse(String(part.value));
+                if (Array.isArray(parsed)) customImageUrls = parsed;
+              } catch (_) {}
+            }
+          } else if (part.type === 'file' && (part.fieldname === 'image' || part.fieldname === 'photo')) {
             newImageBuffer = await part.toBuffer();
           }
         }
       } else {
         const body = (request.body as any) || {};
         if (body.name) name = String(body.name).trim();
+        if (body.series) series = String(body.series).trim();
         if (body.description !== undefined) description = String(body.description).trim();
         if (body.baseRarity) baseRarity = body.baseRarity as Rarity;
         if (body.gender && ['FEMALE', 'MALE', 'OTHER'].includes(body.gender)) {
           gender = body.gender as Gender;
+        }
+        if (body.tags !== undefined) {
+          if (Array.isArray(body.tags)) {
+            tags = body.tags.map((t: any) => String(t).trim()).filter(Boolean);
+          } else if (typeof body.tags === 'string') {
+            tags = body.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+          }
+        }
+        if (body.rank !== undefined) {
+          const r = Number(body.rank);
+          rank = isNaN(r) ? null : r;
+        }
+        if (body.isActive !== undefined) {
+          isActive = Boolean(body.isActive);
+        }
+        if (body.photoAction) {
+          photoAction = String(body.photoAction).toUpperCase() === 'REPLACE' ? 'REPLACE' : 'ADD';
+        }
+        if (body.targetPhoto) {
+          targetPhoto = String(body.targetPhoto).trim();
+        }
+        if (Array.isArray(body.imageUrls)) {
+          customImageUrls = body.imageUrls;
         }
         if (body.imageBase64) {
           newImageBuffer = Buffer.from(body.imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
         }
       }
 
-      let updatedImageUrls = [...character.imageUrls];
+      // Se customImageUrls foi enviado, limpa possíveis URLs absolutas retornando ao formato relativo
+      let updatedImageUrls = customImageUrls !== null
+        ? customImageUrls.map((img) => {
+            if (typeof img !== 'string') return '';
+            // Remove prefixo http/https de media se houver
+            return img.replace(/^https?:\/\/[^\/]+\/media\//, '');
+          }).filter(Boolean)
+        : [...character.imageUrls];
 
       if (newImageBuffer && newImageBuffer.length > 0) {
         const uploadsDir = path.resolve(config.MEDIA_DIR, 'uploads', 'characters', character.id);
@@ -184,16 +246,32 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         await fs.writeFile(filePath, newImageBuffer);
 
         const relPath = `uploads/characters/${character.id}/${fileName}`;
-        updatedImageUrls = [relPath, ...character.imageUrls];
+        if (photoAction === 'REPLACE' && targetPhoto) {
+          const cleanTarget = targetPhoto.replace(/^https?:\/\/[^\/]+\/media\//, '');
+          const idx = updatedImageUrls.findIndex((img) =>
+            img === cleanTarget || img.endsWith(cleanTarget) || cleanTarget.endsWith(img)
+          );
+          if (idx !== -1) {
+            updatedImageUrls[idx] = relPath;
+          } else {
+            updatedImageUrls.unshift(relPath);
+          }
+        } else {
+          updatedImageUrls = [relPath, ...updatedImageUrls];
+        }
       }
 
       const updated = await fastify.prisma.character.update({
         where: { id: character.id },
         data: {
           name,
+          series,
           description,
           baseRarity,
           gender,
+          tags,
+          rank,
+          isActive,
           imageUrls: updatedImageUrls,
         },
       });

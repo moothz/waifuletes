@@ -41,7 +41,7 @@ export const privateKakeraRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post('/kakera/daily', {
     schema: {
-      description: 'Resgata a recompensa diária de moeda Kakera (cooldown de 20 horas)',
+      description: 'Resgata a recompensa diária de moeda Kakera (reset fixo todos os dias às 04:00 BRT)',
       tags: ['Kakera & Economia (Privado)'],
       body: {
         type: 'object',

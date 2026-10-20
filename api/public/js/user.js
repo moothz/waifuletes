@@ -220,39 +220,51 @@ function setupEventListeners() {
   }
 
   // Confirmação de divórcio
-  document.getElementById('btn-confirm-divorce').addEventListener('click', executeDivorce);
+  const btnDivorce = document.getElementById('btn-confirm-divorce');
+  if (btnDivorce) {
+    btnDivorce.addEventListener('click', executeDivorce);
+  }
 
-  // Envio de sugestão de raridade
-  document.getElementById('btn-submit-rarity').addEventListener('click', submitRaritySuggestion);
+  // Envio de sugestão de dados ou raridade
+  const btnSubmitEditInfo = document.getElementById('btn-submit-edit-info');
+  if (btnSubmitEditInfo) {
+    btnSubmitEditInfo.addEventListener('click', submitEditInfoSuggestion);
+  }
+  const btnSubmitRarity = document.getElementById('btn-submit-rarity');
+  if (btnSubmitRarity) {
+    btnSubmitRarity.addEventListener('click', submitEditInfoSuggestion);
+  }
 
   // Upload e inicialização do Cropper para nova foto
   const fileInput = document.getElementById('suggest-file-input');
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const cropperImg = document.getElementById('cropper-img');
-      cropperImg.src = event.target.result;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const cropperImg = document.getElementById('cropper-img');
+        cropperImg.src = event.target.result;
 
-      document.getElementById('cropper-container').classList.remove('hidden');
+        document.getElementById('cropper-container').classList.remove('hidden');
 
-      if (cropperInstance) {
-        cropperInstance.destroy();
-      }
+        if (cropperInstance) {
+          cropperInstance.destroy();
+        }
 
-      // Inicializa Cropper.js com proporção Mudae 225x350 (9/14)
-      cropperInstance = new Cropper(cropperImg, {
-        aspectRatio: 225 / 350,
-        viewMode: 1,
-        autoCropArea: 0.95,
-        preview: '#crop-preview',
-        responsive: true,
-      });
-    };
-    reader.readAsDataURL(file);
-  });
+        // Inicializa Cropper.js com proporção Mudae 225x350 (9/14)
+        cropperInstance = new Cropper(cropperImg, {
+          aspectRatio: 225 / 350,
+          viewMode: 1,
+          autoCropArea: 0.95,
+          preview: '#crop-preview',
+          responsive: true,
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 
   // Envio de sugestão de imagem recortada
   const btnSubmitImg = document.getElementById('btn-submit-image') || document.getElementById('btn-submit-crop');
@@ -550,8 +562,13 @@ function renderPrivateHarem(harem) {
     const covetsBtnClass = unseenCovets > 0 ? 'btn-gold' : '';
     const covetsBtnStyle = unseenCovets > 0 ? 'border-color: #f59e0b; font-weight: 800;' : '';
 
+    const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
+    const photosBadgeHtml = photosCount > 1
+      ? `<div class="badge-married" style="background: rgba(0,0,0,0.8); color: #facc15; border: 1.5px solid #facc15; left: 8px; right: auto; top: ${unseenCovets > 0 ? '36px' : '8px'}; font-weight: 800; font-size: 11px; cursor: pointer; padding: 2px 6px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
+      : '';
+
     card.innerHTML = `
-      <div class="card-img-wrapper">
+      <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
         <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
@@ -559,9 +576,10 @@ function renderPrivateHarem(harem) {
         ${entry.keys ? `<div class="badge-wishes"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
         ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
         ${unseenCovets > 0 ? `<div class="badge-married" style="background: #f59e0b; color: #000; left: 8px; right: auto; font-weight: 800;">👀 ${unseenCovets}</div>` : ''}
+        ${photosBadgeHtml}
       </div>
       <div class="card-info">
-        <div class="card-name">${escapeHtml(char.name)}</div>
+        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
           <!-- 1. Favoritar (rosa com coração rosa) -->
@@ -582,7 +600,7 @@ function renderPrivateHarem(harem) {
           </button>
           <!-- 5. Sugerir Mudança -->
           <button class="btn-retro btn-sm" style="width: 100%;" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
-            <i class="fas fa-lightbulb"></i> Sugerir Mudança
+            <i class="fas fa-lightbulb"></i> Sugerir Alterações
           </button>
         </div>
       </div>
@@ -650,17 +668,23 @@ function renderPrivateWishlist(wishlist) {
       `;
     }
 
+    const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
+    const photosBadgeHtml = photosCount > 1
+      ? `<div class="badge-married" style="background: rgba(0,0,0,0.8); color: #facc15; border: 1.5px solid #facc15; left: 8px; right: auto; font-weight: 800; font-size: 11px; cursor: pointer; padding: 2px 6px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
+      : '';
+
     card.innerHTML = `
-      <div class="card-img-wrapper">
+      <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
         <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
         ${marriedBadgeHtml}
         ${entry.isStarWish ? '<div class="badge-married" title="Starwish!">⭐</div>' : ''}
+        ${photosBadgeHtml}
       </div>
       <div class="card-info">
-        <div class="card-name">${escapeHtml(char.name)}</div>
+        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
           ${isMarried && entry.marriedToPublicId !== userSessionData?.publicId ? `
@@ -1231,40 +1255,70 @@ async function removeFromWishlist(charId) {
 }
 
 // ========================================================
-// MODAL DE SUGESTÕES (RARIDADE E FOTO CROPPER)
+// MODAL DE SUGESTÕES (DADOS COMPLETOS & GALERIA DE FOTOS)
 // ========================================================
-function openSuggestModal(charId, charName, currentRarity) {
-  activeSuggestCharacter = { id: charId, name: charName, currentRarity };
+let userPhotosList = [];
+let userPhotoAction = 'ADD'; // 'ADD' | 'DELETE' | 'REPLACE'
+let userTargetPhoto = null;
+
+async function openSuggestModal(charId, charName, currentRarity, preloadedChar = null) {
+  let char = preloadedChar;
+  if (!char || !char.imageUrls) {
+    try {
+      const res = await Api.get(`/characters/${encodeURIComponent(charId)}`);
+      if (res?.data) char = res.data;
+    } catch (_) {}
+  }
+
+  activeSuggestCharacter = char || { id: charId, name: charName, baseRarity: currentRarity };
 
   const nameEl = document.getElementById('suggest-char-name');
-  if (nameEl) nameEl.textContent = `Personagem: ${charName}`;
+  if (nameEl) nameEl.textContent = `Personagem: ${activeSuggestCharacter.name || charName}`;
+
+  const seriesBadge = document.getElementById('suggest-char-series-badge');
+  if (seriesBadge) seriesBadge.textContent = activeSuggestCharacter.series ? `Série: ${activeSuggestCharacter.series}` : '';
 
   const currBadge = document.getElementById('suggest-current-rarity');
-  const cfg = RARITY_CONFIG[currentRarity] || RARITY_CONFIG.COMMON;
+  const cfg = RARITY_CONFIG[activeSuggestCharacter.baseRarity || currentRarity] || RARITY_CONFIG.COMMON;
   if (currBadge) {
     currBadge.style.borderColor = cfg.color;
     currBadge.style.color = cfg.color;
     currBadge.textContent = `${cfg.emoji} ${cfg.label}`;
   }
 
-  const rarityReason = document.getElementById('suggest-rarity-reason') || document.getElementById('suggest-reason');
-  if (rarityReason) rarityReason.value = '';
+  // Preenche aba Dados com valores atuais para referência
+  const editName = document.getElementById('suggest-edit-name');
+  if (editName) editName.value = activeSuggestCharacter.name || '';
 
-  const photoReason = document.getElementById('suggest-photo-reason') || document.getElementById('suggest-img-reason');
-  if (photoReason) photoReason.value = '';
+  const editSeries = document.getElementById('suggest-edit-series');
+  if (editSeries) editSeries.value = activeSuggestCharacter.series || '';
 
-  const fileInput = document.getElementById('suggest-file-input');
-  if (fileInput) fileInput.value = '';
+  const editGender = document.getElementById('suggest-edit-gender');
+  if (editGender) editGender.value = activeSuggestCharacter.gender || 'FEMALE';
 
-  const cropContainer = document.getElementById('cropper-container');
-  if (cropContainer) cropContainer.classList.add('hidden');
+  const editRarity = document.getElementById('suggest-edit-rarity');
+  if (editRarity) editRarity.value = activeSuggestCharacter.baseRarity || currentRarity || 'COMMON';
 
-  if (cropperInstance) {
-    cropperInstance.destroy();
-    cropperInstance = null;
+  const editTags = document.getElementById('suggest-edit-tags');
+  if (editTags) {
+    editTags.value = Array.isArray(activeSuggestCharacter.tags) ? activeSuggestCharacter.tags.join(', ') : '';
   }
 
-  // Reseta estado das subabas para Raridade
+  const editDesc = document.getElementById('suggest-edit-description');
+  if (editDesc) editDesc.value = activeSuggestCharacter.description || '';
+
+  const editReason = document.getElementById('suggest-edit-reason');
+  if (editReason) editReason.value = '';
+
+  // Prepara fotos
+  userPhotosList = Array.isArray(activeSuggestCharacter.imageUrls) && activeSuggestCharacter.imageUrls.length > 0
+    ? [...activeSuggestCharacter.imageUrls]
+    : (activeSuggestCharacter.imageUrl ? [activeSuggestCharacter.imageUrl] : []);
+
+  renderUserPhotosGrid();
+  cancelUserPhotoAction();
+
+  // Reseta abas para a primeira
   const subtabs = document.querySelectorAll('#modal-suggest .retro-tab[data-subtab]');
   subtabs.forEach((t, i) => {
     if (i === 0) t.classList.add('active');
@@ -1278,54 +1332,158 @@ function openSuggestModal(charId, charName, currentRarity) {
   openModal('modal-suggest');
 }
 
-async function submitRaritySuggestion() {
-  if (!activeSuggestCharacter) return;
-  const selectEl = document.getElementById('suggest-rarity-select') || document.getElementById('suggest-new-rarity');
-  const newRarity = selectEl ? selectEl.value : 'COMMON';
-  const reasonEl = document.getElementById('suggest-rarity-reason') || document.getElementById('suggest-reason');
-  const reason = reasonEl ? reasonEl.value.trim() : '';
+function renderUserPhotosGrid() {
+  const container = document.getElementById('suggest-photos-grid');
+  const countEl = document.getElementById('suggest-photos-count');
+  if (countEl) countEl.textContent = userPhotosList.length;
+  if (!container) return;
+
+  container.innerHTML = '';
+  if (userPhotosList.length === 0) {
+    container.innerHTML = '<div style="grid-column: 1 / -1; font-size: 12px; color: #64748b; font-style: italic; padding: 12px; background: #fff; border: 1px dashed #cbd5e1; border-radius: 4px; text-align: center;">Nenhuma foto cadastrada para este personagem.</div>';
+    return;
+  }
+
+  userPhotosList.forEach((src, idx) => {
+    const item = document.createElement('div');
+    item.style.position = 'relative';
+    item.style.border = '1.5px solid #2d241e';
+    item.style.borderRadius = '4px';
+    item.style.overflow = 'hidden';
+    item.style.background = '#111';
+
+    item.innerHTML = `
+      <div style="aspect-ratio: 9/14; width: 100%; position: relative;">
+        <img src="${src}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg'">
+        <span style="position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,0.7); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 3px;">#${idx + 1}</span>
+      </div>
+      <div style="padding: 4px; background: #fff; border-top: 1px solid #2d241e; display: flex; flex-direction: column; gap: 4px;">
+        <button type="button" class="btn-retro btn-sm btn-gold" style="padding: 2px 4px; font-size: 11px; width: 100%;" onclick="triggerUserReplacePhoto('${escapeAttr(src)}', ${idx})">
+          🔄 Substituir
+        </button>
+        <button type="button" class="btn-retro btn-sm btn-danger" style="padding: 2px 4px; font-size: 11px; width: 100%;" onclick="triggerUserDeletePhoto('${escapeAttr(src)}', ${idx})">
+          🗑️ Excluir
+        </button>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function triggerUserAddPhoto() {
+  userPhotoAction = 'ADD';
+  userTargetPhoto = null;
+  const box = document.getElementById('user-photo-action-box');
+  const title = document.getElementById('user-photo-action-title');
+  const deleteForm = document.getElementById('user-photo-delete-form');
+  const uploadForm = document.getElementById('user-photo-upload-form');
+
+  if (title) title.innerHTML = '➕ <b>Sugerir Nova Foto Extra:</b>';
+  if (deleteForm) deleteForm.classList.add('hidden');
+  if (uploadForm) uploadForm.classList.remove('hidden');
+  if (box) box.classList.remove('hidden');
+
+  const fileInput = document.getElementById('suggest-file-input');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+function triggerUserReplacePhoto(targetPhoto, idx) {
+  userPhotoAction = 'REPLACE';
+  userTargetPhoto = targetPhoto;
+  const box = document.getElementById('user-photo-action-box');
+  const title = document.getElementById('user-photo-action-title');
+  const deleteForm = document.getElementById('user-photo-delete-form');
+  const uploadForm = document.getElementById('user-photo-upload-form');
+
+  if (title) title.innerHTML = `🔄 <b>Sugerir Substituição da Foto #${idx + 1}:</b>`;
+  if (deleteForm) deleteForm.classList.add('hidden');
+  if (uploadForm) uploadForm.classList.remove('hidden');
+  if (box) box.classList.remove('hidden');
+
+  const fileInput = document.getElementById('suggest-file-input');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+function triggerUserDeletePhoto(targetPhoto, idx) {
+  userPhotoAction = 'DELETE';
+  userTargetPhoto = targetPhoto;
+  const box = document.getElementById('user-photo-action-box');
+  const title = document.getElementById('user-photo-action-title');
+  const deleteForm = document.getElementById('user-photo-delete-form');
+  const uploadForm = document.getElementById('user-photo-upload-form');
+
+  if (title) title.innerHTML = `🗑️ <b>Sugerir Exclusão da Foto #${idx + 1}:</b>`;
+  if (uploadForm) uploadForm.classList.add('hidden');
+  if (deleteForm) deleteForm.classList.remove('hidden');
+  if (box) box.classList.remove('hidden');
+
+  const reasonInput = document.getElementById('user-photo-delete-reason');
+  if (reasonInput) {
+    reasonInput.value = '';
+    reasonInput.focus();
+  }
+}
+
+function cancelUserPhotoAction() {
+  const box = document.getElementById('user-photo-action-box');
+  if (box) box.classList.add('hidden');
+  const crop = document.getElementById('cropper-container');
+  if (crop) crop.classList.add('hidden');
+  if (cropperInstance) {
+    cropperInstance.destroy();
+    cropperInstance = null;
+  }
+  const fileInput = document.getElementById('suggest-file-input');
+  if (fileInput) fileInput.value = '';
+  userTargetPhoto = null;
+}
+
+async function submitUserDeletePhotoSuggestion() {
+  if (!activeSuggestCharacter || !userTargetPhoto) return;
+  const reasonInput = document.getElementById('user-photo-delete-reason');
+  const reason = reasonInput ? reasonInput.value.trim() : '';
 
   if (!reason || reason.length < 5) {
-    Api.showToast('Por favor, informe uma justificativa válida com pelo menos 5 caracteres.', '⚠️');
+    Api.showToast('Informe o motivo da exclusão com pelo menos 5 caracteres.', '⚠️');
     return;
   }
 
   try {
     const res = await Api.post(`/api/web/user/${userPublicId}/suggestions`, {
       token: userSessionToken,
-      type: 'RARITY',
+      type: 'IMAGE',
       characterId: activeSuggestCharacter.id,
-      suggestedRarity: newRarity,
-      reason: reason,
+      action: 'DELETE',
+      targetPhoto: userTargetPhoto,
+      reason,
     });
 
     if (!res.success) {
-      Api.showToast(res.error?.message || 'Falha ao enviar sugestão.', '❌');
+      Api.showToast(res.error?.message || 'Falha ao enviar sugestão de exclusão.', '❌');
       return;
     }
 
     closeModal('modal-suggest');
-    Api.showToast(res.data?.message || 'Sugestão enviada para a moderação!', '💡');
-    if (typeof loadUserSuggestions === 'function') {
-      loadUserSuggestions();
-    }
+    Api.showToast('Sugestão de exclusão de foto enviada para moderação!', '🗑️');
+    if (typeof loadUserSuggestions === 'function') loadUserSuggestions();
   } catch (err) {
     Api.showToast('Erro de comunicação ao enviar sugestão.', '❌');
   }
 }
 
-async function submitImageSuggestion() {
+async function submitUserPhotoCropSuggestion() {
   if (!activeSuggestCharacter || !cropperInstance) return;
 
-  const reasonEl = document.getElementById('suggest-photo-reason') || document.getElementById('suggest-img-reason');
+  const reasonEl = document.getElementById('suggest-photo-reason');
   const reason = reasonEl ? reasonEl.value.trim() : '';
 
-  // Exporta o canvas recortado em 450x700 (proporção 225x350)
-  const canvas = cropperInstance.getCroppedCanvas({
-    width: 450,
-    height: 700,
-  });
-
+  const canvas = cropperInstance.getCroppedCanvas({ width: 450, height: 700 });
   canvas.toBlob(async (blob) => {
     if (!blob) {
       Api.showToast('Falha ao processar recorte de imagem.', '❌');
@@ -1336,8 +1494,12 @@ async function submitImageSuggestion() {
     formData.append('token', userSessionToken);
     formData.append('type', 'IMAGE');
     formData.append('characterId', activeSuggestCharacter.id);
+    formData.append('action', userPhotoAction);
+    if (userTargetPhoto) {
+      formData.append('targetPhoto', userTargetPhoto);
+    }
     formData.append('reason', reason);
-    formData.append('image', blob, 'cropped.png');
+    formData.append('image', blob, 'user_photo.png');
 
     try {
       const res = await Api.post(`/api/web/user/${userPublicId}/suggestions`, formData);
@@ -1347,14 +1509,69 @@ async function submitImageSuggestion() {
       }
 
       closeModal('modal-suggest');
-      Api.showToast(res.data?.message || 'Sugestão de foto enviada para a moderação!', '🖼️');
-      if (typeof loadUserSuggestions === 'function') {
-        loadUserSuggestions();
-      }
+      const msg = userPhotoAction === 'REPLACE'
+        ? 'Sugestão de substituição de foto enviada para a moderação!'
+        : 'Sugestão de nova foto enviada para a moderação!';
+      Api.showToast(msg, '🖼️');
+      if (typeof loadUserSuggestions === 'function') loadUserSuggestions();
     } catch (err) {
       Api.showToast('Erro de comunicação ao enviar imagem.', '❌');
     }
   }, 'image/png');
+}
+
+async function submitEditInfoSuggestion() {
+  if (!activeSuggestCharacter) return;
+
+  const suggestedName = document.getElementById('suggest-edit-name')?.value.trim();
+  const suggestedSeries = document.getElementById('suggest-edit-series')?.value.trim();
+  const suggestedGender = document.getElementById('suggest-edit-gender')?.value;
+  const suggestedRarity = document.getElementById('suggest-edit-rarity')?.value;
+  const suggestedTagsStr = document.getElementById('suggest-edit-tags')?.value.trim();
+  const suggestedTags = suggestedTagsStr ? suggestedTagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+  const suggestedDescription = document.getElementById('suggest-edit-description')?.value.trim();
+  const reason = document.getElementById('suggest-edit-reason')?.value.trim();
+
+  if (!reason || reason.length < 5) {
+    Api.showToast('Por favor, informe uma justificativa válida com pelo menos 5 caracteres.', '⚠️');
+    return;
+  }
+
+  try {
+    const res = await Api.post(`/api/web/user/${userPublicId}/suggestions`, {
+      token: userSessionToken,
+      type: 'EDIT',
+      characterId: activeSuggestCharacter.id,
+      suggestedName,
+      suggestedSeries,
+      suggestedGender,
+      suggestedRarity,
+      suggestedTags,
+      suggestedDescription,
+      reason,
+    });
+
+    if (!res.success) {
+      Api.showToast(res.error?.message || 'Falha ao enviar sugestão.', '❌');
+      return;
+    }
+
+    closeModal('modal-suggest');
+    Api.showToast('Sugestão de alteração de dados enviada para moderação!', '💡');
+    if (typeof loadUserSuggestions === 'function') loadUserSuggestions();
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao enviar sugestão.', '❌');
+  }
+}
+
+async function submitRaritySuggestion() {
+  // Alias de compatibilidade se acionado diretamente
+  submitEditInfoSuggestion();
+}
+
+async function submitImageSuggestion() {
+  // Alias de compatibilidade
+  submitUserPhotoCropSuggestion();
 }
 
 // Helpers de Modal
@@ -1494,63 +1711,147 @@ function getLocalBuffDescription(type) {
   return LOCAL_BUFF_DESCRIPTIONS[type] || 'Buff permanente de pesca';
 }
 
+let previewState = {
+  characterId: null,
+  images: [],
+  currentIndex: 0,
+  charData: null
+};
+
 async function openWaifuPreview(charId, charName, charImg, series, rarity, gender) {
   const modal = document.getElementById('modal-waifu-preview');
   if (!modal) return;
-  document.getElementById('waifu-preview-name').textContent = charName || charId;
-  document.getElementById('waifu-preview-series').textContent = series ? `Série: ${series}` : '';
+
+  // Busca dados completos atualizados do personagem (que traz todas as imageUrls)
+  let fullChar = null;
+  try {
+    const res = await Api.get(`/characters/${encodeURIComponent(charId)}`);
+    if (res?.data) fullChar = res.data;
+  } catch (_) {}
+
+  const cName = fullChar?.name || charName || charId;
+  const cSeries = fullChar?.series || series || '';
+  const cRarity = fullChar?.baseRarity || rarity || 'COMMON';
+  const cGender = fullChar?.gender || gender || 'OTHER';
+  const cDesc = fullChar?.description || '';
+
+  // Lista de imagens
+  let images = [];
+  if (fullChar?.imageUrls && Array.isArray(fullChar.imageUrls) && fullChar.imageUrls.length > 0) {
+    images = fullChar.imageUrls;
+  } else if (charImg && charImg !== '/media/characters/default.jpg') {
+    images = [charImg];
+  } else {
+    images = ['/media/characters/default.jpg'];
+  }
+
+  previewState = {
+    characterId: charId,
+    images,
+    currentIndex: 0,
+    charData: fullChar || { id: charId, name: cName, series: cSeries, baseRarity: cRarity, gender: cGender, description: cDesc }
+  };
+
+  document.getElementById('waifu-preview-name').textContent = cName;
+  document.getElementById('waifu-preview-series').textContent = cSeries ? `Série: ${cSeries}` : '';
+  
   const rarityEl = document.getElementById('waifu-preview-rarity');
-  if (rarity && RARITY_CONFIG[rarity]) {
-    const r = RARITY_CONFIG[rarity];
+  if (cRarity && RARITY_CONFIG[cRarity]) {
+    const r = RARITY_CONFIG[cRarity];
     rarityEl.innerHTML = `<span style="color:${r.color}; font-weight:800;">${r.emoji} ${r.label}</span>`;
   } else {
     rarityEl.textContent = '';
   }
 
   const genderEl = document.getElementById('waifu-preview-gender');
-  const formatGender = (g) => {
-    if (g === 'FEMALE') return '<span style="color:#ec4899;">♀ Feminino</span>';
-    if (g === 'MALE') return '<span style="color:#3b82f6;">♂ Masculino</span>';
-    return '<span style="color:#8b5cf6;">⚧ Outro</span>';
-  };
-
-  if (gender && genderEl) {
-    genderEl.innerHTML = formatGender(gender);
-  } else if (genderEl) {
-    genderEl.innerHTML = '';
+  if (genderEl) {
+    const formatGender = (g) => {
+      if (g === 'FEMALE') return '<span style="color:#ec4899;">♀ Feminino</span>';
+      if (g === 'MALE') return '<span style="color:#3b82f6;">♂ Masculino</span>';
+      return '<span style="color:#8b5cf6;">⚧ Outro</span>';
+    };
+    genderEl.innerHTML = formatGender(cGender);
   }
 
-  if (charImg && charImg !== '/media/characters/default.jpg') {
-    document.getElementById('waifu-preview-img').src = charImg;
-    openModal('modal-waifu-preview');
-    if (!gender) {
-      Api.get(`/api/characters/${encodeURIComponent(charId)}`).then(res => {
-        if (res?.data?.gender && genderEl) {
-          genderEl.innerHTML = formatGender(res.data.gender);
-        }
-      }).catch(() => {});
+  const descEl = document.getElementById('waifu-preview-description');
+  if (descEl) {
+    if (cDesc) {
+      descEl.textContent = cDesc;
+      descEl.style.display = 'block';
+    } else {
+      descEl.style.display = 'none';
     }
+  }
+
+  updatePreviewPhotoDisplay();
+  openModal('modal-waifu-preview');
+}
+
+function updatePreviewPhotoDisplay() {
+  const imgEl = document.getElementById('waifu-preview-img');
+  const countEl = document.getElementById('waifu-preview-photo-count');
+  const btnPrev = document.getElementById('btn-preview-prev');
+  const btnNext = document.getElementById('btn-preview-next');
+  const thumbsContainer = document.getElementById('waifu-preview-thumbs');
+
+  const total = previewState.images.length;
+  const curr = previewState.currentIndex;
+  const currentSrc = previewState.images[curr] || '/media/characters/default.jpg';
+
+  if (imgEl) imgEl.src = currentSrc;
+
+  if (total > 1) {
+    if (countEl) {
+      countEl.style.display = 'inline-block';
+      countEl.textContent = `Foto ${curr + 1} de ${total}`;
+    }
+    if (btnPrev) btnPrev.style.display = 'flex';
+    if (btnNext) btnNext.style.display = 'flex';
   } else {
-    document.getElementById('waifu-preview-img').src = '/media/characters/default.jpg';
-    openModal('modal-waifu-preview');
-    try {
-      const res = await Api.get(`/api/characters/${encodeURIComponent(charId)}`);
-      if (res?.data) {
-        const char = res.data;
-        document.getElementById('waifu-preview-name').textContent = char.name || charId;
-        document.getElementById('waifu-preview-series').textContent = char.series ? `Série: ${char.series}` : '';
-        document.getElementById('waifu-preview-img').src = getCharImg(char);
-        if (char.baseRarity && RARITY_CONFIG[char.baseRarity]) {
-          const r = RARITY_CONFIG[char.baseRarity];
-          rarityEl.innerHTML = `<span style="color:${r.color}; font-weight:800;">${r.emoji} ${r.label}</span>`;
-        }
-        if (char.gender && genderEl) {
-          genderEl.innerHTML = formatGender(char.gender);
-        }
-      }
-    } catch {
-      // Silencioso
+    if (countEl) countEl.style.display = 'none';
+    if (btnPrev) btnPrev.style.display = 'none';
+    if (btnNext) btnNext.style.display = 'none';
+  }
+
+  if (thumbsContainer) {
+    thumbsContainer.innerHTML = '';
+    if (total > 1) {
+      previewState.images.forEach((src, idx) => {
+        const thumb = document.createElement('img');
+        thumb.src = src;
+        thumb.style.width = '36px';
+        thumb.style.height = '48px';
+        thumb.style.objectFit = 'cover';
+        thumb.style.borderRadius = '3px';
+        thumb.style.cursor = 'pointer';
+        thumb.style.border = idx === curr ? '2px solid #eab308' : '1px solid #000';
+        thumb.style.opacity = idx === curr ? '1' : '0.6';
+        thumb.onclick = () => {
+          previewState.currentIndex = idx;
+          updatePreviewPhotoDisplay();
+        };
+        thumbsContainer.appendChild(thumb);
+      });
     }
+  }
+}
+
+function changePreviewPhoto(delta) {
+  const total = previewState.images.length;
+  if (total <= 1) return;
+  previewState.currentIndex = (previewState.currentIndex + delta + total) % total;
+  updatePreviewPhotoDisplay();
+}
+
+function openSuggestFromPreview() {
+  closeModal('modal-waifu-preview');
+  if (previewState.charData) {
+    openSuggestModal(
+      previewState.charData.id,
+      previewState.charData.name,
+      previewState.charData.baseRarity,
+      previewState.charData
+    );
   }
 }
 

@@ -523,7 +523,14 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         let series = '';
         let description = '';
         let type = '';
+        let suggestedName = '';
+        let suggestedSeries = '';
+        let suggestedGender: any = null;
+        let suggestedDescription = '';
+        let suggestedTags: string[] = [];
         let suggestedRarity = '';
+        let action: 'ADD' | 'DELETE' | 'REPLACE' = 'ADD';
+        let targetPhoto = '';
         let reason = '';
         let imageBuffer: Buffer | null = null;
 
@@ -535,7 +542,23 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             if (part.fieldname === 'series') series = String(part.value);
             if (part.fieldname === 'description') description = String(part.value);
             if (part.fieldname === 'type') type = String(part.value);
+            if (part.fieldname === 'suggestedName') suggestedName = String(part.value);
+            if (part.fieldname === 'suggestedSeries') suggestedSeries = String(part.value);
+            if (part.fieldname === 'suggestedGender' && ['FEMALE', 'MALE', 'OTHER'].includes(String(part.value))) {
+              suggestedGender = String(part.value) as any;
+            }
+            if (part.fieldname === 'suggestedDescription') suggestedDescription = String(part.value);
+            if (part.fieldname === 'suggestedTags') {
+              suggestedTags = String(part.value).split(',').map((t) => t.trim()).filter(Boolean);
+            }
             if (part.fieldname === 'suggestedRarity' || part.fieldname === 'rarity') suggestedRarity = String(part.value);
+            if (part.fieldname === 'action' || part.fieldname === 'photoAction') {
+              const act = String(part.value).toUpperCase();
+              if (act === 'DELETE' || act === 'DELETE_PHOTO') action = 'DELETE';
+              else if (act === 'REPLACE' || act === 'REPLACE_PHOTO') action = 'REPLACE';
+              else action = 'ADD';
+            }
+            if (part.fieldname === 'targetPhoto') targetPhoto = String(part.value);
             if (part.fieldname === 'reason') reason = String(part.value);
           } else if (part.type === 'file' && (part.fieldname === 'image' || part.fieldname === 'photo')) {
             imageBuffer = await part.toBuffer();
@@ -566,18 +589,38 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
               suggestion,
             },
           });
-        } else if (type === 'IMAGE') {
-          if (!imageBuffer) {
-            return reply.status(400).send({
-              success: false,
-              error: { code: 'IMAGE_REQUIRED', message: 'Arquivo de imagem recortada não enviado.' },
-            });
-          }
-          const suggestion = await suggestionService.submitImageSuggestion(session.userId, characterId, imageBuffer, reason);
+        } else if (type === 'EDIT') {
+          const suggestion = await suggestionService.submitEditSuggestion(session.userId, characterId, {
+            suggestedName: suggestedName || (characterName ? characterName : undefined),
+            suggestedSeries: suggestedSeries || (series ? series : undefined),
+            suggestedGender: suggestedGender || undefined,
+            suggestedDescription: suggestedDescription || (description ? description : undefined),
+            suggestedRarity: (suggestedRarity as Rarity) || undefined,
+            suggestedTags: suggestedTags.length > 0 ? suggestedTags : undefined,
+            reason,
+          });
           return reply.send({
             success: true,
             data: {
-              message: 'Sugestão de foto enviada com sucesso! A moderação irá analisar.',
+              message: 'Sugestão de alteração de dados enviada com sucesso! A moderação irá analisar.',
+              suggestion,
+            },
+          });
+        } else if (type === 'IMAGE') {
+          const suggestion = await suggestionService.submitImageSuggestion(
+            session.userId,
+            characterId,
+            imageBuffer,
+            reason,
+            action,
+            targetPhoto
+          );
+          return reply.send({
+            success: true,
+            data: {
+              message: action === 'DELETE'
+                ? 'Sugestão de exclusão de foto enviada para moderação!'
+                : (action === 'REPLACE' ? 'Sugestão de substituição de foto enviada para moderação!' : 'Sugestão de foto enviada com sucesso!'),
               suggestion,
             },
           });
@@ -611,7 +654,15 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         characterName,
         series,
         description,
+        suggestedName,
+        suggestedSeries,
+        suggestedGender,
+        suggestedDescription,
+        suggestedTags,
         suggestedRarity,
+        action: bodyAction,
+        photoAction,
+        targetPhoto,
         reason,
         imageBase64,
       } = (request.body as any) || {};
@@ -644,6 +695,25 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             suggestion,
           },
         });
+      } else if (type === 'EDIT') {
+        const suggestion = await suggestionService.submitEditSuggestion(session.userId, characterId, {
+          suggestedName: suggestedName || characterName,
+          suggestedSeries: suggestedSeries || series,
+          suggestedGender,
+          suggestedDescription: suggestedDescription || description,
+          suggestedRarity: suggestedRarity as Rarity,
+          suggestedTags: Array.isArray(suggestedTags)
+            ? suggestedTags
+            : (typeof suggestedTags === 'string' ? suggestedTags.split(',').map((t: string) => t.trim()).filter(Boolean) : undefined),
+          reason,
+        });
+        return reply.send({
+          success: true,
+          data: {
+            message: 'Sugestão de alteração de dados enviada com sucesso! A moderação irá analisar.',
+            suggestion,
+          },
+        });
       } else if (type === 'RARITY') {
         const suggestion = await suggestionService.submitRaritySuggestion(
           session.userId,
@@ -658,13 +728,30 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             suggestion,
           },
         });
-      } else if (type === 'IMAGE' && imageBase64) {
-        const buffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-        const suggestion = await suggestionService.submitImageSuggestion(session.userId, characterId, buffer, reason);
+      } else if (type === 'IMAGE') {
+        let buffer: Buffer | null = null;
+        if (imageBase64) {
+          buffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+        }
+        let act: 'ADD' | 'DELETE' | 'REPLACE' = 'ADD';
+        const rawAct = String(bodyAction || photoAction || '').toUpperCase();
+        if (rawAct === 'DELETE' || rawAct === 'DELETE_PHOTO') act = 'DELETE';
+        else if (rawAct === 'REPLACE' || rawAct === 'REPLACE_PHOTO') act = 'REPLACE';
+
+        const suggestion = await suggestionService.submitImageSuggestion(
+          session.userId,
+          characterId,
+          buffer,
+          reason,
+          act,
+          targetPhoto
+        );
         return reply.send({
           success: true,
           data: {
-            message: 'Sugestão de foto enviada com sucesso! A moderação irá analisar.',
+            message: act === 'DELETE'
+              ? 'Sugestão de exclusão de foto enviada para moderação!'
+              : (act === 'REPLACE' ? 'Sugestão de substituição de foto enviada para moderação!' : 'Sugestão de foto enviada com sucesso!'),
             suggestion,
           },
         });

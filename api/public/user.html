@@ -391,74 +391,146 @@
     </div>
   </div>
 
-  <!-- Modal de Sugestões de Personagem Existente (Raridade ou Foto) -->
+  <!-- Modal de Sugestões de Personagem Existente (Dados Gerais e Fotos) -->
   <div class="modal-overlay hidden" id="modal-suggest">
-    <div class="modal-box" style="max-width: min(650px, 80vw); max-height: 80vh;">
+    <div class="modal-box" style="max-width: min(720px, 90vw); max-height: 85vh; overflow-y: auto;">
       <div class="modal-header">
-        <span class="modal-title">💡 Sugerir Alteração</span>
+        <span class="modal-title">💡 Sugerir Alteração no Personagem</span>
         <button class="modal-close" onclick="closeModal('modal-suggest')">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h4 id="suggest-char-name" style="font-weight: 800; font-size: 16px; margin: 0;">Personagem</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: #fffdf5; padding: 10px; border: 1.5px solid #2d241e; border-radius: 4px;">
+          <div>
+            <h4 id="suggest-char-name" style="font-weight: 800; font-size: 16px; margin: 0;">Personagem</h4>
+            <span id="suggest-char-series-badge" style="font-size: 12px; color: var(--text-muted); font-weight: 600;">Série</span>
+          </div>
           <span id="suggest-current-rarity" class="badge-rarity" style="position: static;">⚪ Comum</span>
         </div>
 
         <div class="retro-tabs" style="margin-bottom: 16px;">
-          <button class="retro-tab active" data-subtab="subtab-rarity">⭐ Raridade</button>
-          <button class="retro-tab" data-subtab="subtab-photo">📸 Nova Foto</button>
+          <button class="retro-tab active" data-subtab="subtab-edit-info">📝 Dados (Sexo, Série, Descrição, etc.)</button>
+          <button class="retro-tab" data-subtab="subtab-photos">📸 Fotos (Ver, Adicionar, Excluir, Substituir)</button>
         </div>
 
-        <!-- Subaba Raridade -->
-        <div class="subtab-content" id="subtab-rarity">
-          <div class="form-group">
-            <label class="retro-label">Nova Raridade Sugerida:</label>
-            <select id="suggest-rarity-select" class="retro-select">
-              <option value="COMMON">⚪ Comum</option>
-              <option value="UNCOMMON">🟢 Incomum</option>
-              <option value="RARE">🔵 Raro</option>
-              <option value="EPIC">🟣 Épico</option>
-              <option value="LEGENDARY">⭐ Lendário</option>
-            </select>
+        <!-- Subaba Dados Gerais do Personagem -->
+        <div class="subtab-content" id="subtab-edit-info">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="retro-label">Nome Sugerido:</label>
+              <input type="text" id="suggest-edit-name" class="retro-input" placeholder="Nome do personagem">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="retro-label">Série / Anime Sugerido:</label>
+              <input type="text" id="suggest-edit-series" class="retro-input" placeholder="Obra / Franquia de origem">
+            </div>
           </div>
-          <div class="form-group">
-            <label class="retro-label">Justificativa (obrigatório, mín. 5 caracteres):</label>
-            <textarea id="suggest-rarity-reason" class="retro-textarea" rows="3" placeholder="Ex: Este personagem é o protagonista mais icônico da franquia..."></textarea>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="retro-label">Gênero / Sexo:</label>
+              <select id="suggest-edit-gender" class="retro-select">
+                <option value="FEMALE">♀ Feminino</option>
+                <option value="MALE">♂ Masculino</option>
+                <option value="OTHER">⚧ Outro</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="retro-label">Raridade Sugerida:</label>
+              <select id="suggest-edit-rarity" class="retro-select">
+                <option value="COMMON">⚪ Comum</option>
+                <option value="UNCOMMON">🟢 Incomum</option>
+                <option value="RARE">🔵 Raro</option>
+                <option value="EPIC">🟣 Épico</option>
+                <option value="LEGENDARY">⭐ Lendário</option>
+              </select>
+            </div>
           </div>
-          <button class="btn-retro btn-sm btn-gold" id="btn-submit-rarity" style="width: 100%;">
-            <i class="fas fa-paper-plane"></i> Enviar Sugestão de Raridade
+
+          <div class="form-group">
+            <label class="retro-label">Tags Sugeridas (separadas por vírgula):</label>
+            <input type="text" id="suggest-edit-tags" class="retro-input" placeholder="Ex: anime, protagonista, waifu">
+          </div>
+
+          <div class="form-group">
+            <label class="retro-label">Descrição / Biografia Sugerida:</label>
+            <textarea id="suggest-edit-description" class="retro-textarea" rows="3" placeholder="Informações biográficas da waifu/personagem..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="retro-label">Justificativa da Mudança (obrigatório, mín. 5 caracteres):</label>
+            <textarea id="suggest-edit-reason" class="retro-textarea" rows="2" placeholder="Por que essas alterações devem ser aplicadas?"></textarea>
+          </div>
+
+          <button class="btn-retro btn-sm btn-gold" id="btn-submit-edit-info" onclick="submitEditInfoSuggestion()" style="width: 100%;">
+            <i class="fas fa-paper-plane"></i> Enviar Sugestão de Dados
           </button>
         </div>
 
-        <!-- Subaba Foto -->
-        <div class="subtab-content hidden" id="subtab-photo">
-          <div class="form-group">
-            <label class="retro-label">Selecione uma imagem:</label>
-            <input type="file" id="suggest-file-input" class="retro-input" accept="image/*">
-          </div>
-          
-          <div id="cropper-container" class="hidden">
-            <div class="cropper-img-box">
-              <img id="cropper-img" src="" alt="Recorte de foto">
-            </div>
-            <div class="cropper-preview-container">
-              <div>
-                <span class="retro-label" style="display: block; margin-bottom: 4px;">Pré-visualização do Card:</span>
-                <div class="crop-preview-box" id="crop-preview"></div>
-              </div>
-              <div style="flex: 1;">
-                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
-                  Ajuste o retângulo para enquadrar perfeitamente a waifu/husbando na proporção vertical clássica de card.
-                </p>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label class="retro-label">Motivo (opcional):</label>
-                  <input type="text" id="suggest-photo-reason" class="retro-input" placeholder="Ex: Foto com melhor resolução">
-                </div>
-              </div>
-            </div>
-            <button class="btn-retro btn-sm btn-gold" id="btn-submit-crop" style="width: 100%; margin-top: 14px;">
-              <i class="fas fa-crop-alt"></i> Salvar Recorte e Enviar Foto
+        <!-- Subaba Fotos -->
+        <div class="subtab-content hidden" id="subtab-photos">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-weight: 800; font-size: 13px;">
+              🖼️ Fotos Atuais no Jogo (<span id="suggest-photos-count">0</span>):
+            </span>
+            <button type="button" class="btn-retro btn-sm btn-gold" onclick="triggerUserAddPhoto()">
+              <i class="fas fa-plus"></i> Sugerir Nova Foto
             </button>
+          </div>
+
+          <!-- Galeria de Fotos Atuais -->
+          <div id="suggest-photos-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px;">
+            <!-- Miniaturas dinâmicas -->
+          </div>
+
+          <!-- Ação Selecionada para Foto (Adicionar, Excluir ou Substituir) -->
+          <div id="user-photo-action-box" class="hidden" style="background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span id="user-photo-action-title" style="font-weight: 800; font-size: 13px;">Ação na Foto:</span>
+              <button type="button" class="btn-retro btn-sm" onclick="cancelUserPhotoAction()" style="padding: 2px 8px; font-size: 11px;">Cancelar</button>
+            </div>
+
+            <!-- Formulário de Exclusão de Foto -->
+            <div id="user-photo-delete-form" class="hidden">
+              <p style="font-size: 12px; color: #dc2626; font-weight: 700; margin-bottom: 8px;">
+                ⚠️ Você está sugerindo a exclusão desta foto errada/inadequada.
+              </p>
+              <div class="form-group">
+                <label class="retro-label">Motivo da Exclusão (mín. 5 caracteres):</label>
+                <input type="text" id="user-photo-delete-reason" class="retro-input" placeholder="Ex: Foto de outro personagem, baixa qualidade, etc.">
+              </div>
+              <button type="button" class="btn-retro btn-sm btn-danger" onclick="submitUserDeletePhotoSuggestion()" style="width: 100%;">
+                <i class="fas fa-trash"></i> Confirmar Sugestão de Exclusão
+              </button>
+            </div>
+
+            <!-- Formulário de Upload / Recorte para Nova Foto ou Substituição -->
+            <div id="user-photo-upload-form" class="hidden">
+              <div class="form-group" style="margin-bottom: 8px;">
+                <label class="retro-label">Selecione o arquivo da imagem:</label>
+                <input type="file" id="suggest-file-input" class="retro-input" accept="image/*">
+              </div>
+              
+              <div id="cropper-container" class="hidden">
+                <div class="cropper-img-box">
+                  <img id="cropper-img" src="" alt="Recorte de foto">
+                </div>
+                <div class="cropper-preview-container">
+                  <div>
+                    <span class="retro-label" style="display: block; margin-bottom: 4px;">Pré-visualização (Card):</span>
+                    <div class="crop-preview-box" id="crop-preview"></div>
+                  </div>
+                  <div style="flex: 1;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label class="retro-label">Motivo / Justificativa:</label>
+                      <input type="text" id="suggest-photo-reason" class="retro-input" placeholder="Ex: Foto oficial em alta resolução">
+                    </div>
+                  </div>
+                </div>
+                <button class="btn-retro btn-sm btn-gold" id="btn-submit-crop" onclick="submitUserPhotoCropSuggestion()" style="width: 100%; margin-top: 14px;">
+                  <i class="fas fa-paper-plane"></i> Enviar Sugestão de Foto
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -731,21 +803,34 @@
 
   <!-- Modal Popup de Preview de Waifu (Sobreposto com z-index alto) -->
   <div class="modal-overlay hidden" id="modal-waifu-preview" style="z-index: 10005;">
-    <div class="modal-box" style="max-width: min(420px, 80vw); max-height: 80vh; text-align: center; border: 3px solid #000; box-shadow: 6px 6px 0px #000;">
+    <div class="modal-box" style="max-width: min(440px, 85vw); max-height: 85vh; text-align: center; border: 3px solid #000; box-shadow: 6px 6px 0px #000;">
       <div class="modal-header" style="justify-content: space-between;">
         <span class="modal-title" id="waifu-preview-name" style="font-size: 15px;">Detalhes da Waifu</span>
         <button class="modal-close" onclick="closeModal('modal-waifu-preview')">&times;</button>
       </div>
-      <div class="modal-body" style="padding: 12px; max-height: calc(80vh - 130px); overflow-y: auto;">
-        <div style="width: 100%; height: 320px; overflow: hidden; border: 2px solid #000; border-radius: 4px; background: #111; margin-bottom: 10px;">
+      <div class="modal-body" style="padding: 12px; max-height: calc(85vh - 130px); overflow-y: auto;">
+        <div style="position: relative; width: 100%; height: 320px; overflow: hidden; border: 2px solid #000; border-radius: 4px; background: #111; margin-bottom: 8px;">
           <img id="waifu-preview-img" src="/media/characters/default.jpg" style="width: 100%; height: 100%; object-fit: cover;" onerror="handleImgError(this)">
+          
+          <!-- Controles de Carrossel de Fotos -->
+          <button type="button" id="btn-preview-prev" onclick="changePreviewPhoto(-1)" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: #fff; border: 1px solid #fff; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 14px;">❮</button>
+          <button type="button" id="btn-preview-next" onclick="changePreviewPhoto(1)" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: #fff; border: 1px solid #fff; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 14px;">❯</button>
+          <span id="waifu-preview-photo-count" style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.7); color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.4); display: none;">Foto 1 de 1</span>
         </div>
-        <div id="waifu-preview-series" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;"></div>
-        <div id="waifu-preview-gender" style="font-size: 12px; font-weight: 700; margin-bottom: 6px;"></div>
-        <div id="waifu-preview-rarity" style="font-size: 12px; font-weight: 800;"></div>
+
+        <!-- Miniaturas de Fotos -->
+        <div id="waifu-preview-thumbs" style="display: flex; gap: 6px; justify-content: center; margin-bottom: 10px; overflow-x: auto; padding: 4px 0;"></div>
+
+        <div id="waifu-preview-series" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"></div>
+        <div id="waifu-preview-gender" style="font-size: 12px; font-weight: 700; margin-bottom: 4px;"></div>
+        <div id="waifu-preview-rarity" style="font-size: 12px; font-weight: 800; margin-bottom: 8px;"></div>
+        <div id="waifu-preview-description" style="font-size: 12px; color: #475569; font-style: italic; max-height: 80px; overflow-y: auto; text-align: left; background: #fffdf5; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; display: none;"></div>
       </div>
-      <div class="modal-footer" style="justify-content: center;">
-        <button class="btn-retro btn-sm btn-gold" onclick="closeModal('modal-waifu-preview')">Fechar</button>
+      <div class="modal-footer" style="justify-content: space-between; gap: 8px;">
+        <button class="btn-retro btn-sm btn-gold" id="btn-preview-suggest" onclick="openSuggestFromPreview()">
+          <i class="fas fa-lightbulb"></i> Sugerir Alterações
+        </button>
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-waifu-preview')">Fechar</button>
       </div>
     </div>
   </div>

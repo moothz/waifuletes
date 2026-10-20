@@ -9,6 +9,13 @@ export interface UserRollsState {
   fullRechargeAt: Date;
 }
 
+export interface DailyCycleInfo {
+  previousCycleStart: Date;
+  currentCycleStart: Date;
+  nextReset: Date;
+  secondsUntilReset: number;
+}
+
 // Mapeamento de bônus de rolls por ID ou número do usuário (ex: doadores / VIPs).
 const USER_ROLL_BUFFS: Record<string, number> = {};
 
@@ -257,6 +264,35 @@ export class CooldownService {
     await this.redis.set(this.claimKey(userId), '1', 'EX', seconds);
   }
 
+  getDailyCycleInfo(date: Date = new Date()): DailyCycleInfo {
+    const resetHourUtc = config.DAILY_RESET_HOUR_UTC;
+    const resetMinuteUtc = config.DAILY_RESET_MINUTE_UTC || 0;
+    const todayReset = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), resetHourUtc, resetMinuteUtc, 0, 0)
+    );
+
+    let currentCycleStart: Date;
+    let nextReset: Date;
+
+    if (date.getTime() < todayReset.getTime()) {
+      nextReset = todayReset;
+      currentCycleStart = new Date(todayReset.getTime() - 24 * 60 * 60 * 1000);
+    } else {
+      currentCycleStart = todayReset;
+      nextReset = new Date(todayReset.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    const previousCycleStart = new Date(currentCycleStart.getTime() - 24 * 60 * 60 * 1000);
+    const secondsUntilReset = Math.max(1, Math.ceil((nextReset.getTime() - date.getTime()) / 1000));
+
+    return {
+      previousCycleStart,
+      currentCycleStart,
+      nextReset,
+      secondsUntilReset,
+    };
+  }
+
   async getDailyCooldown(userId: string): Promise<{ active: boolean; remainingSeconds: number; retryAfter?: Date }> {
     const ttl = await this.redis.ttl(this.dailyKey(userId));
     if (ttl > 0) {
@@ -269,13 +305,15 @@ export class CooldownService {
     return { active: false, remainingSeconds: 0 };
   }
 
-  async acquireDailyLock(userId: string, seconds = config.COOLDOWN_DAILY_SECONDS): Promise<boolean> {
-    const res = await this.redis.set(this.dailyKey(userId), '1', 'EX', seconds, 'NX');
+  async acquireDailyLock(userId: string, seconds?: number): Promise<boolean> {
+    const ttl = seconds ?? this.getDailyCycleInfo().secondsUntilReset;
+    const res = await this.redis.set(this.dailyKey(userId), '1', 'EX', ttl, 'NX');
     return res === 'OK';
   }
 
-  async setDailyCooldown(userId: string, seconds = config.COOLDOWN_DAILY_SECONDS): Promise<void> {
-    await this.redis.set(this.dailyKey(userId), '1', 'EX', seconds);
+  async setDailyCooldown(userId: string, seconds?: number): Promise<void> {
+    const ttl = seconds ?? this.getDailyCycleInfo().secondsUntilReset;
+    await this.redis.set(this.dailyKey(userId), '1', 'EX', ttl);
   }
 
   async setClaimLock(
