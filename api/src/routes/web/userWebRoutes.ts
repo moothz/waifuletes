@@ -171,8 +171,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const session = await webSessionService.validateUserSession(publicId, token);
       const isOwner = session.valid && session.userId === user.id;
 
-      // Busca o harém completo do usuário
-      const haremResult = await haremService.getUserHarem(user.id, 1, 200, 'keys');
+      // Busca o harém completo do usuário (sem teto artificial)
+      const haremResult = await haremService.getUserHarem(user.id, 1, 0, 'keys');
 
       if (isOwner) {
         const wishlistResult = await wishlistService.getWishlist(user.id);
@@ -194,6 +194,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             kakera: user.kakera,
             expiresIn: session.expiresIn,
             harem: enrichedHarem,
+            totalHarem: haremResult.total,
             wishlist: wishlistResult,
             covetedCharacterIds,
             inventory: session.inventory || null,
@@ -250,6 +251,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           name: user.name,
           kakera: user.kakera,
           harem: publicHarem,
+          totalHarem: haremResult.total,
           listings: publicListings,
         },
       });

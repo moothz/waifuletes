@@ -451,7 +451,8 @@ async function loadUserData() {
       : `Harém de ${userSessionData.name}`;
 
     const harem = userSessionData.harem || [];
-    document.getElementById('user-subtitle').textContent = `${harem.length} personagens colecionados no harém`;
+    const totalHaremCount = userSessionData.totalHarem !== undefined ? userSessionData.totalHarem : harem.length;
+    document.getElementById('user-subtitle').textContent = `${totalHaremCount} personagens colecionados no harém`;
 
     const zinthos = Number(userSessionData.kakera || 0).toLocaleString('pt-BR');
     const zinthosEl = document.getElementById('user-zinthos');
@@ -539,7 +540,8 @@ function sortHaremCards(harem) {
 
 function renderPrivateHarem(harem) {
   const grid = document.getElementById('harem-grid');
-  document.getElementById('harem-count').textContent = harem.length;
+  const totalCount = userSessionData?.totalHarem !== undefined ? userSessionData.totalHarem : harem.length;
+  document.getElementById('harem-count').textContent = totalCount;
 
   if (harem.length === 0) {
     grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Seu harém ainda está vazio. Jogue no WhatsApp usando !mu-roll para casar com waifus!</div>';
@@ -715,7 +717,8 @@ function renderPrivateWishlist(wishlist) {
 
 function renderPublicHarem(harem) {
   const haremCountBadge = document.getElementById('public-harem-count');
-  if (haremCountBadge) haremCountBadge.textContent = String(harem ? harem.length : 0);
+  const totalCount = userSessionData?.totalHarem !== undefined ? userSessionData.totalHarem : (harem ? harem.length : 0);
+  if (haremCountBadge) haremCountBadge.textContent = String(totalCount);
 
   const favoritesSection = document.getElementById('public-favorites-section');
   const favoritesGrid = document.getElementById('public-favorites-grid');
@@ -1110,7 +1113,12 @@ async function executeDivorce() {
 
     // Atualiza contadores
     userSessionData.harem = (userSessionData.harem || []).filter(h => h.character.id !== id);
-    document.getElementById('harem-count').textContent = userSessionData.harem.length;
+    if (userSessionData.totalHarem !== undefined && userSessionData.totalHarem > 0) {
+      userSessionData.totalHarem--;
+    }
+    const newCount = userSessionData.totalHarem !== undefined ? userSessionData.totalHarem : userSessionData.harem.length;
+    document.getElementById('harem-count').textContent = newCount;
+    document.getElementById('user-subtitle').textContent = `${newCount} personagens colecionados no harém`;
   } catch (err) {
     Api.showToast('Erro de comunicação ao divorciar.', '❌');
   }

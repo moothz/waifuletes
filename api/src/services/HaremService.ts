@@ -8,7 +8,8 @@ export class HaremService {
   ) {}
 
   async getUserHarem(userId: string, page = 1, limit = 20, sort: 'keys' | 'date' | 'rarity' = 'keys') {
-    const skip = (page - 1) * limit;
+    const skip = limit > 0 ? (page - 1) * limit : undefined;
+    const take = limit > 0 ? limit : undefined;
 
     let orderBy: any = [{ isFavorite: 'desc' }, { keys: 'desc' }, { character: { baseRarity: 'desc' } }, { character: { claimCount: 'desc' } }];
 
@@ -23,7 +24,7 @@ export class HaremService {
       this.prisma.haremEntry.findMany({
         where: { userId },
         skip,
-        take: limit,
+        take,
         orderBy,
         include: {
           character: true,
@@ -33,9 +34,9 @@ export class HaremService {
 
     return {
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      page: limit > 0 ? page : 1,
+      limit: limit > 0 ? limit : total,
+      totalPages: limit > 0 ? Math.ceil(total / limit) : 1,
       data: entries.map((e) => ({
         id: e.id,
         claimedAt: e.claimedAt,
