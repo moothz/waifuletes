@@ -44,6 +44,7 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
 
   let createdReportSuggestionId = '';
   let createdMultiReportId = '';
+  let createdEditSuggestionId = '';
 
   afterAll(async () => {
     if (!adminToken) {
@@ -96,6 +97,20 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
       console.log('Deleted multi-report telegram msg:', json);
     }
 
+    if (createdEditSuggestionId && adminToken) {
+      const res = await fetch(`${BASE_URL}/api/admin/suggestions/${createdEditSuggestionId}/telegram`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const json = await res.json().catch(() => null);
+      console.log('Deleted edit telegram msg:', json);
+
+      await fetch(`${BASE_URL}/api/admin/suggestions/${createdEditSuggestionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).catch(() => {});
+    }
+
     // 2. Restaura dados do personagem original
     if (testCharacterId && originalCharacterData && adminToken) {
       await fetch(`${BASE_URL}/api/admin/characters/${testCharacterId}`, {
@@ -109,6 +124,8 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
           series: originalCharacterData.series,
           description: originalCharacterData.description,
           baseRarity: originalCharacterData.baseRarity,
+          gender: originalCharacterData.gender,
+          tags: originalCharacterData.tags,
         }),
       });
     }
@@ -201,6 +218,95 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     expect(json.data).toHaveProperty('suggestion');
     expect(json.data.suggestion.status).toBe('PENDING');
     createdSuggestionId = json.data.suggestion.id;
+  });
+
+  it('Prisma Client SuggestionType deve conter todos os enums suportados (EDIT, RARITY, IMAGE, NEW_CHARACTER, DELETE_CHARACTER)', async () => {
+    const { SuggestionType } = await import('@prisma/client');
+    expect(SuggestionType.EDIT).toBe('EDIT');
+    expect(SuggestionType.RARITY).toBe('RARITY');
+    expect(SuggestionType.IMAGE).toBe('IMAGE');
+    expect(SuggestionType.NEW_CHARACTER).toBe('NEW_CHARACTER');
+    expect(SuggestionType.DELETE_CHARACTER).toBe('DELETE_CHARACTER');
+  });
+
+  it('POST /api/web/user/:publicId/suggestions deve rejeitar sugestão de edição sem alterações reais (400 NO_CHANGES)', async () => {
+    const res = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: testUserToken,
+        type: 'EDIT',
+        characterId: testCharacterId,
+        suggestedName: originalCharacterData.name,
+        suggestedSeries: originalCharacterData.series,
+        reason: 'Tentativa sem alteração real',
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('NO_CHANGES');
+  });
+
+  it('POST /api/web/user/:publicId/suggestions deve rejeitar sugestão de edição sem justificativa válida (400 REASON_REQUIRED)', async () => {
+    const res = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: testUserToken,
+        type: 'EDIT',
+        characterId: testCharacterId,
+        suggestedName: `${originalCharacterData.name} Editado`,
+        reason: 'abc', // < 5 caracteres
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('REASON_REQUIRED');
+  });
+
+  it('POST /api/web/user/:publicId/suggestions deve criar sugestão de alteração (type: EDIT) com campos completos', async () => {
+    const res = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: testUserToken,
+        type: 'EDIT',
+        characterId: testCharacterId,
+        suggestedName: `${originalCharacterData.name} Versão Sugerida`,
+        suggestedSeries: `${originalCharacterData.series} Série Sugerida`,
+        suggestedGender: 'OTHER',
+        suggestedDescription: 'Descrição completa sugerida pelo usuário no painel.',
+        suggestedTags: ['tag_edicao_1', 'tag_edicao_2'],
+        suggestedRarity: 'EPIC',
+        reason: 'Sugestão de alteração completa para testes automatizados.',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data).toHaveProperty('suggestion');
+    expect(json.data.suggestion.type).toBe('EDIT');
+    expect(json.data.suggestion.status).toBe('PENDING');
+    expect(json.data.suggestion.suggestedName).toBe(`${originalCharacterData.name} Versão Sugerida`);
+    expect(json.data.suggestion.suggestedGender).toBe('OTHER');
+    createdEditSuggestionId = json.data.suggestion.id;
+  });
+
+  it('GET /api/web/user/:publicId/suggestions deve listar sugestão de EDIT enviada pelo usuário', async () => {
+    const res = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions?token=${encodeURIComponent(testUserToken)}`);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    const list = Array.isArray(json.data) ? json.data : (json.data?.suggestions || []);
+    const found = list.find((s: any) => s.id === createdEditSuggestionId);
+    expect(found).toBeDefined();
+    expect(found.type).toBe('EDIT');
+    expect(found.suggestedName).toBe(`${originalCharacterData.name} Versão Sugerida`);
   });
 
   it('POST /characters/:id/report deve aceitar denúncia enviando publicId e characterId sem erro 500/P2003', async () => {
@@ -306,6 +412,27 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.data.suggestion.status).toBe('APPROVED');
+  });
+
+  it('POST /api/admin/suggestions/:id/approve deve aprovar sugestão de EDIT e atualizar o personagem no catálogo', async () => {
+    if (!createdEditSuggestionId) return;
+
+    const res = await fetch(`${BASE_URL}/api/admin/suggestions/${createdEditSuggestionId}/approve`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data.suggestion.status).toBe('APPROVED');
+
+    // Confere se o personagem recebeu os novos dados no catálogo
+    const charRes = await fetch(`${BASE_URL}/characters/${encodeURIComponent(testCharacterId)}`);
+    expect(charRes.status).toBe(200);
+    const charJson = await charRes.json();
+    expect(charJson.data.name).toBe(`${originalCharacterData.name} Versão Sugerida`);
+    expect(charJson.data.gender).toBe('OTHER');
+    expect(charJson.data.baseRarity).toBe('EPIC');
   });
 
   it('PUT /api/admin/characters/:id deve permitir ao admin editar nome e descrição diretamente', async () => {
