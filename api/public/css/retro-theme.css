@@ -150,6 +150,18 @@ body.dark-mode .modal-box {
   color: #f5f3ff;
 }
 
+body.dark-mode .modal-header {
+  background: var(--bg-card-subtle) !important;
+  border-bottom: 2px solid #9333ea !important;
+  color: #f5f3ff !important;
+}
+
+body.dark-mode .modal-close {
+  background: #27163f !important;
+  color: #f5f3ff !important;
+  border-color: #9333ea !important;
+}
+
 body.dark-mode .badge-wishes {
   background: #3b1d64;
   color: #e9d5ff;
@@ -844,7 +856,7 @@ body.dark-mode .waifu-card.rarity-common {
 
 .modal-header {
   padding: 14px 18px;
-  background: #fef08a;
+  background: var(--bg-retro-accent);
   border-bottom: var(--border-retro);
   display: flex;
   align-items: center;

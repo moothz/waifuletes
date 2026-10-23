@@ -399,7 +399,7 @@
         <button class="modal-close" onclick="closeModal('modal-suggest')">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: #fffdf5; padding: 10px; border: 1.5px solid #2d241e; border-radius: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: var(--bg-card-subtle); padding: 10px; border: var(--border-retro); border-radius: 4px;">
           <div>
             <h4 id="suggest-char-name" style="font-weight: 800; font-size: 16px; margin: 0;">Personagem</h4>
             <span id="suggest-char-series-badge" style="font-size: 12px; color: var(--text-muted); font-weight: 600;">Série</span>
@@ -483,7 +483,7 @@
           </div>
 
           <!-- Ação Selecionada para Foto (Adicionar, Excluir ou Substituir) -->
-          <div id="user-photo-action-box" class="hidden" style="background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px; margin-top: 10px;">
+          <div id="user-photo-action-box" class="hidden" style="background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 12px; margin-top: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <span id="user-photo-action-title" style="font-weight: 800; font-size: 13px;">Ação na Foto:</span>
               <button type="button" class="btn-retro btn-sm" onclick="cancelUserPhotoAction()" style="padding: 2px 8px; font-size: 11px;">Cancelar</button>
@@ -824,7 +824,7 @@
         <div id="waifu-preview-series" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"></div>
         <div id="waifu-preview-gender" style="font-size: 12px; font-weight: 700; margin-bottom: 4px;"></div>
         <div id="waifu-preview-rarity" style="font-size: 12px; font-weight: 800; margin-bottom: 8px;"></div>
-        <div id="waifu-preview-description" style="font-size: 12px; color: #475569; font-style: italic; max-height: 80px; overflow-y: auto; text-align: left; background: #fffdf5; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; display: none;"></div>
+        <div id="waifu-preview-description" style="font-size: 12px; color: var(--text-muted); font-style: italic; max-height: 80px; overflow-y: auto; text-align: left; background: var(--bg-card-subtle); border: 1px dashed var(--border-retro); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; display: none;"></div>
       </div>
       <div class="modal-footer" style="justify-content: space-between; gap: 8px;">
         <button class="btn-retro btn-sm btn-gold" id="btn-preview-suggest" onclick="openSuggestFromPreview()">
