@@ -309,6 +309,57 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     expect(found.suggestedName).toBe(`${originalCharacterData.name} Versão Sugerida`);
   });
 
+  it('debounce: requisições concorrentes ou duplicadas devem retornar a mesma sugestão sem duplicar no banco', async () => {
+    const payload = {
+      token: testUserToken,
+      type: 'EDIT',
+      characterId: testCharacterId,
+      suggestedName: `${originalCharacterData.name} Debounce Teste`,
+      reason: 'Sugestão para validar debounce no servidor',
+    };
+
+    // Envia 2 requisições concorrentes idênticas no mesmo instante
+    const [res1, res2] = await Promise.all([
+      fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    ]);
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+
+    const json1 = await res1.json();
+    const json2 = await res2.json();
+
+    expect(json1.success).toBe(true);
+    expect(json2.success).toBe(true);
+    // Ambos devem retornar exatamente o mesmo ID de sugestão (reutilizado pelo debounce)
+    expect(json1.data.suggestion.id).toBe(json2.data.suggestion.id);
+
+    // Limpa a sugestão criada do teste
+    if (json1.data?.suggestion?.id && adminToken) {
+      await fetch(`${BASE_URL}/api/admin/suggestions/${json1.data.suggestion.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).catch(() => {});
+    }
+  });
+
+  it('horário formatado no serviço de Telegram deve conter GMT-3 e fuso de Brasília', async () => {
+    const { TelegramNotificationService } = await import('../src/services/TelegramNotificationService.js');
+    const service = new TelegramNotificationService();
+    const formatted = service.formatBrazilDateTime(new Date('2026-10-22T21:00:00Z'));
+    expect(formatted).toContain('(GMT-3)');
+    expect(formatted).toContain('18:00:00'); // 21:00 UTC = 18:00 BRT
+  });
+
   it('POST /characters/:id/report deve aceitar denúncia enviando publicId e characterId sem erro 500/P2003', async () => {
     const res = await fetch(`${BASE_URL}/characters/${encodeURIComponent(testCharacterId)}/report`, {
       method: 'POST',

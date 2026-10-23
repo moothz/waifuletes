@@ -22,6 +22,7 @@ export interface SuggestionNotifyData {
   reason?: string | null;
   imageUrl?: string | null;
   userName?: string | null;
+  userId?: string | null;
   character?: {
     id: string;
     name: string;
@@ -63,10 +64,38 @@ export class TelegramNotificationService {
   }
 
   /**
+   * Formata data e hora no fuso horário oficial (Brasília / GMT-3)
+   */
+  formatBrazilDateTime(date: Date = new Date()): string {
+    const formatted = date.toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    return `${formatted} (GMT-3)`;
+  }
+
+  /**
    * Notifica o grupo do Telegram sobre uma nova sugestão enviada no site
    */
   async notifySuggestion(data: SuggestionNotifyData): Promise<void> {
     if (!this.isConfigured) return;
+
+    // Não envia notificações de testes automatizados para o grupo oficial
+    if (
+      process.env.VITEST ||
+      process.env.NODE_ENV === 'test' ||
+      data.userName?.toLowerCase().includes('teste') ||
+      data.userName?.toLowerCase().includes('tester') ||
+      data.userId?.startsWith('test_') ||
+      data.reason?.toLowerCase().includes('teste automatizado')
+    ) {
+      return;
+    }
 
     try {
       let title = '💡 <b>Nova Sugestão de Usuário</b>';
@@ -119,7 +148,7 @@ export class TelegramNotificationService {
       }
 
       text += `🙋 <b>Sugerido por:</b> ${this.escapeHtml(data.userName || 'Anônimo na Web')}\n`;
-      text += `📅 <b>Data:</b> ${new Date().toLocaleString('pt-BR')}`;
+      text += `📅 <b>Data:</b> ${this.formatBrazilDateTime()}`;
 
       const replyMarkup = {
         inline_keyboard: [
@@ -207,6 +236,18 @@ export class TelegramNotificationService {
   async notifyMultiRollReport(data: MultiRollReportData): Promise<void> {
     if (!this.isConfigured) return;
 
+    // Não envia mensagens de testes automatizados para o grupo oficial
+    if (
+      process.env.VITEST ||
+      process.env.NODE_ENV === 'test' ||
+      data.userName?.toLowerCase().includes('teste') ||
+      data.userName?.toLowerCase().includes('tester') ||
+      data.userId?.startsWith('test_') ||
+      data.reason?.toLowerCase().includes('teste de múltiplos rolls')
+    ) {
+      return;
+    }
+
     try {
       const title = '🚨 <b>Denúncia de Rolls Múltiplos Waifuletes</b> 🚨';
       let text = `${title}\n\n`;
@@ -214,7 +255,8 @@ export class TelegramNotificationService {
       if (data.source) {
         text += `👥 <b>Origem:</b> ${this.escapeHtml(data.source)}\n`;
       }
-      text += `🎲 <b>Total de Personagens:</b> ${data.slots.length}\n\n`;
+      text += `🎲 <b>Total de Personagens:</b> ${data.slots.length}\n`;
+      text += `📅 <b>Data:</b> ${this.formatBrazilDateTime()}\n\n`;
 
       const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
       const rarityEmoji: Record<string, string> = {
@@ -313,7 +355,7 @@ export class TelegramNotificationService {
         await this.answerCallback(queryId, '✅ Sugestão aceita e aplicada com sucesso!');
 
         // Atualiza mensagem no Telegram
-        const appendText = `\n\n✅ <b>APROVADA E APLICADA</b> por ${this.escapeHtml(moderatorName)} em ${new Date().toLocaleString('pt-BR')}`;
+        const appendText = `\n\n✅ <b>APROVADA E APLICADA</b> por ${this.escapeHtml(moderatorName)} em ${this.formatBrazilDateTime()}`;
         await this.updateTelegramMessage(chatId, messageId, message, appendText);
       } else if (data.startsWith('sug_rej:')) {
         const suggestionId = data.replace('sug_rej:', '');
@@ -322,7 +364,7 @@ export class TelegramNotificationService {
         await this.answerCallback(queryId, '❌ Sugestão rejeitada com sucesso.');
 
         // Atualiza mensagem no Telegram
-        const appendText = `\n\n❌ <b>RECUSADA</b> por ${this.escapeHtml(moderatorName)} em ${new Date().toLocaleString('pt-BR')}`;
+        const appendText = `\n\n❌ <b>RECUSADA</b> por ${this.escapeHtml(moderatorName)} em ${this.formatBrazilDateTime()}`;
         await this.updateTelegramMessage(chatId, messageId, message, appendText);
       } else if (data.startsWith('mr_del:')) {
         const parts = data.replace('mr_del:', '').split(':');
@@ -378,7 +420,7 @@ export class TelegramNotificationService {
         );
 
         const newMarkup = this.buildMultiRollKeyboard(reportId, reportData.slots);
-        const appendText = `\n⚠️ Personagem #${slotNumber} (${this.escapeHtml(slotItem.characterName || slotItem.characterId)}) removido por ${this.escapeHtml(moderatorName)} às ${new Date().toLocaleTimeString('pt-BR')}.`;
+        const appendText = `\n⚠️ Personagem #${slotNumber} (${this.escapeHtml(slotItem.characterName || slotItem.characterId)}) removido por ${this.escapeHtml(moderatorName)} em ${this.formatBrazilDateTime()}.`;
         await this.updateTelegramMessage(chatId, messageId, message, appendText, newMarkup);
       } else if (data.startsWith('mr_done:')) {
         await this.answerCallback(queryId, 'Este personagem já foi removido.');
@@ -386,7 +428,7 @@ export class TelegramNotificationService {
         const reportId = data.replace('mr_ign:', '');
         await this.answerCallback(queryId, 'Denúncia finalizada e descartada.');
 
-        const appendText = `\n\n📁 <b>Denúncia finalizada</b> por ${this.escapeHtml(moderatorName)} em ${new Date().toLocaleString('pt-BR')}`;
+        const appendText = `\n\n📁 <b>Denúncia finalizada</b> por ${this.escapeHtml(moderatorName)} em ${this.formatBrazilDateTime()}`;
         await this.updateTelegramMessage(chatId, messageId, message, appendText, { inline_keyboard: [] });
       } else {
         await this.answerCallback(queryId, 'Comando não reconhecido.');

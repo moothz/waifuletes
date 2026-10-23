@@ -2,7 +2,7 @@ import { PrismaClient, SuggestionType, SuggestionStatus, Rarity, Gender } from '
 import { Redis } from 'ioredis';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { DomainError } from '../errors/DomainError.js';
 import { CharacterService, slugify } from './CharacterService.js';
@@ -44,42 +44,48 @@ export class SuggestionService {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
 
-    const suggestion = await this.prisma.characterSuggestion.create({
-      data: {
-        characterId: character.id,
-        userId: user.id,
+    const fingerprint = createHash('sha256')
+      .update(`rarity:${user.id}:${character.id}:${suggestedRarity}`)
+      .digest('hex');
+
+    return this.executeWithDebounce(fingerprint, async () => {
+      const suggestion = await this.prisma.characterSuggestion.create({
+        data: {
+          characterId: character.id,
+          userId: user.id,
+          type: 'RARITY',
+          status: 'PENDING',
+          currentRarity: character.baseRarity,
+          suggestedRarity,
+          reason: reason.trim(),
+        },
+        include: {
+          character: {
+            select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+          },
+        },
+      });
+
+      // Notifica Telegram
+      await this.telegramService.notifySuggestion({
+        id: suggestion.id,
         type: 'RARITY',
-        status: 'PENDING',
+        characterId: character.id,
         currentRarity: character.baseRarity,
         suggestedRarity,
         reason: reason.trim(),
-      },
-      include: {
+        userName: user?.name || userId,
         character: {
-          select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+          id: character.id,
+          name: character.name,
+          series: character.series,
+          baseRarity: character.baseRarity,
+          imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
         },
-      },
+      }).catch((err) => console.error('Telegram notification error:', err));
+
+      return suggestion;
     });
-
-    // Notifica Telegram
-    await this.telegramService.notifySuggestion({
-      id: suggestion.id,
-      type: 'RARITY',
-      characterId: character.id,
-      currentRarity: character.baseRarity,
-      suggestedRarity,
-      reason: reason.trim(),
-      userName: user?.name || userId,
-      character: {
-        id: character.id,
-        name: character.name,
-        series: character.series,
-        baseRarity: character.baseRarity,
-        imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
-      },
-    }).catch((err) => console.error('Telegram notification error:', err));
-
-    return suggestion;
   }
 
   /**
@@ -114,20 +120,6 @@ export class SuggestionService {
       }
     }
 
-    let relPath: string | null = null;
-    const suggestionId = randomUUID();
-
-    if (imageBuffer && imageBuffer.length > 0) {
-      const fileName = `${suggestionId}.png`;
-      const suggestionsDir = path.resolve(config.MEDIA_DIR, 'suggestions');
-
-      await fs.mkdir(suggestionsDir, { recursive: true });
-      const filePath = path.join(suggestionsDir, fileName);
-      await fs.writeFile(filePath, imageBuffer);
-
-      relPath = `suggestions/${fileName}`;
-    }
-
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ id: userId }, { publicId: userId }] },
       select: { id: true, name: true },
@@ -136,48 +128,69 @@ export class SuggestionService {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
 
-    const actionMetadata = (action === 'DELETE' || action === 'REPLACE')
-      ? JSON.stringify({ action, targetPhoto })
-      : null;
+    const imgHash = imageBuffer ? createHash('md5').update(imageBuffer).digest('hex') : 'no_img';
+    const fingerprint = createHash('sha256')
+      .update(`image:${user.id}:${character.id}:${action}:${targetPhoto || ''}:${imgHash}`)
+      .digest('hex');
 
-    const suggestion = await this.prisma.characterSuggestion.create({
-      data: {
-        id: suggestionId,
-        characterId: character.id,
-        userId: user.id,
-        type: 'IMAGE',
-        status: 'PENDING',
-        imageUrl: relPath,
-        description: actionMetadata,
-        reason: reason ? reason.trim() : null,
-      },
-      include: {
-        character: {
-          select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+    return this.executeWithDebounce(fingerprint, async () => {
+      let relPath: string | null = null;
+      const suggestionId = randomUUID();
+
+      if (imageBuffer && imageBuffer.length > 0) {
+        const fileName = `${suggestionId}.png`;
+        const suggestionsDir = path.resolve(config.MEDIA_DIR, 'suggestions');
+
+        await fs.mkdir(suggestionsDir, { recursive: true });
+        const filePath = path.join(suggestionsDir, fileName);
+        await fs.writeFile(filePath, imageBuffer);
+
+        relPath = `suggestions/${fileName}`;
+      }
+
+      const actionMetadata = (action === 'DELETE' || action === 'REPLACE')
+        ? JSON.stringify({ action, targetPhoto })
+        : null;
+
+      const suggestion = await this.prisma.characterSuggestion.create({
+        data: {
+          id: suggestionId,
+          characterId: character.id,
+          userId: user.id,
+          type: 'IMAGE',
+          status: 'PENDING',
+          imageUrl: relPath,
+          description: actionMetadata,
+          reason: reason ? reason.trim() : null,
         },
-      },
+        include: {
+          character: {
+            select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+          },
+        },
+      });
+
+      // Notifica Telegram
+      await this.telegramService.notifySuggestion({
+        id: suggestion.id,
+        type: 'IMAGE',
+        characterId: character.id,
+        imageUrl: relPath,
+        photoAction: action,
+        targetPhoto,
+        reason: reason ? reason.trim() : null,
+        userName: user.name || userId,
+        character: {
+          id: character.id,
+          name: character.name,
+          series: character.series,
+          baseRarity: character.baseRarity,
+          imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
+        },
+      }).catch((err) => console.error('Telegram notification error:', err));
+
+      return suggestion;
     });
-
-    // Notifica Telegram
-    await this.telegramService.notifySuggestion({
-      id: suggestion.id,
-      type: 'IMAGE',
-      characterId: character.id,
-      imageUrl: relPath,
-      photoAction: action,
-      targetPhoto,
-      reason: reason ? reason.trim() : null,
-      userName: user.name || userId,
-      character: {
-        id: character.id,
-        name: character.name,
-        series: character.series,
-        baseRarity: character.baseRarity,
-        imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
-      },
-    }).catch((err) => console.error('Telegram notification error:', err));
-
-    return suggestion;
   }
 
   /**
@@ -226,54 +239,62 @@ export class SuggestionService {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
 
-    const suggestion = await this.prisma.characterSuggestion.create({
-      data: {
-        characterId: character.id,
-        userId: user.id,
+    const fingerprint = createHash('sha256')
+      .update(
+        `edit:${user.id}:${character.id}:${data.suggestedName || ''}:${data.suggestedSeries || ''}:${data.suggestedGender || ''}:${data.suggestedRarity || ''}:${(data.suggestedTags || []).join(',')}:${data.suggestedDescription || ''}`
+      )
+      .digest('hex');
+
+    return this.executeWithDebounce(fingerprint, async () => {
+      const suggestion = await this.prisma.characterSuggestion.create({
+        data: {
+          characterId: character.id,
+          userId: user.id,
+          type: 'EDIT',
+          status: 'PENDING',
+          characterName: character.name,
+          series: character.series,
+          description: character.description,
+          currentRarity: character.baseRarity,
+          suggestedName: data.suggestedName?.trim() || null,
+          suggestedSeries: data.suggestedSeries?.trim() || null,
+          suggestedGender: data.suggestedGender || null,
+          suggestedDescription: data.suggestedDescription !== undefined ? data.suggestedDescription.trim() : null,
+          suggestedRarity: data.suggestedRarity || null,
+          suggestedTags: data.suggestedTags || [],
+          reason: data.reason.trim(),
+        },
+        include: {
+          character: {
+            select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+          },
+        },
+      });
+
+      // Notifica Telegram
+      await this.telegramService.notifySuggestion({
+        id: suggestion.id,
         type: 'EDIT',
-        status: 'PENDING',
-        characterName: character.name,
-        series: character.series,
-        description: character.description,
-        currentRarity: character.baseRarity,
+        characterId: character.id,
         suggestedName: data.suggestedName?.trim() || null,
         suggestedSeries: data.suggestedSeries?.trim() || null,
         suggestedGender: data.suggestedGender || null,
         suggestedDescription: data.suggestedDescription !== undefined ? data.suggestedDescription.trim() : null,
         suggestedRarity: data.suggestedRarity || null,
-        suggestedTags: data.suggestedTags || [],
+        suggestedTags: data.suggestedTags || null,
         reason: data.reason.trim(),
-      },
-      include: {
+        userName: user.name || userId,
         character: {
-          select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+          id: character.id,
+          name: character.name,
+          series: character.series,
+          baseRarity: character.baseRarity,
+          imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
         },
-      },
+      }).catch((err) => console.error('Telegram notification error:', err));
+
+      return suggestion;
     });
-
-    // Notifica Telegram
-    await this.telegramService.notifySuggestion({
-      id: suggestion.id,
-      type: 'EDIT',
-      characterId: character.id,
-      suggestedName: data.suggestedName?.trim() || null,
-      suggestedSeries: data.suggestedSeries?.trim() || null,
-      suggestedGender: data.suggestedGender || null,
-      suggestedDescription: data.suggestedDescription !== undefined ? data.suggestedDescription.trim() : null,
-      suggestedRarity: data.suggestedRarity || null,
-      suggestedTags: data.suggestedTags || null,
-      reason: data.reason.trim(),
-      userName: user.name || userId,
-      character: {
-        id: character.id,
-        name: character.name,
-        series: character.series,
-        baseRarity: character.baseRarity,
-        imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
-      },
-    }).catch((err) => console.error('Telegram notification error:', err));
-
-    return suggestion;
   }
 
   /**
@@ -298,18 +319,6 @@ export class SuggestionService {
       throw new DomainError('INVALID_SERIES', 'A série/origem deve conter ao menos 2 caracteres.', 400);
     }
 
-    let relPath: string | null = null;
-    const suggestionId = randomUUID();
-
-    if (data.imageBuffer && data.imageBuffer.length > 0) {
-      const fileName = `${suggestionId}.png`;
-      const suggestionsDir = path.resolve(config.MEDIA_DIR, 'suggestions');
-      await fs.mkdir(suggestionsDir, { recursive: true });
-      const filePath = path.join(suggestionsDir, fileName);
-      await fs.writeFile(filePath, data.imageBuffer);
-      relPath = `suggestions/${fileName}`;
-    }
-
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ id: userId }, { publicId: userId }] },
       select: { id: true, name: true },
@@ -318,35 +327,56 @@ export class SuggestionService {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
 
-    const suggestion = await this.prisma.characterSuggestion.create({
-      data: {
-        id: suggestionId,
-        userId: user.id,
+    const imgHash = data.imageBuffer ? createHash('md5').update(data.imageBuffer).digest('hex') : 'no_img';
+    const fingerprint = createHash('sha256')
+      .update(
+        `new_char:${user.id}:${data.name.trim().toLowerCase()}:${data.series.trim().toLowerCase()}:${data.rarity}:${imgHash}`
+      )
+      .digest('hex');
+
+    return this.executeWithDebounce(fingerprint, async () => {
+      let relPath: string | null = null;
+      const suggestionId = randomUUID();
+
+      if (data.imageBuffer && data.imageBuffer.length > 0) {
+        const fileName = `${suggestionId}.png`;
+        const suggestionsDir = path.resolve(config.MEDIA_DIR, 'suggestions');
+        await fs.mkdir(suggestionsDir, { recursive: true });
+        const filePath = path.join(suggestionsDir, fileName);
+        await fs.writeFile(filePath, data.imageBuffer);
+        relPath = `suggestions/${fileName}`;
+      }
+
+      const suggestion = await this.prisma.characterSuggestion.create({
+        data: {
+          id: suggestionId,
+          userId: user.id,
+          type: 'NEW_CHARACTER',
+          status: 'PENDING',
+          characterName: data.name.trim(),
+          series: data.series.trim(),
+          description: data.description ? data.description.trim() : null,
+          suggestedRarity: data.rarity || 'COMMON',
+          imageUrl: relPath,
+          reason: data.reason ? data.reason.trim() : null,
+        },
+      });
+
+      // Notifica Telegram
+      await this.telegramService.notifySuggestion({
+        id: suggestion.id,
         type: 'NEW_CHARACTER',
-        status: 'PENDING',
         characterName: data.name.trim(),
         series: data.series.trim(),
         description: data.description ? data.description.trim() : null,
         suggestedRarity: data.rarity || 'COMMON',
         imageUrl: relPath,
         reason: data.reason ? data.reason.trim() : null,
-      },
+        userName: user.name || userId,
+      }).catch((err) => console.error('Telegram notification error:', err));
+
+      return suggestion;
     });
-
-    // Notifica Telegram
-    await this.telegramService.notifySuggestion({
-      id: suggestion.id,
-      type: 'NEW_CHARACTER',
-      characterName: data.name.trim(),
-      series: data.series.trim(),
-      description: data.description ? data.description.trim() : null,
-      suggestedRarity: data.rarity || 'COMMON',
-      imageUrl: relPath,
-      reason: data.reason ? data.reason.trim() : null,
-      userName: user.name || userId,
-    }).catch((err) => console.error('Telegram notification error:', err));
-
-    return suggestion;
   }
 
   /**
@@ -371,38 +401,44 @@ export class SuggestionService {
       }
     }
 
-    const suggestion = await this.prisma.characterSuggestion.create({
-      data: {
-        characterId: character.id,
-        userId: resolvedUserId,
-        type: 'DELETE_CHARACTER',
-        status: 'PENDING',
-        reason: reason ? reason.trim() : 'Conteúdo inadequado ou denúncia de exclusão (🔞).',
-      },
-      include: {
-        character: {
-          select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+    const fingerprint = createHash('sha256')
+      .update(`delete:${resolvedUserId || userId || 'anon'}:${character.id}:${(reason || '').trim()}`)
+      .digest('hex');
+
+    return this.executeWithDebounce(fingerprint, async () => {
+      const suggestion = await this.prisma.characterSuggestion.create({
+        data: {
+          characterId: character.id,
+          userId: resolvedUserId,
+          type: 'DELETE_CHARACTER',
+          status: 'PENDING',
+          reason: reason ? reason.trim() : 'Conteúdo inadequado ou denúncia de exclusão (🔞).',
         },
-      },
+        include: {
+          character: {
+            select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+          },
+        },
+      });
+
+      // Notifica Telegram
+      await this.telegramService.notifySuggestion({
+        id: suggestion.id,
+        type: 'DELETE_CHARACTER',
+        characterId: character.id,
+        reason: reason ? reason.trim() : 'Conteúdo inadequado ou denúncia de exclusão (🔞).',
+        userName,
+        character: {
+          id: character.id,
+          name: character.name,
+          series: character.series,
+          baseRarity: character.baseRarity,
+          imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
+        },
+      }).catch((err) => console.error('Telegram notification error:', err));
+
+      return suggestion;
     });
-
-    // Notifica Telegram
-    await this.telegramService.notifySuggestion({
-      id: suggestion.id,
-      type: 'DELETE_CHARACTER',
-      characterId: character.id,
-      reason: reason ? reason.trim() : 'Conteúdo inadequado ou denúncia de exclusão (🔞).',
-      userName,
-      character: {
-        id: character.id,
-        name: character.name,
-        series: character.series,
-        baseRarity: character.baseRarity,
-        imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
-      },
-    }).catch((err) => console.error('Telegram notification error:', err));
-
-    return suggestion;
   }
 
   /**
@@ -873,27 +909,34 @@ export class SuggestionService {
     userName?: string | null;
     source?: string | null;
   }) {
-    const reportId = randomUUID().replace(/-/g, '').slice(0, 12);
+    const slotsKey = (data.slots || []).map((s) => `${s.slot}:${s.characterId || ''}`).join(',');
+    const fingerprint = createHash('sha256')
+      .update(`multireport:${data.userId || 'anon'}:${slotsKey}:${(data.reason || '').trim()}`)
+      .digest('hex');
 
-    await this.telegramService.notifyMultiRollReport({
-      id: reportId,
-      slots: (data.slots || []).map((s) => ({
-        slot: s.slot,
-        characterId: s.characterId || null,
-        characterName: s.characterName || null,
-        series: s.series || null,
-        rarity: s.rarity || 'COMMON',
-        imageUrl: s.imageUrl || null,
-        removed: false,
-      })),
-      gridImageBase64: data.gridImageBase64,
-      reason: data.reason,
-      userId: data.userId,
-      userName: data.userName,
-      source: data.source,
+    return this.executeWithDebounce(fingerprint, async () => {
+      const reportId = randomUUID().replace(/-/g, '').slice(0, 12);
+
+      await this.telegramService.notifyMultiRollReport({
+        id: reportId,
+        slots: (data.slots || []).map((s) => ({
+          slot: s.slot,
+          characterId: s.characterId || null,
+          characterName: s.characterName || null,
+          series: s.series || null,
+          rarity: s.rarity || 'COMMON',
+          imageUrl: s.imageUrl || null,
+          removed: false,
+        })),
+        gridImageBase64: data.gridImageBase64,
+        reason: data.reason,
+        userId: data.userId,
+        userName: data.userName,
+        source: data.source,
+      });
+
+      return { id: reportId, slotsCount: (data.slots || []).length };
     });
-
-    return { id: reportId, slotsCount: (data.slots || []).length };
   }
 
   /**
@@ -942,5 +985,72 @@ export class SuggestionService {
         await this.redis.del(...keys);
       }
     } catch (_) {}
+  }
+
+  /**
+   * Executa uma ação com debounce em nível de Redis baseado em um fingerprint dos dados.
+   * Se uma solicitação idêntica for enviada concorrentemente ou dentro da janela de TTL,
+   * retorna o resultado já existente sem duplicar registros no banco ou notificações no Telegram.
+   */
+  private async executeWithDebounce<T>(
+    fingerprint: string,
+    action: () => Promise<T>,
+    ttlSeconds = 15
+  ): Promise<T> {
+    const cacheKey = `suggestion:debounce:${fingerprint}`;
+    const lockKey = `suggestion:lock:${fingerprint}`;
+
+    // 1. Se já temos o resultado recente em cache, retorna diretamente
+    if (this.redis) {
+      try {
+        const cached = await this.redis.get(cacheKey);
+        if (cached) {
+          return JSON.parse(cached) as T;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Tenta adquirir o lock atômico para esta solicitação
+    let acquired = false;
+    if (this.redis) {
+      try {
+        const res = await this.redis.set(lockKey, '1', 'EX', 10, 'NX');
+        acquired = res === 'OK';
+      } catch (_) {
+        acquired = true; // Se o Redis falhar, prossegue normalmente
+      }
+    } else {
+      acquired = true;
+    }
+
+    if (!acquired && this.redis) {
+      // 3. Outra requisição idêntica está em processamento concorrente no mesmo instante.
+      // Aguarda até 3 segundos pela conclusão da primeira e retorno do cache.
+      for (let i = 0; i < 30; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        try {
+          const cached = await this.redis.get(cacheKey);
+          if (cached) {
+            return JSON.parse(cached) as T;
+          }
+        } catch (_) {}
+      }
+    }
+
+    try {
+      const result = await action();
+      if (this.redis) {
+        try {
+          await this.redis.set(cacheKey, JSON.stringify(result), 'EX', ttlSeconds);
+        } catch (_) {}
+      }
+      return result;
+    } finally {
+      if (acquired && this.redis) {
+        try {
+          await this.redis.del(lockKey);
+        } catch (_) {}
+      }
+    }
   }
 }

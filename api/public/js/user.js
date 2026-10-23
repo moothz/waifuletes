@@ -266,8 +266,8 @@ function setupEventListeners() {
     });
   }
 
-  // Envio de sugestão de imagem recortada
-  const btnSubmitImg = document.getElementById('btn-submit-image') || document.getElementById('btn-submit-crop');
+  // Envio de sugestão de imagem recortada (se botão separado sem onclick existir)
+  const btnSubmitImg = document.getElementById('btn-submit-image');
   if (btnSubmitImg) {
     btnSubmitImg.addEventListener('click', typeof submitImageSuggestion !== 'undefined' ? submitImageSuggestion : submitCroppedImage);
   }
@@ -1444,7 +1444,10 @@ function cancelUserPhotoAction() {
   userTargetPhoto = null;
 }
 
+let isSubmittingSuggestion = false;
+
 async function submitUserDeletePhotoSuggestion() {
+  if (isSubmittingSuggestion) return;
   if (!activeSuggestCharacter || !userTargetPhoto) return;
   const reasonInput = document.getElementById('user-photo-delete-reason');
   const reason = reasonInput ? reasonInput.value.trim() : '';
@@ -1454,6 +1457,7 @@ async function submitUserDeletePhotoSuggestion() {
     return;
   }
 
+  isSubmittingSuggestion = true;
   try {
     const res = await Api.post(`/api/web/user/${userPublicId}/suggestions`, {
       token: userSessionToken,
@@ -1474,19 +1478,28 @@ async function submitUserDeletePhotoSuggestion() {
     if (typeof loadUserSuggestions === 'function') loadUserSuggestions();
   } catch (err) {
     Api.showToast('Erro de comunicação ao enviar sugestão.', '❌');
+  } finally {
+    isSubmittingSuggestion = false;
   }
 }
 
 async function submitUserPhotoCropSuggestion() {
+  if (isSubmittingSuggestion) return;
   if (!activeSuggestCharacter || !cropperInstance) return;
 
+  const btnCrop = document.getElementById('btn-submit-crop');
   const reasonEl = document.getElementById('suggest-photo-reason');
   const reason = reasonEl ? reasonEl.value.trim() : '';
 
   const canvas = cropperInstance.getCroppedCanvas({ width: 450, height: 700 });
+  if (btnCrop) btnCrop.disabled = true;
+  isSubmittingSuggestion = true;
+
   canvas.toBlob(async (blob) => {
     if (!blob) {
       Api.showToast('Falha ao processar recorte de imagem.', '❌');
+      if (btnCrop) btnCrop.disabled = false;
+      isSubmittingSuggestion = false;
       return;
     }
 
@@ -1516,11 +1529,15 @@ async function submitUserPhotoCropSuggestion() {
       if (typeof loadUserSuggestions === 'function') loadUserSuggestions();
     } catch (err) {
       Api.showToast('Erro de comunicação ao enviar imagem.', '❌');
+    } finally {
+      if (btnCrop) btnCrop.disabled = false;
+      isSubmittingSuggestion = false;
     }
   }, 'image/png');
 }
 
 async function submitEditInfoSuggestion() {
+  if (isSubmittingSuggestion) return;
   if (!activeSuggestCharacter) return;
 
   const suggestedName = document.getElementById('suggest-edit-name')?.value.trim();
@@ -1536,6 +1553,10 @@ async function submitEditInfoSuggestion() {
     Api.showToast('Por favor, informe uma justificativa válida com pelo menos 5 caracteres.', '⚠️');
     return;
   }
+
+  const btnEdit = document.getElementById('btn-submit-edit-info');
+  if (btnEdit) btnEdit.disabled = true;
+  isSubmittingSuggestion = true;
 
   try {
     const res = await Api.post(`/api/web/user/${userPublicId}/suggestions`, {
@@ -1561,6 +1582,9 @@ async function submitEditInfoSuggestion() {
     if (typeof loadUserSuggestions === 'function') loadUserSuggestions();
   } catch (err) {
     Api.showToast('Erro de comunicação ao enviar sugestão.', '❌');
+  } finally {
+    if (btnEdit) btnEdit.disabled = false;
+    isSubmittingSuggestion = false;
   }
 }
 
