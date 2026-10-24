@@ -309,7 +309,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'object',
         properties: {
           status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED', 'all'], default: 'PENDING' },
-          type: { type: 'string', enum: ['RARITY', 'IMAGE'] },
+          type: { type: 'string', enum: ['RARITY', 'IMAGE', 'EDIT', 'NEW_CHARACTER', 'DELETE_CHARACTER'] },
           page: { type: 'integer', minimum: 1, default: 1 },
           limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
         },
@@ -347,7 +347,8 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
     },
     handler: async (request, reply) => {
       const { id } = request.params as { id: string };
-      const result = await suggestionService.approveSuggestion(id, 'admin');
+      const body = (request.body || {}) as { overrideRarity?: string };
+      const result = await suggestionService.approveSuggestion(id, 'admin', body.overrideRarity);
       return reply.send(result);
     },
   });
@@ -470,6 +471,69 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send({
         success: true,
         data: { message: 'Sugestão removida com sucesso.' },
+      });
+    },
+  });
+
+  /**
+   * Bloqueia um usuário para não enviar sugestões (24h, 7d, 30d ou pra sempre)
+   */
+  fastify.post('/api/admin/users/:userId/block-suggestions', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Bloqueia um usuário de enviar sugestões por 24h, 7d, 30d ou permanentemente',
+      tags: ['Admin (Web)'],
+      params: {
+        type: 'object',
+        required: ['userId'],
+        properties: { userId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['duration'],
+        additionalProperties: false,
+        properties: {
+          duration: { type: 'string', enum: ['24h', '7d', '30d', 'forever'] },
+          reason: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      const { duration, reason } = request.body as { duration: any; reason?: string };
+      const blockInfo = await suggestionService.blockUserFromSuggestions(userId, duration, reason);
+      return reply.send({
+        success: true,
+        data: {
+          message: `Usuário bloqueado de enviar sugestões com sucesso (${duration === 'forever' ? 'permanente' : duration}).`,
+          blockInfo,
+        },
+      });
+    },
+  });
+
+  /**
+   * Desbloqueia um usuário para permitir envio de sugestões
+   */
+  fastify.post('/api/admin/users/:userId/unblock-suggestions', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Remove o bloqueio de envio de sugestões de um usuário',
+      tags: ['Admin (Web)'],
+      params: {
+        type: 'object',
+        required: ['userId'],
+        properties: { userId: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.params as { userId: string };
+      await suggestionService.unblockUserFromSuggestions(userId);
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Usuário desbloqueado com sucesso.',
+        },
       });
     },
   });

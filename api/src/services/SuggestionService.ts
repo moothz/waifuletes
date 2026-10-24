@@ -8,6 +8,16 @@ import { DomainError } from '../errors/DomainError.js';
 import { CharacterService, slugify } from './CharacterService.js';
 import { TelegramNotificationService } from './TelegramNotificationService.js';
 
+export type SuggestionBlockDuration = '24h' | '7d' | '30d' | 'forever';
+
+export interface UserSuggestionBlockInfo {
+  userId: string;
+  duration: SuggestionBlockDuration;
+  blockedAt: string;
+  expiresAt: string | null;
+  reason?: string;
+}
+
 export class SuggestionService {
   private telegramService: TelegramNotificationService;
 
@@ -17,6 +27,127 @@ export class SuggestionService {
     private characterService: CharacterService
   ) {
     this.telegramService = new TelegramNotificationService(this.redis);
+  }
+
+  /**
+   * Obtém informações de casamento de um personagem
+   */
+  async getCharacterMarriage(characterId: string, suggesterUserId?: string | null) {
+    const haremEntry = await this.prisma.haremEntry.findUnique({
+      where: { characterId },
+      include: {
+        user: {
+          select: { id: true, name: true, publicId: true },
+        },
+      },
+    });
+
+    if (!haremEntry) {
+      return { marriedUser: null, isMarriedToSuggester: false };
+    }
+
+    const isMarriedToSuggester = Boolean(suggesterUserId && haremEntry.userId === suggesterUserId);
+    return {
+      marriedUser: { id: haremEntry.user.id, name: haremEntry.user.name, publicId: haremEntry.user.publicId },
+      isMarriedToSuggester,
+    };
+  }
+
+  /**
+   * Bloqueia um usuário para impedi-lo de enviar sugestões (24h, 7d, 30d ou pra sempre)
+   */
+  async blockUserFromSuggestions(
+    userIdOrPublicId: string,
+    duration: SuggestionBlockDuration,
+    reason = 'Suspeita de spam'
+  ): Promise<UserSuggestionBlockInfo> {
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ id: userIdOrPublicId }, { publicId: userIdOrPublicId }] },
+      select: { id: true, publicId: true, name: true },
+    });
+
+    if (!user) {
+      throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
+    }
+
+    const DURATION_SECONDS: Record<SuggestionBlockDuration, number> = {
+      '24h': 86400,
+      '7d': 7 * 86400,
+      '30d': 30 * 86400,
+      'forever': -1,
+    };
+
+    const seconds = DURATION_SECONDS[duration];
+    if (seconds === undefined) {
+      throw new DomainError('INVALID_DURATION', 'Duração de bloqueio inválida. Use: 24h, 7d, 30d ou forever.', 400);
+    }
+
+    const now = new Date();
+    const expiresAt = seconds > 0 ? new Date(now.getTime() + seconds * 1000).toISOString() : null;
+
+    const blockInfo: UserSuggestionBlockInfo = {
+      userId: user.id,
+      duration,
+      blockedAt: now.toISOString(),
+      expiresAt,
+      reason,
+    };
+
+    const payload = JSON.stringify(blockInfo);
+
+    if (seconds > 0) {
+      await this.redis.set(`suggestion:block:${user.id}`, payload, 'EX', seconds);
+      await this.redis.set(`suggestion:block:${user.publicId}`, payload, 'EX', seconds);
+    } else {
+      await this.redis.set(`suggestion:block:${user.id}`, payload);
+      await this.redis.set(`suggestion:block:${user.publicId}`, payload);
+    }
+
+    return blockInfo;
+  }
+
+  /**
+   * Desbloqueia um usuário para voltar a enviar sugestões
+   */
+  async unblockUserFromSuggestions(userIdOrPublicId: string): Promise<boolean> {
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ id: userIdOrPublicId }, { publicId: userIdOrPublicId }] },
+      select: { id: true, publicId: true },
+    });
+
+    if (user) {
+      await this.redis.del(`suggestion:block:${user.id}`, `suggestion:block:${user.publicId}`);
+    } else {
+      await this.redis.del(`suggestion:block:${userIdOrPublicId}`);
+    }
+    return true;
+  }
+
+  /**
+   * Consulta se o usuário está bloqueado de enviar sugestões
+   */
+  async getUserSuggestionBlock(userIdOrPublicId: string): Promise<UserSuggestionBlockInfo | null> {
+    const raw = await this.redis.get(`suggestion:block:${userIdOrPublicId}`);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Valida se o usuário pode enviar sugestões. Se estiver bloqueado, lança DomainError 403.
+   */
+  async assertUserNotBlocked(userIdOrPublicId: string): Promise<void> {
+    const block = await this.getUserSuggestionBlock(userIdOrPublicId);
+    if (block) {
+      throw new DomainError(
+        'SUGGESTIONS_BLOCKED',
+        'Você está temporariamente impedido de enviar sugestões por suspeita de spam.',
+        403
+      );
+    }
   }
 
   /**
@@ -44,6 +175,8 @@ export class SuggestionService {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
 
+    await this.assertUserNotBlocked(user.id);
+
     const fingerprint = createHash('sha256')
       .update(`rarity:${user.id}:${character.id}:${suggestedRarity}`)
       .digest('hex');
@@ -66,6 +199,8 @@ export class SuggestionService {
         },
       });
 
+      const marriageInfo = await this.getCharacterMarriage(character.id, user.id);
+
       // Notifica Telegram
       await this.telegramService.notifySuggestion({
         id: suggestion.id,
@@ -75,13 +210,19 @@ export class SuggestionService {
         suggestedRarity,
         reason: reason.trim(),
         userName: user?.name || userId,
+        userId: user.id,
         character: {
           id: character.id,
           name: character.name,
           series: character.series,
           baseRarity: character.baseRarity,
+          gender: character.gender,
+          description: character.description,
+          tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
         },
+        marriedUser: marriageInfo.marriedUser,
+        isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
       return suggestion;
@@ -128,6 +269,8 @@ export class SuggestionService {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
 
+    await this.assertUserNotBlocked(user.id);
+
     const imgHash = imageBuffer ? createHash('md5').update(imageBuffer).digest('hex') : 'no_img';
     const fingerprint = createHash('sha256')
       .update(`image:${user.id}:${character.id}:${action}:${targetPhoto || ''}:${imgHash}`)
@@ -170,6 +313,8 @@ export class SuggestionService {
         },
       });
 
+      const marriageInfo = await this.getCharacterMarriage(character.id, user.id);
+
       // Notifica Telegram
       await this.telegramService.notifySuggestion({
         id: suggestion.id,
@@ -180,13 +325,19 @@ export class SuggestionService {
         targetPhoto,
         reason: reason ? reason.trim() : null,
         userName: user.name || userId,
+        userId: user.id,
         character: {
           id: character.id,
           name: character.name,
           series: character.series,
           baseRarity: character.baseRarity,
+          gender: character.gender,
+          description: character.description,
+          tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
         },
+        marriedUser: marriageInfo.marriedUser,
+        isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
       return suggestion;
@@ -239,6 +390,8 @@ export class SuggestionService {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
 
+    await this.assertUserNotBlocked(user.id);
+
     const fingerprint = createHash('sha256')
       .update(
         `edit:${user.id}:${character.id}:${data.suggestedName || ''}:${data.suggestedSeries || ''}:${data.suggestedGender || ''}:${data.suggestedRarity || ''}:${(data.suggestedTags || []).join(',')}:${data.suggestedDescription || ''}`
@@ -271,6 +424,8 @@ export class SuggestionService {
         },
       });
 
+      const marriageInfo = await this.getCharacterMarriage(character.id, user.id);
+
       // Notifica Telegram
       await this.telegramService.notifySuggestion({
         id: suggestion.id,
@@ -284,13 +439,19 @@ export class SuggestionService {
         suggestedTags: data.suggestedTags || null,
         reason: data.reason.trim(),
         userName: user.name || userId,
+        userId: user.id,
         character: {
           id: character.id,
           name: character.name,
           series: character.series,
           baseRarity: character.baseRarity,
+          gender: character.gender,
+          description: character.description,
+          tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
         },
+        marriedUser: marriageInfo.marriedUser,
+        isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
       return suggestion;
@@ -326,6 +487,8 @@ export class SuggestionService {
     if (!user) {
       throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
     }
+
+    await this.assertUserNotBlocked(user.id);
 
     const imgHash = data.imageBuffer ? createHash('md5').update(data.imageBuffer).digest('hex') : 'no_img';
     const fingerprint = createHash('sha256')
@@ -373,6 +536,7 @@ export class SuggestionService {
         imageUrl: relPath,
         reason: data.reason ? data.reason.trim() : null,
         userName: user.name || userId,
+        userId: user.id,
       }).catch((err) => console.error('Telegram notification error:', err));
 
       return suggestion;
@@ -401,6 +565,12 @@ export class SuggestionService {
       }
     }
 
+    if (resolvedUserId) {
+      await this.assertUserNotBlocked(resolvedUserId);
+    } else if (userId) {
+      await this.assertUserNotBlocked(userId);
+    }
+
     const fingerprint = createHash('sha256')
       .update(`delete:${resolvedUserId || userId || 'anon'}:${character.id}:${(reason || '').trim()}`)
       .digest('hex');
@@ -421,6 +591,8 @@ export class SuggestionService {
         },
       });
 
+      const marriageInfo = await this.getCharacterMarriage(character.id, resolvedUserId);
+
       // Notifica Telegram
       await this.telegramService.notifySuggestion({
         id: suggestion.id,
@@ -428,13 +600,19 @@ export class SuggestionService {
         characterId: character.id,
         reason: reason ? reason.trim() : 'Conteúdo inadequado ou denúncia de exclusão (🔞).',
         userName,
+        userId: resolvedUserId,
         character: {
           id: character.id,
           name: character.name,
           series: character.series,
           baseRarity: character.baseRarity,
+          gender: character.gender,
+          description: character.description,
+          tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
         },
+        marriedUser: marriageInfo.marriedUser,
+        isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
       return suggestion;
@@ -471,14 +649,47 @@ export class SuggestionService {
         orderBy: [{ createdAt: 'desc' }],
         include: {
           character: {
-            select: { id: true, name: true, series: true, baseRarity: true, imageUrls: true },
+            select: {
+              id: true,
+              name: true,
+              series: true,
+              baseRarity: true,
+              gender: true,
+              description: true,
+              tags: true,
+              imageUrls: true,
+              haremEntries: {
+                select: {
+                  user: {
+                    select: { id: true, name: true, publicId: true },
+                  },
+                },
+              },
+            },
           },
           user: {
-            select: { publicId: true, name: true },
+            select: { id: true, publicId: true, name: true },
           },
         },
       }),
     ]);
+
+    const userIds = [...new Set(suggestions.map((s) => s.userId).filter(Boolean))] as string[];
+    const blockMap: Record<string, UserSuggestionBlockInfo> = {};
+    if (userIds.length > 0) {
+      const blockKeys = userIds.map((uid) => `suggestion:block:${uid}`);
+      const rawBlocks = await this.redis.mget(blockKeys);
+      rawBlocks.forEach((b) => {
+        if (b) {
+          try {
+            const parsed = JSON.parse(b);
+            if (parsed?.userId) {
+              blockMap[parsed.userId] = parsed;
+            }
+          } catch (_) {}
+        }
+      });
+    }
 
     return {
       total,
@@ -493,9 +704,14 @@ export class SuggestionService {
           } catch (_) {}
         }
 
+        const marriedUser = s.character?.haremEntries?.[0]?.user || null;
+        const isMarriedToSuggester = Boolean(marriedUser && s.userId && marriedUser.id === s.userId);
+        const userBlock = s.userId ? blockMap[s.userId] || null : null;
+
         return {
           id: s.id,
           characterId: s.characterId,
+          userId: s.userId,
           type: s.type,
           status: s.status,
           characterName: s.characterName,
@@ -516,6 +732,10 @@ export class SuggestionService {
           reviewedBy: s.reviewedBy,
           rejectionReason: s.rejectionReason,
           createdAt: s.createdAt,
+          marriage: marriedUser ? { id: marriedUser.id, name: marriedUser.name, publicId: marriedUser.publicId } : null,
+          isMarriedToSuggester,
+          isUserBlocked: Boolean(userBlock),
+          userBlockInfo: userBlock,
           character: s.character
             ? {
                 ...s.character,
@@ -526,6 +746,7 @@ export class SuggestionService {
             : null,
           user: s.user
             ? {
+                id: s.user.id,
                 name: s.user.name,
                 publicId: s.user.publicId,
               }
@@ -600,7 +821,7 @@ export class SuggestionService {
   /**
    * Aceita uma sugestão e aplica a alteração automaticamente
    */
-  async approveSuggestion(suggestionId: string, reviewedBy = 'admin') {
+  async approveSuggestion(suggestionId: string, reviewedBy = 'admin', overrideRarity?: string) {
     const suggestion = await this.prisma.characterSuggestion.findUnique({
       where: { id: suggestionId },
       include: { character: true },
@@ -614,14 +835,20 @@ export class SuggestionService {
       throw new DomainError('SUGGESTION_ALREADY_REVIEWED', `Esta sugestão já foi avaliada anteriormente (${suggestion.status}).`, 400);
     }
 
+    const validRarities = ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'];
+    const chosenRarity = overrideRarity && validRarities.includes(overrideRarity.toUpperCase())
+      ? (overrideRarity.toUpperCase() as Rarity)
+      : null;
+
     let successMessage = 'Sugestão aprovada e aplicada com sucesso!';
 
-    if (suggestion.type === 'RARITY' && suggestion.character && suggestion.suggestedRarity) {
+    if (suggestion.type === 'RARITY' && suggestion.character) {
+      const finalRarity = chosenRarity || suggestion.suggestedRarity || 'COMMON';
       await this.prisma.character.update({
         where: { id: suggestion.character.id },
-        data: { baseRarity: suggestion.suggestedRarity },
+        data: { baseRarity: finalRarity },
       });
-      successMessage = `Raridade de ${suggestion.character.name} alterada para ${suggestion.suggestedRarity}!`;
+      successMessage = `Raridade de ${suggestion.character.name} alterada para ${finalRarity}!`;
     } else if (suggestion.type === 'EDIT' && suggestion.character) {
       const dataToUpdate: any = {};
       if (suggestion.suggestedName) dataToUpdate.name = suggestion.suggestedName;
@@ -630,7 +857,11 @@ export class SuggestionService {
       if (suggestion.suggestedDescription !== null && suggestion.suggestedDescription !== undefined) {
         dataToUpdate.description = suggestion.suggestedDescription;
       }
-      if (suggestion.suggestedRarity) dataToUpdate.baseRarity = suggestion.suggestedRarity;
+      if (chosenRarity) {
+        dataToUpdate.baseRarity = chosenRarity;
+      } else if (suggestion.suggestedRarity) {
+        dataToUpdate.baseRarity = suggestion.suggestedRarity;
+      }
       if (suggestion.suggestedTags && suggestion.suggestedTags.length > 0) {
         dataToUpdate.tags = suggestion.suggestedTags;
       }
@@ -785,7 +1016,10 @@ export class SuggestionService {
       data: {
         status: 'APPROVED',
         reviewedAt: new Date(),
-        reviewedBy,
+        reviewedBy: chosenRarity && chosenRarity !== suggestion.suggestedRarity
+          ? `${reviewedBy} (${chosenRarity})`
+          : reviewedBy,
+        ...(chosenRarity ? { suggestedRarity: chosenRarity } : {}),
       },
     });
 

@@ -360,6 +360,42 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     expect(formatted).toContain('18:00:00'); // 21:00 UTC = 18:00 BRT
   });
 
+  it('notificação de alteração de raridade deve gerar botões para cada raridade e processar callback com override', async () => {
+    const { TelegramNotificationService } = await import('../src/services/TelegramNotificationService.js');
+    const service = new TelegramNotificationService();
+
+    let capturedQuery: string | null = null;
+    let capturedApproveArgs: any = null;
+    const mockSuggestionService = {
+      approveSuggestion: async (id: string, reviewedBy: string, overrideRarity?: string) => {
+        capturedApproveArgs = { id, reviewedBy, overrideRarity };
+        return { success: true };
+      },
+    };
+
+    (service as any).answerCallback = async (id: string, text: string) => {
+      capturedQuery = text;
+    };
+    (service as any).updateTelegramMessage = async () => {};
+    (service as any).botToken = 'mock_token';
+
+    const callbackQuery = {
+      id: 'query123',
+      data: 'sug_app_rar:sug_456:EPIC',
+      from: { first_name: 'Admin', username: 'moothz' },
+      message: { chat: { id: 123 }, message_id: 999 },
+    };
+
+    await service.handleCallback(callbackQuery, mockSuggestionService);
+
+    expect(capturedApproveArgs).toEqual({
+      id: 'sug_456',
+      reviewedBy: 'telegram:Admin (@moothz)',
+      overrideRarity: 'EPIC',
+    });
+    expect(capturedQuery).toContain('EPIC');
+  });
+
   it('POST /characters/:id/report deve aceitar denúncia enviando publicId e characterId sem erro 500/P2003', async () => {
     const res = await fetch(`${BASE_URL}/characters/${encodeURIComponent(testCharacterId)}/report`, {
       method: 'POST',
@@ -737,5 +773,63 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     const rollFemaleJson = await rollFemaleRes.json();
     expect(rollFemaleJson.success).toBe(true);
     expect(['FEMALE', 'OTHER']).toContain(rollFemaleJson.data.character.gender);
+  });
+
+  it('POST /api/admin/users/:userId/block-suggestions deve bloquear o usuário para não enviar sugestões', async () => {
+    // 1. Bloqueia o usuário por 24h
+    const blockRes = await fetch(`${BASE_URL}/api/admin/users/${testUserId}/block-suggestions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        duration: '24h',
+        reason: 'Suspeita de spam',
+      }),
+    });
+    expect(blockRes.status).toBe(200);
+    const blockJson = await blockRes.json();
+    expect(blockJson.success).toBe(true);
+    expect(blockJson.data.blockInfo.duration).toBe('24h');
+
+    // 2. Consulta sugestões do usuário e confirma isBlocked === true
+    const listRes = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions?token=${encodeURIComponent(testUserToken)}`);
+    expect(listRes.status).toBe(200);
+    const listJson = await listRes.json();
+    expect(listJson.success).toBe(true);
+    expect(listJson.data.isBlocked).toBe(true);
+
+    // 3. Tenta enviar uma sugestão enquanto bloqueado -> deve retornar 403 SUGGESTIONS_BLOCKED
+    const submitRes = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: testUserToken,
+        type: 'RARITY',
+        characterId: testCharacterId,
+        suggestedRarity: 'LEGENDARY',
+        reason: 'Tentativa de envio enquanto bloqueado',
+      }),
+    });
+    expect(submitRes.status).toBe(403);
+    const submitJson = await submitRes.json();
+    expect(submitJson.success).toBe(false);
+    expect(submitJson.error.code).toBe('SUGGESTIONS_BLOCKED');
+    expect(submitJson.error.message).toBe('Você está temporariamente impedido de enviar sugestões por suspeita de spam.');
+
+    // 4. Desbloqueia o usuário
+    const unblockRes = await fetch(`${BASE_URL}/api/admin/users/${testUserId}/unblock-suggestions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(unblockRes.status).toBe(200);
+    const unblockJson = await unblockRes.json();
+    expect(unblockJson.success).toBe(true);
+
+    // 5. Consulta novamente e confirma que isBlocked agora é false
+    const listAfterRes = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/suggestions?token=${encodeURIComponent(testUserToken)}`);
+    const listAfterJson = await listAfterRes.json();
+    expect(listAfterJson.data.isBlocked).toBe(false);
   });
 });

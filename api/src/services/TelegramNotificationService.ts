@@ -28,8 +28,16 @@ export interface SuggestionNotifyData {
     name: string;
     series: string;
     baseRarity: string;
+    gender?: string | null;
+    description?: string | null;
+    tags?: string[] | null;
     imageUrl?: string | null;
   } | null;
+  marriedUser?: {
+    id: string;
+    name: string;
+  } | null;
+  isMarriedToSuggester?: boolean;
 }
 
 export interface MultiRollReportData {
@@ -121,17 +129,57 @@ export class TelegramNotificationService {
       } else if (data.character) {
         text += `👤 <b>Personagem:</b> ${this.escapeHtml(data.character.name)} (<code>${data.character.id}</code>)\n`;
         text += `📺 <b>Série Atual:</b> ${this.escapeHtml(data.character.series)}\n`;
-        text += `⭐ <b>Raridade Atual:</b> ${data.character.baseRarity}\n`;
+
+        // Informações de casamento
+        if (data.isMarriedToSuggester) {
+          text += `💍 <b>Casamento:</b> ⚠️ <b>ATENÇÃO: Casado com QUEM SUGERIU (${this.escapeHtml(data.marriedUser?.name || data.userName || 'Autor')})!</b> ⚠️\n`;
+        } else if (data.marriedUser) {
+          text += `💍 <b>Casamento:</b> Casado com <b>${this.escapeHtml(data.marriedUser.name)}</b>\n`;
+        }
 
         if (data.type === 'RARITY') {
-          text += `🎯 <b>Raridade Sugerida:</b> <b>${data.suggestedRarity}</b>\n`;
+          const fromRarity = data.currentRarity || data.character.baseRarity;
+          const toRarity = data.suggestedRarity;
+          text += `⭐ <b>Mudança de Raridade:</b> <b>${fromRarity} -> ${toRarity}</b>\n`;
         } else if (data.type === 'EDIT') {
-          if (data.suggestedName) text += `✏️ <b>Nome Sugerido:</b> <b>${this.escapeHtml(data.suggestedName)}</b>\n`;
-          if (data.suggestedSeries) text += `📺 <b>Série Sugerida:</b> <b>${this.escapeHtml(data.suggestedSeries)}</b>\n`;
-          if (data.suggestedGender) text += `⚧ <b>Gênero Sugerido:</b> <b>${data.suggestedGender}</b>\n`;
-          if (data.suggestedRarity) text += `⭐ <b>Raridade Sugerida:</b> <b>${data.suggestedRarity}</b>\n`;
-          if (data.suggestedDescription) text += `📝 <b>Descrição Sugerida:</b> <i>${this.escapeHtml(data.suggestedDescription)}</i>\n`;
-          if (data.suggestedTags && data.suggestedTags.length > 0) text += `🏷️ <b>Tags:</b> ${data.suggestedTags.join(', ')}\n`;
+          const changes: string[] = [];
+
+          if (data.suggestedName && data.suggestedName.trim() !== data.character.name.trim()) {
+            changes.push(`✏️ <b>Nome:</b> ${this.escapeHtml(data.character.name)} ➔ <b>${this.escapeHtml(data.suggestedName.trim())}</b>`);
+          }
+
+          if (data.suggestedSeries && data.suggestedSeries.trim() !== data.character.series.trim()) {
+            changes.push(`📺 <b>Série:</b> ${this.escapeHtml(data.character.series)} ➔ <b>${this.escapeHtml(data.suggestedSeries.trim())}</b>`);
+          }
+
+          if (data.suggestedGender && data.character.gender && data.suggestedGender !== data.character.gender) {
+            changes.push(`⚧ <b>Gênero:</b> ${data.character.gender} ➔ <b>${data.suggestedGender}</b>`);
+          } else if (data.suggestedGender && !data.character.gender) {
+            changes.push(`⚧ <b>Gênero:</b> (não definido) ➔ <b>${data.suggestedGender}</b>`);
+          }
+
+          const charRarity = data.character.baseRarity || data.currentRarity;
+          if (data.suggestedRarity && charRarity && data.suggestedRarity !== charRarity) {
+            changes.push(`⭐ <b>Raridade:</b> <b>${charRarity} -> ${data.suggestedRarity}</b>`);
+          }
+
+          const curDesc = (data.character.description || '').trim();
+          const sugDesc = (data.suggestedDescription || '').trim();
+          if (data.suggestedDescription !== undefined && data.suggestedDescription !== null && sugDesc !== curDesc) {
+            changes.push(`📝 <b>Descrição:</b> <i>${this.escapeHtml(curDesc || '(vazia)')}</i> ➔ <i>${this.escapeHtml(sugDesc || '(vazia)')}</i>`);
+          }
+
+          const curTags = Array.isArray(data.character.tags) ? data.character.tags : [];
+          const sugTags = Array.isArray(data.suggestedTags) ? data.suggestedTags : [];
+          const curTagsNorm = [...curTags].sort().join(',');
+          const sugTagsNorm = [...sugTags].sort().join(',');
+          if (data.suggestedTags && sugTagsNorm !== curTagsNorm) {
+            changes.push(`🏷️ <b>Tags:</b> ${this.escapeHtml(curTags.join(', ') || '(nenhuma)')} ➔ <b>${this.escapeHtml(sugTags.join(', ') || '(nenhuma)')}</b>`);
+          }
+
+          if (changes.length > 0) {
+            text += `\n📋 <b>Campos alterados:</b>\n${changes.join('\n')}\n`;
+          }
         } else if (data.type === 'IMAGE') {
           if (data.photoAction === 'DELETE') {
             text += `⚠️ <b>Ação:</b> Excluir foto apontada como errada/ruim\n`;
@@ -139,7 +187,11 @@ export class TelegramNotificationService {
           } else if (data.photoAction === 'REPLACE') {
             text += `🔄 <b>Ação:</b> Substituir foto errada pela nova foto enviada\n`;
             if (data.targetPhoto) text += `🖼️ <b>Foto Antiga:</b> <code>${this.escapeHtml(data.targetPhoto)}</code>\n`;
+          } else {
+            text += `✨ <b>Ação:</b> Adicionar nova foto ao personagem\n`;
           }
+        } else if (data.type === 'DELETE_CHARACTER') {
+          text += `🔞 <b>Ação Solicitada:</b> Remoção definitiva do personagem do catálogo\n`;
         }
       }
 
@@ -150,16 +202,43 @@ export class TelegramNotificationService {
       text += `🙋 <b>Sugerido por:</b> ${this.escapeHtml(data.userName || 'Anônimo na Web')}\n`;
       text += `📅 <b>Data:</b> ${this.formatBrazilDateTime()}`;
 
+      const isRarityChange =
+        data.type === 'RARITY' ||
+        (data.type === 'EDIT' && Boolean(data.suggestedRarity && data.suggestedRarity !== data.character?.baseRarity));
+
+      const inlineKeyboard: any[][] = [];
+
+      if (isRarityChange) {
+        inlineKeyboard.push([
+          { text: '✅ Aceitar', callback_data: `sug_app:${data.id}` },
+          { text: '❌ Rejeitar', callback_data: `sug_rej:${data.id}` },
+        ]);
+        inlineKeyboard.push([
+          { text: '⚪ Aceitar - Common', callback_data: `sug_app_rar:${data.id}:COMMON` },
+          { text: '🟢 Aceitar - Uncommon', callback_data: `sug_app_rar:${data.id}:UNCOMMON` },
+        ]);
+        inlineKeyboard.push([
+          { text: '🔵 Aceitar - Rare', callback_data: `sug_app_rar:${data.id}:RARE` },
+          { text: '🟣 Aceitar - Epic', callback_data: `sug_app_rar:${data.id}:EPIC` },
+        ]);
+        inlineKeyboard.push([
+          { text: '🟡 Aceitar - Legendary', callback_data: `sug_app_rar:${data.id}:LEGENDARY` },
+        ]);
+        inlineKeyboard.push([
+          { text: '🌐 Abrir Painel Admin', url: `${config.PUBLIC_BASE_URL}/admin` },
+        ]);
+      } else {
+        inlineKeyboard.push([
+          { text: '✅ Aceitar e Aplicar', callback_data: `sug_app:${data.id}` },
+          { text: '❌ Rejeitar', callback_data: `sug_rej:${data.id}` },
+        ]);
+        inlineKeyboard.push([
+          { text: '🌐 Abrir Painel Admin', url: `${config.PUBLIC_BASE_URL}/admin` },
+        ]);
+      }
+
       const replyMarkup = {
-        inline_keyboard: [
-          [
-            { text: '✅ Aceitar e Aplicar', callback_data: `sug_app:${data.id}` },
-            { text: '❌ Rejeitar', callback_data: `sug_rej:${data.id}` },
-          ],
-          [
-            { text: '🌐 Abrir Painel Admin', url: `${config.PUBLIC_BASE_URL}/admin` },
-          ],
-        ],
+        inline_keyboard: inlineKeyboard,
       };
 
       // Tenta enviar com imagem se houver
@@ -348,7 +427,19 @@ export class TelegramNotificationService {
     }
 
     try {
-      if (data.startsWith('sug_app:')) {
+      if (data.startsWith('sug_app_rar:')) {
+        const parts = data.replace('sug_app_rar:', '').split(':');
+        const suggestionId = parts[0];
+        const overrideRarity = parts[1];
+
+        await suggestionService.approveSuggestion(suggestionId, `telegram:${moderatorName}`, overrideRarity);
+
+        await this.answerCallback(queryId, `✅ Sugestão aceita com raridade ${overrideRarity}!`);
+
+        // Atualiza mensagem no Telegram
+        const appendText = `\n\n✅ <b>APROVADA (Raridade ${overrideRarity})</b> por ${this.escapeHtml(moderatorName)} em ${this.formatBrazilDateTime()}`;
+        await this.updateTelegramMessage(chatId, messageId, message, appendText);
+      } else if (data.startsWith('sug_app:')) {
         const suggestionId = data.replace('sug_app:', '');
         await suggestionService.approveSuggestion(suggestionId, `telegram:${moderatorName}`);
 
