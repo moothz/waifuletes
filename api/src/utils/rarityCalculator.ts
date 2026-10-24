@@ -35,6 +35,7 @@ export interface WeightCalculationParams {
   isWishlisted?: boolean;
   isStarWish?: boolean;
   bonuses?: RollBonuses;
+  investmentShares?: number;
 }
 
 export function calculateCharacterWeight(params: WeightCalculationParams): number {
@@ -63,6 +64,15 @@ export function calculateCharacterWeight(params: WeightCalculationParams): numbe
   } else if (params.isWishlisted) {
     const wishMult = params.bonuses?.wishlistMultiplier ?? defaultWishMult;
     finalWeight *= wishMult;
+  }
+
+  // Multiplicador de Cotas de Investimento:
+  // 1 cota (25%): 4x peso (+300%)
+  // 2 cotas (50%): 10x peso (+900%)
+  // 3 cotas (75%): 25x peso (+2400%)
+  if (params.investmentShares && params.investmentShares > 0) {
+    const shareMult = params.investmentShares === 1 ? 4 : params.investmentShares === 2 ? 10 : 25;
+    finalWeight *= shareMult;
   }
 
   return Math.max(1, Math.round(finalWeight));

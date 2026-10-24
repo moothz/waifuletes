@@ -1,11 +1,13 @@
 import { FastifyPluginAsync } from 'fastify';
 import { MarketService } from '../../services/MarketService.js';
+import { MarketInvestmentService } from '../../services/MarketInvestmentService.js';
 import { CharacterService } from '../../services/CharacterService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 
 export const privateMarketRoutes: FastifyPluginAsync = async (fastify) => {
   const characterService = new CharacterService(fastify.prisma, fastify.redis);
   const marketService = new MarketService(fastify.prisma, characterService);
+  const marketInvestmentService = new MarketInvestmentService(fastify.prisma, characterService, fastify.redis);
 
   fastify.addHook('preHandler', verifyApiKey);
 
@@ -149,6 +151,101 @@ export const privateMarketRoutes: FastifyPluginAsync = async (fastify) => {
 
       const offer = await marketService.rejectOffer(userId, offerId);
       return reply.send({ success: true, data: offer });
+    },
+  });
+
+  /**
+   * GET /market/quote/:characterId - Consulta cotação dinâmica de waifus e cotas de investimento
+   */
+  fastify.get('/market/quote/:characterId', {
+    schema: {
+      description: 'Consulta cotação dinâmica (100% e cota de 25%) e inflação de um personagem',
+      tags: ['Mercado (Privado)'],
+      params: {
+        type: 'object',
+        required: ['characterId'],
+        properties: {
+          characterId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { characterId } = request.params as { characterId: string };
+      const quote = await marketInvestmentService.getCharacterQuote(characterId);
+      return reply.send({ success: true, data: quote });
+    },
+  });
+
+  /**
+   * GET /market/stats - Panorama macroeconômico e estatísticas dos últimos 30 dias de anúncios
+   */
+  fastify.get('/market/stats', {
+    schema: {
+      description: 'Estatísticas macroeconômicas de Zinthos, inflação e anúncios',
+      tags: ['Mercado (Privado)'],
+    },
+    handler: async (_request, reply) => {
+      const stats = await marketInvestmentService.getMacroStats();
+      return reply.send({ success: true, data: stats });
+    },
+  });
+
+  /**
+   * GET /market/investments - Lista investimentos ativos do usuário
+   */
+  fastify.get('/market/investments', {
+    schema: {
+      description: 'Lista investimentos ativos em waifus por cotas de um usuário',
+      tags: ['Mercado (Privado)'],
+      querystring: {
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId } = request.query as { userId: string };
+      const investments = await marketInvestmentService.getUserInvestments(userId);
+      return reply.send({ success: true, data: investments });
+    },
+  });
+
+  /**
+   * POST /market/invest - Realiza compra de 1 a 4 cotas (25% cada) ou compra integral
+   */
+  fastify.post('/market/invest', {
+    schema: {
+      description: 'Investe em cotas de um personagem ou adquire definitivamente com 4 cotas',
+      tags: ['Mercado (Privado)'],
+      body: {
+        type: 'object',
+        required: ['userId', 'characterId'],
+        properties: {
+          userId: { type: 'string' },
+          characterId: { type: 'string' },
+          shares: { type: 'number', minimum: 1, maximum: 4, default: 1 },
+          groupId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { userId, characterId, shares, groupId } = request.body as {
+        userId: string;
+        characterId: string;
+        shares?: number;
+        groupId?: string;
+      };
+
+      const result = await marketInvestmentService.invest({
+        userId,
+        characterIdOrSlug: characterId,
+        shares,
+        groupId,
+      });
+
+      return reply.send({ success: true, data: result });
     },
   });
 };

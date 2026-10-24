@@ -149,6 +149,38 @@ export class MarryService {
           },
         });
 
+        // Limpar investimentos e reembolsar competidores caso alguém tenha investido nesta waifu
+        const competitors = await tx.characterInvestment.findMany({
+          where: { characterId: targetCharId, userId: { not: userId } },
+          include: { user: true },
+        });
+
+        for (const comp of competitors) {
+          await tx.user.update({
+            where: { id: comp.userId },
+            data: { kakera: { increment: comp.totalZinthos } },
+          });
+
+          await tx.kakeraTransaction.create({
+            data: {
+              userId: comp.userId,
+              amount: comp.totalZinthos,
+              reason: 'MARKET_REFUND',
+              metadata: {
+                type: 'INVESTMENT_MARRIED_REFUND',
+                characterId: targetCharId,
+                characterName: currentCharacter.name,
+                sharesLost: comp.shares,
+                marriedUserId: userId,
+              },
+            },
+          });
+        }
+
+        await tx.characterInvestment.deleteMany({
+          where: { characterId: targetCharId },
+        });
+
         return { entry, character: currentCharacter };
       });
     } catch (error) {

@@ -36,6 +36,8 @@ enum KakeraReason {
   WISHLIST_BONUS
   SOULMATE_BONUS
   MARKET_TRADE
+  MARKET_BUY
+  MARKET_REFUND
 }
 
 model User {
@@ -59,6 +61,7 @@ model User {
   covetsGiven    CharacterCovet[]      @relation("UserCovets")
   covetsReceived CharacterCovet[]      @relation("OwnerCovets")
   marketNotifications MarketListingNotification[]
+  investments   CharacterInvestment[]
 
   @@index([kakera(sort: Desc)])
   @@map("users")
@@ -126,6 +129,7 @@ model Character {
   marketListings MarketListing[]
   covets         CharacterCovet[]
   marketNotifications MarketListingNotification[]
+  investments    CharacterInvestment[]
 
   @@index([claimCount(sort: Desc), likeCount(sort: Desc)])
   @@index([baseRarity, claimCount(sort: Desc)])
@@ -354,6 +358,24 @@ model MarketListingNotification {
   @@unique([listingId, userId])
   @@index([userId, notified])
   @@map("market_listing_notifications")
+}
+
+model CharacterInvestment {
+  id           String    @id @default(cuid())
+  characterId  String
+  userId       String
+  shares       Int       @default(1)
+  totalZinthos Int
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  character    Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, userId])
+  @@index([userId])
+  @@index([characterId])
+  @@map("character_investments")
 }
 
 

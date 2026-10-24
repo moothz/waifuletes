@@ -129,7 +129,7 @@ export class RollService {
       }
 
       // 3. Consultas secundárias leves em paralelo
-      const [disabledRecords, wishlistRecords, claimedRecords, totalClaims] = await Promise.all([
+      const [disabledRecords, wishlistRecords, claimedRecords, totalClaims, investmentRecords] = await Promise.all([
         this.prisma.groupDisabledSeries.findMany({
           where: { groupId },
           select: { characterId: true },
@@ -140,11 +140,16 @@ export class RollService {
         }),
         this.getClaimedRecords(),
         this.getTotalClaims(),
+        this.prisma.characterInvestment.findMany({
+          where: { userId },
+          select: { characterId: true, shares: true },
+        }),
       ]);
 
       const disabledIds = new Set(disabledRecords.map((d) => d.characterId));
       const wishMap = new Map(wishlistRecords.map((w) => [w.characterId, w.isStarWish]));
       const claimedMap = new Map(claimedRecords.map((c) => [c.id, c.claimCount]));
+      const investmentMap = new Map(investmentRecords.map((i) => [i.characterId, i.shares]));
 
       // 4. Filtrar candidatos elegíveis
       let candidates = this.inMemoryPool;
@@ -182,8 +187,9 @@ export class RollService {
       for (const char of candidates) {
         const isWish = wishMap.has(char.id);
         const claimCount = claimedMap.get(char.id) ?? 0;
+        const shares = investmentMap.get(char.id) ?? 0;
 
-        if (isWish || claimCount > 0) {
+        if (isWish || claimCount > 0 || shares > 0) {
           const weight = calculateCharacterWeight({
             baseRarity: char.baseRarity,
             claimCount,
@@ -191,6 +197,7 @@ export class RollService {
             isWishlisted: isWish,
             isStarWish: wishMap.get(char.id) ?? false,
             bonuses,
+            investmentShares: shares,
           });
           specialCandidates.push({ id: char.id, weight });
           specialTotalWeight += weight;
@@ -322,6 +329,11 @@ export class RollService {
 
       let keyProgress = null;
       let kakeraCrystalValue: number | null = null;
+      const rollerShares = investmentMap.get(chosen.id) ?? 0;
+      let instantMarriage = false;
+      let instantHaremEntry: any = null;
+      let refundedCompetitorsCount = 0;
+      let rollerUser: { id: string; name: string; kakera: number } | null = null;
 
       if (isClaimed) {
         if (isOwner) {
@@ -362,8 +374,77 @@ export class RollService {
           const baseRefund = RARITY_DIVORCE_VALUES[chosen.baseRarity] ?? 50;
           kakeraCrystalValue = Math.round(baseRefund * 0.2) + existingHaremEntry.keys * 5;
         }
+      } else if (rollerShares > 0) {
+        // CASAMENTO INSTANTÂNEO POR COTA!
+        // O usuário possuía ao menos 1 cota nesta waifu livre.
+        // O casamento é realizado instantaneamente no próprio roll sem cooldown!
+        instantMarriage = true;
+        rollerUser = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, name: true, kakera: true },
+        });
+
+        const marryResult = await this.prisma.$transaction(async (tx) => {
+          const entry = await tx.haremEntry.create({
+            data: {
+              userId,
+              characterId: chosen.id,
+              claimedInGroup: groupId || 'ROLL_COTA',
+              keys: 1,
+            },
+          });
+
+          await tx.character.update({
+            where: { id: chosen.id },
+            data: { claimCount: { increment: 1 } },
+          });
+
+          // Deleta o investimento do autor do roll
+          await tx.characterInvestment.deleteMany({
+            where: { characterId: chosen.id, userId },
+          });
+
+          // Estorna concorrentes (se houver)
+          const competitors = await tx.characterInvestment.findMany({
+            where: { characterId: chosen.id, userId: { not: userId } },
+            include: { user: true },
+          });
+
+          for (const comp of competitors) {
+            await tx.user.update({
+              where: { id: comp.userId },
+              data: { kakera: { increment: comp.totalZinthos } },
+            });
+
+            await tx.kakeraTransaction.create({
+              data: {
+                userId: comp.userId,
+                amount: comp.totalZinthos,
+                reason: 'MARKET_REFUND',
+                metadata: {
+                  type: 'INVESTMENT_ROLL_CLAIM_REFUND',
+                  characterId: chosen.id,
+                  characterName: chosen.name,
+                  sharesLost: comp.shares,
+                  marriedUserId: userId,
+                },
+              },
+            });
+          }
+
+          if (competitors.length > 0) {
+            await tx.characterInvestment.deleteMany({
+              where: { characterId: chosen.id, userId: { not: userId } },
+            });
+          }
+
+          return { entry, refundedCount: competitors.length };
+        });
+
+        instantHaremEntry = marryResult.entry;
+        refundedCompetitorsCount = marryResult.refundedCount;
       } else {
-        // Livre: lock não exclusivo de 300 segundos (qualquer um do grupo pode casar)
+        // Livre comum: lock não exclusivo de 300 segundos (qualquer um do grupo pode casar)
         await this.cooldownService.setClaimLock(groupId, chosen.id, userId);
       }
 
@@ -410,7 +491,7 @@ export class RollService {
       });
 
       const now = Date.now();
-      const lockExpiresAt = !isClaimed ? new Date(now + config.CLAIM_LOCK_SECONDS * 1000) : null;
+      const lockExpiresAt = !isClaimed && !instantMarriage ? new Date(now + config.CLAIM_LOCK_SECONDS * 1000) : null;
       const nextRollAt = new Date(now + config.COOLDOWN_ROLL_SECONDS * 1000);
 
       return {
@@ -427,18 +508,26 @@ export class RollService {
             imageUrls: chosen.imageUrls.map((img) => this.characterService.formatImageUrl(chosen.id, img)),
             tags: chosen.tags,
           },
-          available: !isClaimed,
+          available: !isClaimed && !instantMarriage,
           isWishlist: wishMap.has(chosen.id),
           isStarWish: wishMap.get(chosen.id) ?? false,
           wishlistUsers,
-          isOwner,
+          isOwner: isOwner || instantMarriage,
           owner: isClaimed
             ? {
                 id: existingHaremEntry.user.id,
                 name: existingHaremEntry.user.name,
               }
-            : null,
-          keyProgress,
+            : instantMarriage
+              ? {
+                  id: userId,
+                  name: rollerUser?.name || userId,
+                }
+              : null,
+          instantMarriage,
+          instantMarriageShares: rollerShares,
+          refundedCompetitorsCount,
+          keyProgress: instantMarriage ? { currentKeys: 1, requiredForSoulmate: config.SOULMATE_KEYS_REQUIRED, isSoulmate: false, becameSoulmateNow: false } : keyProgress,
           kakeraValue: kakeraCrystalValue,
           rollReward: {
             totalScrap,
