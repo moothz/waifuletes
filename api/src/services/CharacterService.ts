@@ -112,6 +112,122 @@ export class CharacterService {
       where.haremEntries = { none: {} };
     }
 
+    // Ordenação inicial aleatória alternando 1 de cada raridade em ordem decrescente
+    const isRandomSort = filter.sort === 'random' || !filter.sort;
+    if (isRandomSort) {
+      const rarities: Rarity[] = filter.rarity
+        ? [filter.rarity]
+        : ['LEGENDARY', 'EPIC', 'RARE', 'UNCOMMON', 'COMMON'];
+
+      const countPerRarity = Math.ceil(limit / rarities.length);
+
+      const conditions: string[] = ['"isActive" = true'];
+      const values: any[] = [];
+      let paramIdx = 1;
+
+      if (filter.gender) {
+        conditions.push(`"gender" = $${paramIdx}::"Gender"`);
+        values.push(filter.gender);
+        paramIdx++;
+      }
+
+      if (filter.maritalStatus === 'single') {
+        conditions.push(`NOT EXISTS (SELECT 1 FROM harem_entries h WHERE h."characterId" = characters.id)`);
+      } else if (filter.maritalStatus === 'married') {
+        conditions.push(`EXISTS (SELECT 1 FROM harem_entries h WHERE h."characterId" = characters.id)`);
+      }
+
+      if (filter.series) {
+        conditions.push(`"series" ILIKE $${paramIdx}`);
+        values.push(`%${filter.series}%`);
+        paramIdx++;
+      }
+
+      if (filter.tag) {
+        conditions.push(`$${paramIdx} = ANY("tags")`);
+        values.push(filter.tag);
+        paramIdx++;
+      }
+
+      if (filter.search) {
+        const terms = filter.search.trim().split(/\s+/).filter(Boolean);
+        for (const term of terms) {
+          conditions.push(`("name" ILIKE $${paramIdx} OR "series" ILIKE $${paramIdx} OR "id" ILIKE $${paramIdx})`);
+          values.push(`%${term}%`);
+          paramIdx++;
+        }
+      }
+
+      const baseWhereSql = conditions.join(' AND ');
+
+      const idsPerRarity = await Promise.all(
+        rarities.map((r) => {
+          const sql = `SELECT id FROM characters WHERE ${baseWhereSql} AND "baseRarity" = $${paramIdx}::"Rarity" ORDER BY random() LIMIT ${countPerRarity}`;
+          return this.prisma.$queryRawUnsafe<{ id: string }[]>(sql, ...values, r);
+        })
+      );
+
+      const orderedIds: string[] = [];
+      const maxLen = Math.max(...idsPerRarity.map((l) => l.length), 0);
+
+      for (let i = 0; i < maxLen; i++) {
+        for (let r = 0; r < rarities.length; r++) {
+          if (idsPerRarity[r][i]) {
+            orderedIds.push(idsPerRarity[r][i].id);
+          }
+        }
+      }
+
+      const finalIds = orderedIds.slice(0, limit);
+
+      const [total, characters] = await Promise.all([
+        this.prisma.character.count({ where }),
+        finalIds.length > 0
+          ? this.prisma.character.findMany({
+              where: { id: { in: finalIds } },
+              include: {
+                _count: { select: { wishlists: true } },
+                haremEntries: {
+                  take: 1,
+                  include: {
+                    user: { select: { id: true, publicId: true, name: true, platform: true } },
+                  },
+                },
+              },
+            })
+          : [],
+      ]);
+
+      const charMap = new Map(characters.map((c) => [c.id, c]));
+      const sortedCharacters = finalIds.map((id) => charMap.get(id)).filter(Boolean);
+
+      return {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        data: sortedCharacters.map((c: any) => {
+          const rawOwner = c.haremEntries?.[0]?.user ?? null;
+          let owner: any = null;
+          if (rawOwner) {
+            owner = isTrusted ? rawOwner : { name: rawOwner.name, publicId: rawOwner.publicId };
+          }
+
+          const { haremEntries, ...charRest } = c;
+
+          return {
+            ...charRest,
+            imageUrl: this.getRandomImageUrl(c.id, c.imageUrls),
+            imageUrls: c.imageUrls.map((img: string) => this.formatImageUrl(c.id, img)),
+            isClaimed: !!rawOwner,
+            owner,
+            claimedInGroup: isTrusted ? (c.haremEntries?.[0]?.claimedInGroup ?? null) : null,
+            wishlistCount: c._count?.wishlists ?? 0,
+          };
+        }),
+      };
+    }
+
     let orderBy: any = [{ claimCount: 'desc' }, { likeCount: 'desc' }, { name: 'asc' }];
     if (filter.sort === 'name') {
       orderBy = [{ name: 'asc' }];

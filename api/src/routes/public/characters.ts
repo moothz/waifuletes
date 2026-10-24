@@ -30,7 +30,8 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
       const isTrusted = isTrustedRequest(request);
 
       let cacheKey: string | null = null;
-      if (!isTrusted) {
+      const isRandom = !query.sort || query.sort === 'random';
+      if (!isTrusted && !isRandom) {
         cacheKey = `cache:characters:list:${JSON.stringify(query)}`;
         const cached = await fastify.redis.get(cacheKey);
         if (cached) {
@@ -52,7 +53,7 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
           tag: query.tag,
           search: query.search,
           maritalStatus: query.maritalStatus,
-          sort: query.sort,
+          sort: query.sort || 'random',
           page: query.page ? Math.min(1000, Math.max(1, Number(query.page))) : 1,
           limit: query.limit ? Math.min(100, Math.max(1, Number(query.limit))) : 20,
         },
@@ -60,9 +61,11 @@ export const publicCharacterRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       if (!isTrusted) {
-        reply.header('Cache-Control', 'public, max-age=30');
-        if (cacheKey) {
+        if (!isRandom && cacheKey) {
+          reply.header('Cache-Control', 'public, max-age=30');
           await fastify.redis.set(cacheKey, JSON.stringify(result), 'EX', 30);
+        } else {
+          reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
         }
       }
 

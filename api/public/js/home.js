@@ -13,7 +13,7 @@ const state = {
   gender: '',
   maritalStatus: '',
   rarity: '',
-  sortBy: 'ranking',
+  sortBy: 'random',
   page: 1,
   limit: 24,
   total: 0,
