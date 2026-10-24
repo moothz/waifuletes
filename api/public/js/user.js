@@ -1636,6 +1636,25 @@ async function loadUserSuggestions() {
     }
 
     const raw = res.data;
+    const isBlocked = Boolean(raw?.isBlocked);
+    const blockBanner = document.getElementById('user-suggestions-block-banner');
+    const btnOpenSuggest = document.getElementById('btn-open-suggest-char');
+    if (blockBanner) {
+      if (isBlocked) {
+        blockBanner.classList.remove('hidden');
+        if (btnOpenSuggest) {
+          btnOpenSuggest.disabled = true;
+          btnOpenSuggest.title = 'Você está impedido de enviar sugestões';
+        }
+      } else {
+        blockBanner.classList.add('hidden');
+        if (btnOpenSuggest) {
+          btnOpenSuggest.disabled = false;
+          btnOpenSuggest.title = '';
+        }
+      }
+    }
+
     const suggestions = Array.isArray(raw) ? raw : (raw?.suggestions || raw?.data || []);
     if (countBadge) {
       countBadge.textContent = suggestions.length;

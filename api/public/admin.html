@@ -335,6 +335,48 @@
     </div>
   </div>
 
+  <!-- Modal de Bloqueio de Sugestões de Usuário -->
+  <div class="modal-overlay hidden" id="modal-block-suggestions">
+    <div class="modal-box" style="max-width: 460px;">
+      <div class="modal-header">
+        <span class="modal-title">🚫 Bloquear Envio de Sugestões</span>
+        <button class="modal-close" onclick="closeModal('modal-block-suggestions')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; font-size: 14px;">
+          Impedir o usuário <strong id="block-suggestions-user-name">...</strong> de enviar sugestões ao jogo por suspeita de spam.
+        </p>
+        <input type="hidden" id="block-suggestions-user-id">
+        <div style="background: #fee2e2; border: 1.5px solid #dc2626; border-radius: 6px; padding: 10px; margin-bottom: 14px; font-size: 12px; color: #991b1b; font-weight: 600;">
+          ⚠️ O usuário receberá aviso de que está temporariamente impedido de enviar sugestões por suspeita de spam ao tentar qualquer envio.
+        </div>
+        <div style="margin-bottom: 16px;">
+          <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 8px;">Duração do Bloqueio:</label>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; cursor: pointer;">
+              <input type="radio" name="block-suggestions-duration" value="24h" checked> ⏳ 24 horas (1 dia)
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; cursor: pointer;">
+              <input type="radio" name="block-suggestions-duration" value="7d"> 📅 7 dias (1 semana)
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; cursor: pointer;">
+              <input type="radio" name="block-suggestions-duration" value="30d"> 🗓️ 30 dias (1 mês)
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; cursor: pointer; color: #dc2626;">
+              <input type="radio" name="block-suggestions-duration" value="forever"> 🚫 Pra sempre (Permanente)
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 12px 0 0 0; background: transparent; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn-retro btn-sm" onclick="closeModal('modal-block-suggestions')">Cancelar</button>
+          <button type="button" class="btn-retro btn-danger btn-sm" id="btn-confirm-block-suggestions" onclick="confirmBlockSuggestions()">
+            <i class="fas fa-ban"></i> Confirmar Bloqueio
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="retro-toast" class="retro-toast hidden"></div>
 

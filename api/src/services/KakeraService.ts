@@ -210,12 +210,23 @@ export class KakeraService {
   }) {
     const { userId, amount, reason, metadata } = params;
 
-    const user = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
     if (!user) {
-      throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
+      if (amount > 0) {
+        user = await this.prisma.user.create({
+          data: {
+            id: userId,
+            name: metadata?.name || metadata?.donorName || userId,
+            platform: 'WHATSAPP',
+            kakera: 0,
+          },
+        });
+      } else {
+        throw new DomainError('USER_NOT_FOUND', 'Usuário não encontrado.', 404);
+      }
     }
 
     if (amount < 0) {

@@ -499,9 +499,14 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const suggestions = await suggestionService.listUserSuggestions(session.userId);
+      const blockInfo = await suggestionService.getUserSuggestionBlock(session.userId);
       return reply.send({
         success: true,
-        data: suggestions,
+        data: {
+          suggestions,
+          isBlocked: Boolean(blockInfo),
+          blockInfo: blockInfo ? { duration: blockInfo.duration, expiresAt: blockInfo.expiresAt, reason: blockInfo.reason } : null,
+        },
       });
     },
   });
@@ -574,6 +579,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
           });
         }
+
+        await suggestionService.assertUserNotBlocked(session.userId);
 
         if (type === 'NEW_CHARACTER') {
           const suggestion = await suggestionService.submitNewCharacterSuggestion(session.userId, {
@@ -676,6 +683,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
         });
       }
+
+      await suggestionService.assertUserNotBlocked(session.userId);
 
       if (type === 'NEW_CHARACTER') {
         let buffer: Buffer | undefined;

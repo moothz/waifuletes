@@ -642,18 +642,20 @@ function createSuggestionItem(s) {
   let bodyContent = '';
 
   if (s.type === 'RARITY') {
+    const fromRarityStr = s.currentRarity || char.baseRarity || 'COMMON';
+    const toRarityStr = s.suggestedRarity || 'COMMON';
     bodyContent = `
       <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
-        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 13px; font-weight: 700;">Raridade Atual:</span>
+        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 700;">Mudança de Raridade:</span>
           <span class="badge-rarity" style="position: static; border-color: ${currentRarity.color}; color: ${currentRarity.color};">
             ${currentRarity.emoji} ${currentRarity.label}
           </span>
-          <span>➡️</span>
-          <span style="font-size: 13px; font-weight: 700;">Sugerida:</span>
+          <span style="font-weight: 800; font-size: 14px;">➔</span>
           <span class="badge-rarity" style="position: static; border-color: ${suggestedRarity.color}; color: ${suggestedRarity.color};">
             ${suggestedRarity.emoji} ${suggestedRarity.label}
           </span>
+          <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 12px;">${fromRarityStr} -> ${toRarityStr}</code>
         </div>
         <div style="font-size: 13px; font-weight: 600; color: #475569;">
           <strong>Justificativa do Usuário:</strong> <em>"${escapeHtml(s.reason || 'Sem justificativa')}"</em>
@@ -661,19 +663,30 @@ function createSuggestionItem(s) {
       </div>
     `;
   } else if (s.type === 'EDIT') {
+    const nameChanged = s.suggestedName && s.suggestedName.trim() !== (char.name || '').trim();
+    const seriesChanged = s.suggestedSeries && s.suggestedSeries.trim() !== (char.series || '').trim();
+    const genderChanged = s.suggestedGender && s.suggestedGender !== char.gender;
+    const rarityChanged = s.suggestedRarity && s.suggestedRarity !== (char.baseRarity || s.currentRarity);
+    const curTagsNorm = [...(char.tags || [])].sort().join(',');
+    const sugTagsNorm = [...(s.suggestedTags || [])].sort().join(',');
+    const tagsChanged = s.suggestedTags && s.suggestedTags.length > 0 && sugTagsNorm !== curTagsNorm;
+    const curDesc = (char.description || '').trim();
+    const sugDesc = (s.suggestedDescription || '').trim();
+    const descChanged = s.suggestedDescription !== undefined && s.suggestedDescription !== null && sugDesc !== curDesc;
+
     bodyContent = `
       <div style="margin: 10px 0; background: #eff6ff; border: 1.5px solid #3b82f6; border-radius: 6px; padding: 12px;">
         <div style="font-weight: 800; font-size: 14px; margin-bottom: 8px; color: #1e40af;">
           📝 Sugestão de Edição de Dados do Personagem
         </div>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 13px;">
-          ${s.suggestedName ? `<div><strong>Nome:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.name || '')}</span> ➡️ <strong style="color: #2563eb;">${escapeHtml(s.suggestedName)}</strong></div>` : ''}
-          ${s.suggestedSeries ? `<div><strong>Série:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.series || '')}</span> ➡️ <strong style="color: #2563eb;">${escapeHtml(s.suggestedSeries)}</strong></div>` : ''}
-          ${s.suggestedGender ? `<div><strong>Gênero:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.gender || ''}</span> ➡️ <strong style="color: #2563eb;">${s.suggestedGender}</strong></div>` : ''}
-          ${s.suggestedRarity ? `<div><strong>Raridade:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.baseRarity || ''}</span> ➡️ <strong style="color: #2563eb;">${s.suggestedRarity}</strong></div>` : ''}
-          ${s.suggestedTags && s.suggestedTags.length > 0 ? `<div><strong>Tags:</strong> <strong style="color: #2563eb;">${s.suggestedTags.join(', ')}</strong></div>` : ''}
+          ${nameChanged ? `<div><strong>Nome:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.name || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedName)}</strong></div>` : ''}
+          ${seriesChanged ? `<div><strong>Série:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.series || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedSeries)}</strong></div>` : ''}
+          ${genderChanged ? `<div><strong>Gênero:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.gender || '(não definido)'}</span> ➔ <strong style="color: #2563eb;">${s.suggestedGender}</strong></div>` : ''}
+          ${rarityChanged ? `<div><strong>Raridade:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.baseRarity || ''}</span> ➔ <strong style="color: #2563eb;">${char.baseRarity} -> ${s.suggestedRarity}</strong></div>` : ''}
+          ${tagsChanged ? `<div><strong>Tags:</strong> <strong style="color: #2563eb;">${(char.tags || []).join(', ') || '(nenhuma)'} ➔ ${s.suggestedTags.join(', ')}</strong></div>` : ''}
         </div>
-        ${s.suggestedDescription ? `
+        ${descChanged ? `
           <div style="margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #bfdbfe;">
             <strong>Nova Descrição Sugerida:</strong><br>${escapeHtml(s.suggestedDescription)}
           </div>
@@ -814,16 +827,64 @@ function createSuggestionItem(s) {
   const charSeries = s.type === 'NEW_CHARACTER' ? (s.series || 'Sem série') : (char.series || 'Sem série');
   const userName = user.name || (s.type === 'DELETE_CHARACTER' ? 'Denúncia Pública / Jogador' : 'Jogador');
 
+  // Informações de casamento
+  let marriageHtml = '';
+  if (s.isMarriedToSuggester) {
+    marriageHtml = `
+      <div style="margin: 10px 0; background: #fee2e2; border: 2px solid #ef4444; border-radius: 6px; padding: 10px; font-weight: 800; color: #991b1b; display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 24px;">⚠️</span>
+        <div>
+          <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">ALERTA DE CASAMENTO</div>
+          <div style="font-size: 13px; font-weight: 700; margin-top: 2px;">
+            Este personagem é <u>CASADO COM QUEM SUGERIU</u> (<strong>${escapeHtml(s.marriage?.name || user.name || 'Autor')}</strong>)! As pessoas tentam alterar a raridade para levar vantagem indevida.
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (s.marriage) {
+    marriageHtml = `
+      <div style="margin: 8px 0; font-size: 12px; font-weight: 700; color: #475569; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 4px; padding: 6px 10px;">
+        💍 <strong>Casado com:</strong> ${escapeHtml(s.marriage.name)}
+      </div>
+    `;
+  }
+
+  // Controles de bloqueio de sugestões
+  const targetUserId = s.userId || user.id;
+  let userBlockHtml = '';
+  if (targetUserId) {
+    if (s.isUserBlocked) {
+      const dur = s.userBlockInfo?.duration === 'forever' ? 'Pra sempre' : `Até ${new Date(s.userBlockInfo?.expiresAt).toLocaleDateString('pt-BR')}`;
+      userBlockHtml = `
+        <span style="background: #fee2e2; border: 1.5px solid #dc2626; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 800; margin-left: 6px;" title="Bloqueado de enviar sugestões">
+          🚫 Bloqueado (${dur})
+        </span>
+        <button class="btn-retro btn-sm" style="margin-left: 4px; font-size: 11px; padding: 2px 6px;" onclick="unblockUserSuggestions('${targetUserId}')" title="Desbloquear envio de sugestões deste usuário">
+          <i class="fas fa-unlock"></i> Desbloquear
+        </button>
+      `;
+    } else {
+      userBlockHtml = `
+        <button class="btn-retro btn-sm btn-danger" style="margin-left: 6px; font-size: 11px; padding: 2px 6px;" onclick="openBlockSuggestionsModal('${targetUserId}', '${escapeHtml(userName)}')" title="Bloquear este usuário de enviar sugestões por suspeita de spam">
+          <i class="fas fa-ban"></i> Bloquear
+        </button>
+      `;
+    }
+  }
+
   card.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; flex-wrap: wrap; gap: 8px;">
       <div>
         <strong style="font-size: 15px;">${escapeHtml(charTitle)}</strong>
         <span style="font-size: 12px; color: #64748b; margin-left: 6px;">(${escapeHtml(charSeries)})</span>
       </div>
-      <div style="font-size: 12px; font-weight: 700;">
-        Sugerido por: <strong>${escapeHtml(userName)}</strong> em ${new Date(s.createdAt).toLocaleDateString('pt-BR')}
+      <div style="font-size: 12px; font-weight: 700; display: flex; align-items: center; flex-wrap: wrap;">
+        <span>Sugerido por: <strong>${escapeHtml(userName)}</strong> em ${new Date(s.createdAt).toLocaleDateString('pt-BR')}</span>
+        ${userBlockHtml}
       </div>
     </div>
+
+    ${marriageHtml}
 
     ${bodyContent}
 
@@ -844,6 +905,68 @@ function createSuggestionItem(s) {
   `;
 
   return card;
+}
+
+function openBlockSuggestionsModal(userId, userName) {
+  const modal = document.getElementById('modal-block-suggestions');
+  if (!modal) return;
+  document.getElementById('block-suggestions-user-id').value = userId;
+  document.getElementById('block-suggestions-user-name').textContent = userName;
+  modal.classList.remove('hidden');
+}
+
+async function confirmBlockSuggestions() {
+  const userId = document.getElementById('block-suggestions-user-id').value;
+  const durationInput = document.querySelector('input[name="block-suggestions-duration"]:checked');
+  const duration = durationInput ? durationInput.value : '24h';
+
+  if (!userId) {
+    Api.showToast('ID do usuário não identificado.', '❌');
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirm-block-suggestions');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await Api.post(`/api/admin/users/${encodeURIComponent(userId)}/block-suggestions`, {
+      duration,
+      reason: 'Suspeita de spam',
+    }, {
+      'Authorization': `Bearer ${adminToken}`,
+    });
+
+    if (res.success) {
+      Api.showToast(res.data?.message || 'Usuário bloqueado de enviar sugestões!', '🚫');
+      closeModal('modal-block-suggestions');
+      loadSuggestions();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao bloquear usuário.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao bloquear usuário.', '❌');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function unblockUserSuggestions(userId) {
+  if (!confirm('Deseja realmente desbloquear este usuário para que ele volte a enviar sugestões?')) return;
+
+  try {
+    const res = await Api.post(`/api/admin/users/${encodeURIComponent(userId)}/unblock-suggestions`, {}, {
+      'Authorization': `Bearer ${adminToken}`,
+    });
+
+    if (res.success) {
+      Api.showToast('Usuário desbloqueado com sucesso!', '✨');
+      loadSuggestions();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao desbloquear usuário.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao desbloquear usuário.', '❌');
+  }
 }
 
 async function approveAllSuggestions() {
