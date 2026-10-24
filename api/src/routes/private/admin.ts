@@ -377,6 +377,100 @@ export const privateAdminRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
+  // Estatísticas consolidadas para o resumo semanal da Ravena
+  fastify.get('/admin/stats/weekly', {
+    schema: {
+      description: 'Estatísticas consolidadas para o resumo semanal da Ravena',
+      tags: ['Administração (Privado)'],
+    },
+    handler: async (request, reply) => {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      // 1. Casamentos na semana por raridade
+      const weeklyMarriagesByRarity: Array<{ rarity: string; count: number }> = await fastify.prisma.$queryRaw`
+        SELECT c."baseRarity" as rarity, count(h.id)::int as count
+        FROM harem_entries h
+        JOIN characters c ON c.id = h."characterId"
+        WHERE h."claimedAt" >= ${since}
+        GROUP BY c."baseRarity"
+      `;
+
+      // 2. Negociações concluídas no Mercado
+      const weeklyNegotiationsCount = await fastify.prisma.marketOffer.count({
+        where: {
+          status: 'ACCEPTED',
+          updatedAt: { gte: since },
+        },
+      });
+
+      // 3. Top casamenteiro da semana
+      const topMarrier: Array<{ id: string; name: string; count: number }> = await fastify.prisma.$queryRaw`
+        SELECT u.id, u.name, count(h.id)::int as count
+        FROM harem_entries h
+        JOIN users u ON u.id = h."userId"
+        WHERE h."claimedAt" >= ${since}
+        GROUP BY u.id, u.name
+        ORDER BY count DESC
+        LIMIT 1
+      `;
+
+      // 4. Waifu mais cobiçada / favoritada na semana
+      const mostCoveted: Array<{ id: string; name: string; series: string; count: number }> = await fastify.prisma.$queryRaw`
+        SELECT c.id, c.name, c.series, count(w.id)::int as count
+        FROM wishlist_entries w
+        JOIN characters c ON c.id = w."characterId"
+        WHERE w."addedAt" >= ${since}
+        GROUP BY c.id, c.name, c.series
+        ORDER BY count DESC
+        LIMIT 1
+      `;
+
+      // 5. Novas Almas Gêmeas (Soulmates) seladas
+      const weeklySoulmatesCount = await fastify.prisma.soulmate.count({
+        where: { becameSoulmateAt: { gte: since } },
+      });
+
+      // 6. Percentual de cada categoria já casada (Global)
+      const categoryStats: Array<{
+        rarity: string;
+        total: number;
+        married: number;
+        percentage: number;
+      }> = await fastify.prisma.$queryRaw`
+        SELECT 
+          c."baseRarity" as rarity,
+          count(c.id)::int as "total",
+          count(h.id)::int as "married",
+          round((count(h.id)::numeric / count(c.id)::numeric) * 100, 2)::float as "percentage"
+        FROM characters c
+        LEFT JOIN harem_entries h ON h."characterId" = c.id
+        WHERE c."isActive" = true
+        GROUP BY c."baseRarity"
+        ORDER BY 
+          CASE c."baseRarity"
+            WHEN 'COMMON' THEN 1
+            WHEN 'UNCOMMON' THEN 2
+            WHEN 'RARE' THEN 3
+            WHEN 'EPIC' THEN 4
+            WHEN 'LEGENDARY' THEN 5
+            ELSE 6
+          END
+      `;
+
+      return reply.send({
+        success: true,
+        data: {
+          weeklyMarriagesByRarity,
+          weeklyNegotiationsCount,
+          weeklySoulmatesCount,
+          topMarrier: topMarrier[0] || null,
+          mostCoveted: mostCoveted[0] || null,
+          categoryStats,
+        },
+      });
+    },
+  });
+
   // Remoção administrativa de personagem problemático (SuperAdmin)
   fastify.post('/admin/characters/purge-character', {
     schema: {

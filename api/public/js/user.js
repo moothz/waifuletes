@@ -689,6 +689,11 @@ function renderPrivateWishlist(wishlist) {
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+          ${!isMarried ? `
+            <button class="btn-retro btn-sm btn-gold" style="width: 100%; font-weight: 800; border-color: #d97706; color: #92400e; background: #fef3c7;" onclick="openInvestModal('${char.id}')">
+              <i class="fas fa-coins"></i> 📈 Investir
+            </button>
+          ` : ''}
           ${isMarried && entry.marriedToPublicId !== userSessionData?.publicId ? `
             ${userCovetedSet.has(char.id) ? `
               <button class="btn-retro btn-sm" style="width: 100%; border-color: #ec4899; color: #ec4899;" disabled>
@@ -2757,5 +2762,248 @@ async function markAllCovetsSeen(characterId) {
     Api.showToast('Erro de comunicação.', '❌');
   }
 }
+
+// ---------------------------------------------------------------------------
+// Sistema de Investimento em Cotas de Waifus (Wishlist)
+// ---------------------------------------------------------------------------
+let currentInvestQuoteData = null;
+
+async function openInvestModal(charId) {
+  if (!userSessionToken || !userPublicId) {
+    Api.showToast('Você precisa estar autenticado para investir.', '⚠️');
+    return;
+  }
+
+  currentInvestQuoteData = null;
+  const loadingEl = document.getElementById('invest-modal-loading');
+  const contentEl = document.getElementById('invest-modal-content');
+  const confirmBtn = document.getElementById('btn-confirm-invest');
+
+  if (loadingEl) loadingEl.classList.remove('hidden');
+  if (contentEl) contentEl.classList.add('hidden');
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = '0.5';
+  }
+
+  openModal('modal-invest');
+
+  try {
+    const res = await Api.get(
+      `/api/web/user/${encodeURIComponent(userPublicId)}/market/quote/${encodeURIComponent(charId)}?token=${encodeURIComponent(userSessionToken)}`
+    );
+
+    if (!res.success || !res.data) {
+      Api.showToast(res.error?.message || 'Erro ao carregar cotação do personagem.', '❌');
+      closeModal('modal-invest');
+      return;
+    }
+
+    currentInvestQuoteData = res.data;
+    const char = res.data.character;
+    const pricing = res.data.pricing;
+    const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
+    const userShares = Number(res.data.userShares || 0);
+    const userKakera = Number(res.data.userKakera || userSessionData?.kakera || 0);
+
+    // Atualiza elementos do modal
+    const imgEl = document.getElementById('invest-modal-img');
+    if (imgEl) imgEl.src = char.imageUrl || '/media/characters/default.jpg';
+
+    const nameEl = document.getElementById('invest-modal-char-name');
+    if (nameEl) nameEl.textContent = char.name;
+
+    const seriesEl = document.getElementById('invest-modal-char-series');
+    if (seriesEl) seriesEl.textContent = char.series || 'Sem série';
+
+    const rarityEl = document.getElementById('invest-modal-char-rarity');
+    if (rarityEl) {
+      rarityEl.innerHTML = `<span style="color: ${rarity.color};">${rarity.emoji} ${rarity.label}</span>`;
+    }
+
+    const cotaPriceEl = document.getElementById('invest-modal-cota-price');
+    if (cotaPriceEl) {
+      cotaPriceEl.textContent = `${Number(pricing.cotaPrice).toLocaleString('pt-BR')} Zinthos`;
+    }
+
+    const totalPriceEl = document.getElementById('invest-modal-total-price');
+    if (totalPriceEl) {
+      totalPriceEl.textContent = `${Number(pricing.dynamicPrice).toLocaleString('pt-BR')} Zinthos`;
+    }
+
+    const userSharesEl = document.getElementById('invest-modal-user-shares');
+    if (userSharesEl) {
+      userSharesEl.textContent = `${userShares} / 4 cotas (${userShares * 25}%)`;
+    }
+
+    const userBalanceEl = document.getElementById('invest-modal-user-balance');
+    if (userBalanceEl) {
+      userBalanceEl.textContent = `${userKakera.toLocaleString('pt-BR')} Zinthos`;
+    }
+
+    // Configura o seletor de cotas disponíveis
+    const select = document.getElementById('invest-modal-shares-select');
+    const remainingShares = Math.max(0, 4 - userShares);
+
+    if (select) {
+      select.innerHTML = '';
+      if (remainingShares === 0) {
+        select.innerHTML = '<option value="0">Todas as 4 cotas já adquiridas</option>';
+        select.disabled = true;
+      } else {
+        select.disabled = false;
+        for (let i = 1; i <= remainingShares; i++) {
+          const opt = document.createElement('option');
+          opt.value = String(i);
+          const pct = (userShares + i) * 25;
+          opt.textContent = `${i} cota(s) (+${i * 25}% ➔ Total: ${pct}%)${userShares + i === 4 ? ' — 💍 Casamento Imediato' : ''}`;
+          select.appendChild(opt);
+        }
+      }
+    }
+
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (contentEl) contentEl.classList.remove('hidden');
+
+    updateInvestModalTotal();
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao consultar cotação.', '❌');
+    closeModal('modal-invest');
+  }
+}
+
+function updateInvestModalTotal() {
+  if (!currentInvestQuoteData) return;
+
+  const select = document.getElementById('invest-modal-shares-select');
+  const shares = parseInt(select?.value || '1', 10);
+  const cotaPrice = Number(currentInvestQuoteData.pricing?.cotaPrice || 0);
+  const userKakera = Number(currentInvestQuoteData.userKakera || userSessionData?.kakera || 0);
+  const userShares = Number(currentInvestQuoteData.userShares || 0);
+
+  const subtotal = shares * cotaPrice;
+  const subtotalEl = document.getElementById('invest-modal-subtotal');
+  if (subtotalEl) {
+    subtotalEl.textContent = `${subtotal.toLocaleString('pt-BR')} Zinthos`;
+  }
+
+  const warningEl = document.getElementById('invest-modal-balance-warning');
+  const confirmBtn = document.getElementById('btn-confirm-invest');
+
+  if (shares <= 0) {
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.style.background = '#9ca3af';
+      confirmBtn.style.borderColor = '#6b7280';
+      confirmBtn.style.color = '#374151';
+      confirmBtn.style.cursor = 'not-allowed';
+      confirmBtn.style.boxShadow = 'none';
+      confirmBtn.innerHTML = '<i class="fas fa-check"></i> 100% Adquirido';
+    }
+    if (warningEl) warningEl.classList.add('hidden');
+    return;
+  }
+
+  const hasEnoughBalance = userKakera >= subtotal;
+
+  if (!hasEnoughBalance) {
+    // Botão confirmar cinza e desabilitado se não tiver zinthos suficiente
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.style.background = '#9ca3af';
+      confirmBtn.style.borderColor = '#6b7280';
+      confirmBtn.style.color = '#374151';
+      confirmBtn.style.cursor = 'not-allowed';
+      confirmBtn.style.boxShadow = 'none';
+      confirmBtn.innerHTML = '<i class="fas fa-coins"></i> Saldo Insuficiente';
+    }
+
+    if (warningEl) {
+      const missing = subtotal - userKakera;
+      warningEl.textContent = `⚠️ Saldo insuficiente para adquirir ${shares} cota(s). Faltam ${missing.toLocaleString('pt-BR')} Zinthos.`;
+      warningEl.classList.remove('hidden');
+    }
+  } else {
+    // Saldo suficiente: botão dourado/ativo
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.style.background = '';
+      confirmBtn.style.borderColor = '';
+      confirmBtn.style.color = '';
+      confirmBtn.style.cursor = 'pointer';
+      confirmBtn.style.boxShadow = '';
+      confirmBtn.style.opacity = '1';
+
+      if (userShares + shares >= 4) {
+        confirmBtn.innerHTML = '<i class="fas fa-ring"></i> Confirmar Casamento (4 Cotas)';
+      } else {
+        confirmBtn.innerHTML = `<i class="fas fa-coins"></i> Comprar ${shares} Cota(s)`;
+      }
+    }
+
+    if (warningEl) {
+      warningEl.classList.add('hidden');
+    }
+  }
+}
+
+async function confirmInvest() {
+  if (!currentInvestQuoteData || !userSessionToken || !userPublicId) return;
+
+  const select = document.getElementById('invest-modal-shares-select');
+  const shares = parseInt(select?.value || '1', 10);
+  const charId = currentInvestQuoteData.character?.id;
+  const charName = currentInvestQuoteData.character?.name || 'Waifu';
+
+  if (!shares || shares <= 0) return;
+
+  const confirmBtn = document.getElementById('btn-confirm-invest');
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando transação...';
+  }
+
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/market/invest`, {
+      token: userSessionToken,
+      characterId: charId,
+      shares,
+    });
+
+    if (!res.success) {
+      Api.showToast(res.error?.message || 'Falha ao processar investimento.', '❌');
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        updateInvestModalTotal();
+      }
+      return;
+    }
+
+    // Atualiza saldo local e na interface
+    if (typeof res.data.remainingKakera === 'number') {
+      userSessionData.kakera = res.data.remainingKakera;
+      const zinthos = Number(userSessionData.kakera || 0).toLocaleString('pt-BR');
+      const zinthosEl = document.getElementById('user-zinthos');
+      if (zinthosEl) zinthosEl.textContent = `${zinthos} zinthos`;
+    }
+
+    closeModal('modal-invest');
+
+    if (res.data.acquired) {
+      Api.showToast(`💍 Parabéns! Você adquiriu as 4 cotas (100%) e se casou com ${charName}! 🎉`, '✨');
+      setTimeout(() => loadUserData(), 600);
+    } else {
+      Api.showToast(`📈 Sucesso! Você adquiriu ${shares} cota(s) de ${charName}. Total: ${res.data.totalShares} cotas.`, '✅');
+      setTimeout(() => loadUserData(), 600);
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação durante a compra de cotas.', '❌');
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      updateInvestModalTotal();
+    }
+  }
+}
+
 
 

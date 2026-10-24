@@ -42,6 +42,10 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
 
+  HYPERION_LLM_URL: z.string().default(process.env.HYPERION_LLM_URL || 'http://192.168.195.212:16001/v1'),
+  HYPERION_LLM_KEY: z.string().default(process.env.HYPERION_LLM_KEY || '2orQzPoPJ1WDr6Ffv0gaBwcC'),
+  HYPERION_LLM_MODEL: z.string().default(process.env.HYPERION_LLM_MODEL || 'gemma4:12b-uncensored'),
+
   MEDIA_DIR: z.string().default(
     process.env.MEDIA_DIR ||
       (fs.existsSync('/app/media') ? '/app/media' : path.resolve(process.cwd(), '../media'))

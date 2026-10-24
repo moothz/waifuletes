@@ -6,6 +6,7 @@ import { DivorceService } from '../../services/DivorceService.js';
 import { CharacterService } from '../../services/CharacterService.js';
 import { SuggestionService } from '../../services/SuggestionService.js';
 import { MarketService } from '../../services/MarketService.js';
+import { MarketInvestmentService } from '../../services/MarketInvestmentService.js';
 import { CovetService } from '../../services/CovetService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
@@ -78,6 +79,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   const webSessionService = new WebSessionService(fastify.redis, fastify.prisma);
   const suggestionService = new SuggestionService(fastify.prisma, fastify.redis, characterService);
   const marketService = new MarketService(fastify.prisma, characterService);
+  const marketInvestmentService = new MarketInvestmentService(fastify.prisma, characterService, fastify.redis);
   const covetService = new CovetService(fastify.prisma, characterService, wishlistService);
 
   /**
@@ -1171,6 +1173,125 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
 
       const offer = await marketService.rejectOffer(session.userId, offerId);
       return reply.send({ success: true, data: offer });
+    },
+  });
+
+  /**
+   * Consulta cotação de investimento para o modal da Wishlist
+   */
+  fastify.get('/api/web/user/:publicId/market/quote/:characterId', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'characterId'],
+        properties: {
+          publicId: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, characterId } = request.params as { publicId: string; characterId: string };
+      const { token } = request.query as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const quote = await marketInvestmentService.getCharacterQuote(characterId);
+      const user = await fastify.prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { id: true, kakera: true },
+      });
+
+      const existingInvestment = await fastify.prisma.characterInvestment.findUnique({
+        where: {
+          characterId_userId: {
+            characterId: quote.character.id,
+            userId: session.userId,
+          },
+        },
+      });
+
+      return reply.send({
+        success: true,
+        data: {
+          ...quote,
+          userShares: existingInvestment?.shares ?? 0,
+          userKakera: user?.kakera ?? 0,
+        },
+      });
+    },
+  });
+
+  /**
+   * Realiza investimento/compra de cotas via modal da Wishlist
+   */
+  fastify.post('/api/web/user/:publicId/market/invest', {
+    schema: {
+      tags: ['Mercado (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: {
+          publicId: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'characterId'],
+        properties: {
+          token: { type: 'string' },
+          characterId: { type: 'string' },
+          shares: { type: 'number', minimum: 1, maximum: 4, default: 1 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, characterId, shares = 1 } = request.body as {
+        token: string;
+        characterId: string;
+        shares?: number;
+      };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await marketInvestmentService.invest({
+        userId: session.userId,
+        characterIdOrSlug: characterId,
+        shares,
+      });
+
+      // Atualiza o saldo do usuário para resposta
+      const updatedUser = await fastify.prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { kakera: true },
+      });
+
+      return reply.send({
+        success: true,
+        data: {
+          ...result,
+          remainingKakera: updatedUser?.kakera ?? 0,
+        },
+      });
     },
   });
 

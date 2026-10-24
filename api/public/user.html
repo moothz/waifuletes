@@ -865,6 +865,97 @@
     </div>
   </div>
 
+  <!-- Modal de Investimento em Cotas de Waifu -->
+  <div class="modal-overlay hidden" id="modal-invest" style="z-index: 10006;">
+    <div class="modal-box" style="max-width: min(600px, 90vw); max-height: 85vh; overflow-y: auto;">
+      <div class="modal-header">
+        <span class="modal-title">📈 Investir em Waifu</span>
+        <button class="modal-close" onclick="closeModal('modal-invest')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+        <div id="invest-modal-loading" style="text-align: center; padding: 30px; font-weight: 700;">
+          <i class="fas fa-spinner fa-spin"></i> Carregando cotação em tempo real...
+        </div>
+
+        <div id="invest-modal-content" class="hidden">
+          <!-- Card de Apresentação da Waifu -->
+          <div style="display: flex; gap: 14px; align-items: center; background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 8px; padding: 10px; margin-bottom: 14px;">
+            <img id="invest-modal-img" src="/media/characters/default.jpg" style="width: 75px; height: 75px; object-fit: cover; border-radius: 6px; border: var(--border-retro); flex-shrink: 0;" onerror="handleImgError(this)">
+            <div style="flex: 1; min-width: 0;">
+              <h4 id="invest-modal-char-name" style="font-weight: 800; font-size: 17px; margin: 0 0 2px 0;">Nome</h4>
+              <div id="invest-modal-char-series" style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">Série</div>
+              <div id="invest-modal-char-rarity" style="font-size: 12px; font-weight: 700;"></div>
+            </div>
+          </div>
+
+          <!-- Guia Explicativo do Sistema de Investimentos -->
+          <div style="background: #eff6ff; border: 1.5px solid #3b82f6; border-radius: 6px; padding: 12px; font-size: 13px; margin-bottom: 14px; line-height: 1.45; color: #1e3a8a;">
+            <div style="font-weight: 800; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+              <i class="fas fa-info-circle" style="color: #2563eb;"></i> Como funciona o investimento em cotas:
+            </div>
+            <ul style="margin: 0; padding-left: 18px;">
+              <li>Cada waifu pode ser adquirida através de <b>4 cotas (25% cada)</b>.</li>
+              <li><b>Bônus de Drop:</b> Cada cota eleva sua chance no <code>!mu-roll</code> (+300% com 1 cota, 10x com 2 cotas, 25x com 3 cotas).</li>
+              <li><b>Casamento Instantâneo:</b> Se roletar este personagem com cotas ativas, <b>você se casa na hora</b> sem gastar cooldown de claim!</li>
+              <li><b>Compra Imediata:</b> Ao atingir as 4 cotas (100%), o casamento ocorre imediatamente!</li>
+              <li><b>Disputa Segura:</b> Se outro jogador casar primeiro, <b>100% dos seus Zinthos investidos são devolvidos</b>.</li>
+            </ul>
+          </div>
+
+          <!-- Panorama da Cotação -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; font-size: 13px;">
+            <div style="background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 8px 10px;">
+              <div style="color: var(--text-muted); font-size: 11px;">Preço por Cota (25%)</div>
+              <div id="invest-modal-cota-price" style="font-weight: 800; font-size: 15px; color: #b45309;">-</div>
+            </div>
+            <div style="background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 8px 10px;">
+              <div style="color: var(--text-muted); font-size: 11px;">Valor Total (100%)</div>
+              <div id="invest-modal-total-price" style="font-weight: 800; font-size: 15px; color: #1e293b;">-</div>
+            </div>
+            <div style="background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 8px 10px;">
+              <div style="color: var(--text-muted); font-size: 11px;">Suas Cotas Atuais</div>
+              <div id="invest-modal-user-shares" style="font-weight: 800; font-size: 14px;">-</div>
+            </div>
+            <div style="background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 8px 10px;">
+              <div style="color: var(--text-muted); font-size: 11px;">Seu Saldo Disponível</div>
+              <div id="invest-modal-user-balance" style="font-weight: 800; font-size: 14px; color: #047857;">-</div>
+            </div>
+          </div>
+
+          <!-- Seleção de Cotas a Comprar -->
+          <div style="background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 12px; margin-bottom: 14px;">
+            <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 6px;">
+              Quantidade de Cotas a Adquirir:
+            </label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <select id="invest-modal-shares-select" class="retro-select" style="flex: 1;" onchange="updateInvestModalTotal()">
+                <option value="1">1 cota (25%)</option>
+                <option value="2">2 cotas (50%)</option>
+                <option value="3">3 cotas (75%)</option>
+                <option value="4">4 cotas (100% - Compra Imediata)</option>
+              </select>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-retro);">
+              <span style="font-weight: 700; font-size: 13px;">Total a Pagar:</span>
+              <span id="invest-modal-subtotal" style="font-weight: 800; font-size: 16px; color: #b45309;">-</span>
+            </div>
+          </div>
+
+          <!-- Aviso de Saldo Insuficiente -->
+          <div id="invest-modal-balance-warning" class="hidden" style="background: #fef2f2; border: 1.5px solid #ef4444; border-radius: 6px; padding: 10px 12px; font-size: 12px; font-weight: 700; color: #b91c1c; margin-bottom: 12px; text-align: center;">
+            ⚠️ Saldo insuficiente para adquirir esta quantidade de cotas.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button class="btn-retro btn-sm" onclick="closeModal('modal-invest')">Cancelar</button>
+        <button id="btn-confirm-invest" class="btn-retro btn-sm btn-gold" onclick="confirmInvest()">
+          <i class="fas fa-coins"></i> Confirmar Investimento
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast de Notificação -->
   <div id="retro-toast" class="retro-toast hidden"></div>
 

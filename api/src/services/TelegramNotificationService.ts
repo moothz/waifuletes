@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Redis } from 'ioredis';
 import { config } from '../config.js';
+import { RarityAdvisorService } from './RarityAdvisorService.js';
 
 export interface SuggestionNotifyData {
   id: string;
@@ -61,10 +62,12 @@ export interface MultiRollReportData {
 export class TelegramNotificationService {
   private botToken?: string;
   private chatId?: string;
+  private rarityAdvisorService: RarityAdvisorService;
 
   constructor(private redis?: Redis) {
     this.botToken = config.TELEGRAM_BOT_TOKEN;
     this.chatId = config.TELEGRAM_CHAT_ID;
+    this.rarityAdvisorService = new RarityAdvisorService();
   }
 
   get isConfigured(): boolean {
@@ -268,6 +271,29 @@ export class TelegramNotificationService {
           'EX',
           7 * 86400
         );
+      }
+
+      // Se for alteração de raridade, solicita auxílio da IA com ferramentas de busca para subsidiar a decisão
+      if (isRarityChange && sentInfo) {
+        const targetMessageId = sentInfo.messageId;
+        this.rarityAdvisorService
+          .evaluateRaritySuggestion(data)
+          .then(async (advisorText) => {
+            if (advisorText) {
+              const replyInfo = await this.sendMessage(advisorText, undefined, targetMessageId);
+              if (replyInfo && this.redis) {
+                await this.redis.set(
+                  `telegram:suggestion:${data.id}:advisor_msg`,
+                  JSON.stringify(replyInfo),
+                  'EX',
+                  7 * 86400
+                );
+              }
+            }
+          })
+          .catch((err) => {
+            console.error('[TelegramNotificationService] Erro ao obter parecer da IA:', err?.message || err);
+          });
       }
     } catch (err: any) {
       console.error('Falha ao enviar notificação para o Telegram:', err?.message || err);
@@ -560,18 +586,28 @@ export class TelegramNotificationService {
     }
   }
 
-  private async sendMessage(text: string, replyMarkup: any): Promise<{ messageId: number; chatId: string } | null> {
+  private async sendMessage(
+    text: string,
+    replyMarkup?: any,
+    replyToMessageId?: number
+  ): Promise<{ messageId: number; chatId: string } | null> {
     try {
       const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+      const payload: any = {
+        chat_id: this.chatId,
+        text,
+        parse_mode: 'HTML',
+      };
+      if (replyMarkup) {
+        payload.reply_markup = replyMarkup;
+      }
+      if (replyToMessageId) {
+        payload.reply_to_message_id = replyToMessageId;
+      }
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: this.chatId,
-          text,
-          parse_mode: 'HTML',
-          reply_markup: replyMarkup,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = (await res.json()) as any;
       if (data?.ok && data.result?.message_id) {
@@ -677,6 +713,20 @@ export class TelegramNotificationService {
       if (chatId && messageId) {
         const deleted = await this.deleteMessage(chatId, messageId);
         await r.del(key);
+
+        // Limpa mensagem de parecer da IA, caso exista
+        const advKey = `telegram:suggestion:${suggestionId}:advisor_msg`;
+        const advRaw = await r.get(advKey);
+        if (advRaw) {
+          try {
+            const advInfo = JSON.parse(advRaw);
+            if (advInfo.chatId && advInfo.messageId) {
+              await this.deleteMessage(advInfo.chatId, advInfo.messageId);
+              await r.del(advKey);
+            }
+          } catch (_) {}
+        }
+
         return deleted;
       }
     } catch (err: any) {
