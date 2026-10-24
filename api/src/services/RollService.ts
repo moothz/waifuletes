@@ -411,21 +411,25 @@ export class RollService {
           });
 
           for (const comp of competitors) {
+            const refundAmount = Math.floor(comp.totalZinthos * 0.5);
+
             await tx.user.update({
               where: { id: comp.userId },
-              data: { kakera: { increment: comp.totalZinthos } },
+              data: { kakera: { increment: refundAmount } },
             });
 
             await tx.kakeraTransaction.create({
               data: {
                 userId: comp.userId,
-                amount: comp.totalZinthos,
+                amount: refundAmount,
                 reason: 'MARKET_REFUND',
                 metadata: {
                   type: 'INVESTMENT_ROLL_CLAIM_REFUND',
                   characterId: chosen.id,
                   characterName: chosen.name,
                   sharesLost: comp.shares,
+                  totalInvested: comp.totalZinthos,
+                  refundRate: 0.5,
                   marriedUserId: userId,
                 },
               },

@@ -399,7 +399,7 @@ export class MarketInvestmentService {
           });
         }
 
-        // Estorno 100% integral dos concorrentes que investiram nesta waifu
+        // Estorno de 50% dos concorrentes que investiram nesta waifu
         const competitors = await tx.characterInvestment.findMany({
           where: {
             characterId: character.id,
@@ -410,21 +410,25 @@ export class MarketInvestmentService {
 
         const refundedCompetitors = [];
         for (const comp of competitors) {
+          const refundAmount = Math.floor(comp.totalZinthos * 0.5);
+
           await tx.user.update({
             where: { id: comp.userId },
-            data: { kakera: { increment: comp.totalZinthos } },
+            data: { kakera: { increment: refundAmount } },
           });
 
           await tx.kakeraTransaction.create({
             data: {
               userId: comp.userId,
-              amount: comp.totalZinthos,
+              amount: refundAmount,
               reason: KakeraReason.MARKET_REFUND,
               metadata: {
                 type: 'INVESTMENT_OUTBID_REFUND',
                 characterId: character.id,
                 characterName: character.name,
                 sharesLost: comp.shares,
+                totalInvested: comp.totalZinthos,
+                refundRate: 0.5,
                 winnerUserId: params.userId,
               },
             },
@@ -433,7 +437,7 @@ export class MarketInvestmentService {
           refundedCompetitors.push({
             userId: comp.userId,
             name: comp.user.name,
-            refundedZinthos: comp.totalZinthos,
+            refundedZinthos: refundAmount,
             shares: comp.shares,
           });
         }

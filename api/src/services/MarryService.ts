@@ -156,21 +156,25 @@ export class MarryService {
         });
 
         for (const comp of competitors) {
+          const refundAmount = Math.floor(comp.totalZinthos * 0.5);
+
           await tx.user.update({
             where: { id: comp.userId },
-            data: { kakera: { increment: comp.totalZinthos } },
+            data: { kakera: { increment: refundAmount } },
           });
 
           await tx.kakeraTransaction.create({
             data: {
               userId: comp.userId,
-              amount: comp.totalZinthos,
+              amount: refundAmount,
               reason: 'MARKET_REFUND',
               metadata: {
                 type: 'INVESTMENT_MARRIED_REFUND',
                 characterId: targetCharId,
                 characterName: currentCharacter.name,
                 sharesLost: comp.shares,
+                totalInvested: comp.totalZinthos,
+                refundRate: 0.5,
                 marriedUserId: userId,
               },
             },
