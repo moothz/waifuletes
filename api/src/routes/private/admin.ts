@@ -106,6 +106,25 @@ export const privateAdminRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
+  // Retorna todos os IDs de usuários cadastrados (Admin)
+  fastify.get('/admin/users/ids', {
+    schema: {
+      description: 'Retorna a lista de todos os IDs de usuários cadastrados',
+      tags: ['Administração (Privado)'],
+    },
+    handler: async (_request, reply) => {
+      try {
+        const users = await fastify.prisma.user.findMany({ select: { id: true } });
+        return reply.send({ success: true, count: users.length, userIds: users.map((u) => u.id) });
+      } catch (err: any) {
+        return reply.status(500).send({
+          success: false,
+          error: { code: err.message, message: err.message },
+        });
+      }
+    },
+  });
+
   // Remover Kakera (Admin)
   fastify.post('/admin/kakera/take', {
     schema: {
