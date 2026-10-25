@@ -62,6 +62,50 @@ export const privateAdminRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
+  // Conceder Kakera para todos os usuários (Evento Instantâneo)
+  fastify.post('/admin/kakera/give-all', {
+    schema: {
+      description: 'Concede quantidade de moeda Kakera para todos os usuários cadastrados',
+      tags: ['Administração (Privado)'],
+      body: {
+        type: 'object',
+        required: ['amount'],
+        properties: {
+          amount: { type: 'integer', minimum: 1 },
+          reason: {
+            type: 'string',
+            enum: ['ADMIN_GRANT', 'EVENT_REWARD', 'DAILY_REWARD', 'DIVORCE', 'ROLL_CRYSTAL', 'WISHLIST_BONUS', 'SOULMATE_BONUS'],
+            default: 'EVENT_REWARD',
+          },
+          metadata: { type: 'object' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { amount, reason = 'EVENT_REWARD' } = request.body as any;
+
+      try {
+        const res = await fastify.prisma.user.updateMany({
+          data: {
+            kakera: { increment: amount },
+          },
+        });
+
+        return reply.send({
+          success: true,
+          count: res.count,
+          amount,
+          reason,
+        });
+      } catch (err: any) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: err.message, message: err.message },
+        });
+      }
+    },
+  });
+
   // Remover Kakera (Admin)
   fastify.post('/admin/kakera/take', {
     schema: {
