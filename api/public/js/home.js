@@ -27,7 +27,36 @@ document.addEventListener('DOMContentLoaded', () => {
   bindHomeEvents();
   loadCharacters();
   fetchRavenaContact();
+  checkLoggedInUser();
 });
+
+function getCookie(name) {
+  const nameEQ = name + '=';
+  const ca = document.cookie.split(';');
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+  }
+  return null;
+}
+
+function checkLoggedInUser() {
+  const publicId = getCookie('waifu_user_public_id');
+  const token = getCookie('waifu_session');
+  if (publicId && token) {
+    const actions = document.querySelector('.header-actions');
+    if (actions && !document.getElementById('btn-my-harem-nav')) {
+      const btnHarem = document.createElement('a');
+      btnHarem.id = 'btn-my-harem-nav';
+      btnHarem.href = `/user/${publicId}`;
+      btnHarem.className = 'btn-retro btn-sm';
+      btnHarem.style.cssText = 'background: #22c55e; color: #ffffff; border-color: #16a34a; font-weight: 800;';
+      btnHarem.innerHTML = '<i class="fas fa-heart"></i> Meu Harém';
+      actions.prepend(btnHarem);
+    }
+  }
+}
 
 function bindHomeEvents() {
   // Alternância de Abas na Home

@@ -62,6 +62,9 @@
         </div>
       </a>
       <div class="header-actions">
+        <button id="btn-session-auth" class="btn-retro btn-sm hidden" title="Gerenciar sessão">
+          <i class="fas fa-lock"></i> Manter Login!
+        </button>
         <button id="btn-toggle-theme" class="btn-retro btn-sm" title="Alternar tema">
           <i class="fas fa-moon"></i> Dark
         </button>
@@ -90,6 +93,7 @@
         <button class="retro-tab" data-tab="tab-wishlist"><i class="fas fa-star"></i> Minha Wishlist (<span id="wishlist-count">0</span>)</button>
         <button class="retro-tab" data-tab="tab-market"><i class="fas fa-store"></i> Classificados <span id="market-pending-badge" class="badge-tag hidden" style="background:#f59e0b;color:#000;margin-left:4px;font-weight:800;padding:3px 6px;border-radius:4px;font-size:11px;">0</span></button>
         <button class="retro-tab" data-tab="tab-suggestions"><i class="fas fa-lightbulb"></i> Sugestões (<span id="user-suggestions-count">0</span>)</button>
+        <button class="retro-tab" data-tab="tab-notifications"><i class="fas fa-bell"></i> Notificações <span id="notifications-count-badge" class="badge-tag hidden" style="background:#ef4444;color:#fff;margin-left:4px;font-weight:800;padding:2px 6px;border-radius:4px;font-size:11px;">0</span></button>
       </div>
 
       <!-- Aba 1: Catálogo Geral com Ações Rápidas -->
@@ -311,6 +315,33 @@
           </table>
         </div>
       </div>
+
+      <!-- Aba 6: Notificações do Usuário -->
+      <div class="tab-content hidden" id="tab-notifications">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; background: var(--bg-card); padding: 12px 16px; border: var(--border-retro); border-radius: var(--radius-retro); box-shadow: var(--shadow-retro-sm);">
+          <div>
+            <span style="font-weight: 800; font-size: 15px;">🔔 Minhas Notificações</span>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+              Avisos de alterações nas suas waifus, wishlist, classificados e ofertas em tempo real.
+            </p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-retro btn-sm" id="btn-notifications-filter-unread">
+              <i class="fas fa-filter"></i> Apenas Não Lidas
+            </button>
+            <button class="btn-retro btn-sm btn-gold" id="btn-notifications-mark-read">
+              <i class="fas fa-check-double"></i> Marcar todas como lidas
+            </button>
+          </div>
+        </div>
+
+        <div id="notifications-container">
+          <div id="notifications-loading" style="text-align: center; padding: 32px;">
+            <i class="fas fa-spinner fa-spin"></i> Carregando notificações...
+          </div>
+          <div id="notifications-list"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Container do Painel Público (Apenas leitura) -->
@@ -470,8 +501,15 @@
           </div>
 
           <div class="form-group">
-            <label class="retro-label">Tags Sugeridas (separadas por vírgula):</label>
-            <input type="text" id="suggest-edit-tags" class="retro-input" placeholder="Ex: anime, protagonista, waifu">
+            <label class="retro-label">Tags do Personagem (Adicionar e Remover):</label>
+            <div id="suggest-tags-chips-container" class="tag-manager-container"></div>
+            <div style="display: flex; gap: 8px; margin-top: 6px;">
+              <input type="text" id="suggest-new-tag-input" class="retro-input" placeholder="Nova tag..." style="flex: 1;">
+              <button type="button" class="btn-retro btn-sm btn-gold" id="btn-add-suggest-tag" style="white-space: nowrap;">
+                <i class="fas fa-plus"></i> Adicionar
+              </button>
+            </div>
+            <input type="hidden" id="suggest-edit-tags">
           </div>
 
           <div class="form-group">
@@ -592,6 +630,21 @@
               <option value="EPIC">🟣 Épico</option>
               <option value="LEGENDARY">⭐ Lendário</option>
             </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="retro-label">Gênero / Sexo:</label>
+              <select id="new-char-gender" class="retro-select">
+                <option value="FEMALE" selected>♀ Feminino</option>
+                <option value="MALE">♂ Masculino</option>
+                <option value="OTHER">⚧ Outro</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="retro-label">Tags (separadas por vírgula):</label>
+              <input type="text" id="new-char-tags" class="retro-input" placeholder="Ex: anime, protagonista, waifu">
+            </div>
           </div>
 
           <div class="form-group">
@@ -844,10 +897,30 @@
         <!-- Miniaturas de Fotos -->
         <div id="waifu-preview-thumbs" style="display: flex; gap: 6px; justify-content: center; margin-bottom: 10px; overflow-x: auto; padding: 4px 0;"></div>
 
+        <div id="waifu-preview-rank-line" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 4px; font-weight: 800; font-size: 12px;"></div>
         <div id="waifu-preview-series" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;"></div>
         <div id="waifu-preview-gender" style="font-size: 12px; font-weight: 700; margin-bottom: 4px;"></div>
         <div id="waifu-preview-rarity" style="font-size: 12px; font-weight: 800; margin-bottom: 8px;"></div>
+        <div id="waifu-preview-marriage-line" style="font-size: 13px; font-weight: 700; margin-bottom: 8px;"></div>
+
+        <!-- Linha de Métricas & Interação Rápida -->
+        <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 10px;">
+          <button type="button" class="btn-retro btn-sm" id="btn-preview-like" style="border-color: #ec4899; color: #ec4899; font-weight: 800;">
+            <i class="fas fa-heart"></i> <span id="waifu-preview-likes-count">0</span> Curtir
+          </button>
+          <button type="button" class="btn-retro btn-sm btn-gold" id="btn-preview-wish" style="font-weight: 800;">
+            <i class="fas fa-star"></i> <span id="waifu-preview-wishes-count">0</span> Wishlist
+          </button>
+        </div>
+
+        <!-- Tags do Personagem -->
+        <div id="waifu-preview-tags" style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 8px;"></div>
+
+        <!-- Descrição / Biografia -->
         <div id="waifu-preview-description" style="font-size: 12px; color: var(--text-muted); font-style: italic; max-height: 80px; overflow-y: auto; text-align: left; background: var(--bg-card-subtle); border: 1px dashed var(--border-retro); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; display: none;"></div>
+
+        <!-- Ações Contextuais Dinâmicas -->
+        <div id="waifu-preview-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;"></div>
       </div>
       <div class="modal-footer" style="justify-content: space-between; gap: 8px;">
         <button class="btn-retro btn-sm btn-gold" id="btn-preview-suggest" onclick="openSuggestFromPreview()">

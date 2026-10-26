@@ -8,6 +8,7 @@ import { SuggestionService } from '../../services/SuggestionService.js';
 import { MarketService } from '../../services/MarketService.js';
 import { MarketInvestmentService } from '../../services/MarketInvestmentService.js';
 import { CovetService } from '../../services/CovetService.js';
+import { NotificationService } from '../../services/NotificationService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
 import { Rarity } from '@prisma/client';
@@ -81,6 +82,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   const marketService = new MarketService(fastify.prisma, characterService);
   const marketInvestmentService = new MarketInvestmentService(fastify.prisma, characterService, fastify.redis);
   const covetService = new CovetService(fastify.prisma, characterService, wishlistService);
+  const notificationService = new NotificationService(fastify.prisma);
 
   /**
    * Retorna um número de WhatsApp ativo da Ravena para redirecionamento com !mu-adm
@@ -180,6 +182,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         const wishlistResult = await wishlistService.getWishlist(user.id);
         const covetCountsMap = await covetService.getHaremCovetCounts(user.id);
         const covetedCharacterIds = await covetService.getUserCovetedCharacterIds(user.id);
+        const unreadNotificationsCount = await fastify.prisma.userNotification.count({
+          where: { userId: user.id, isRead: false },
+        });
 
         const enrichedHarem = haremResult.data.map((item) => ({
           ...item,
@@ -195,6 +200,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             name: user.name,
             kakera: user.kakera,
             expiresIn: session.expiresIn,
+            isPersistent: session.isPersistent,
+            unreadNotificationsCount,
             harem: enrichedHarem,
             totalHarem: haremResult.total,
             wishlist: wishlistResult,
@@ -256,6 +263,237 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           totalHarem: haremResult.total,
           listings: publicListings,
         },
+      });
+    },
+  });
+
+  /**
+   * Torna a sessão do usuário persistente por 3 dias
+   */
+  fastify.post('/api/web/user/:publicId/persist-session', {
+    schema: {
+      description: 'Ativa o modo manter login (sessão persistente por 3 dias)',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token } = request.body as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await webSessionService.persistUserSession(publicId, token);
+      return reply.send({
+        success: true,
+        data: result,
+      });
+    },
+  });
+
+  /**
+   * Encerra a sessão do usuário (Logout)
+   */
+  fastify.post('/api/web/user/:publicId/logout', {
+    schema: {
+      description: 'Encerra a sessão ativa do usuário no navegador',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        properties: { token: { type: 'string' } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { token } = (request.body as { token?: string }) || {};
+      if (token) {
+        await webSessionService.invalidateUserSession(token);
+      }
+      return reply.send({
+        success: true,
+        data: { message: 'Sessão encerrada com sucesso.' },
+      });
+    },
+  });
+
+  /**
+   * Dá curtida/like em um personagem via painel web
+   */
+  fastify.post('/api/web/user/:publicId/characters/:characterId/like', {
+    schema: {
+      description: 'Dá curtida/like em um personagem respeitando o reset diário das 04:00',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'characterId'],
+        properties: {
+          publicId: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['token'],
+        properties: {
+          token: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, characterId } = request.params as { publicId: string; characterId: string };
+      const { token } = request.body as { token: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Você precisa estar logado para curtir personagens.' },
+        });
+      }
+
+      const updated = await characterService.likeCharacter(session.userId, characterId);
+      return reply.send({
+        success: true,
+        data: {
+          message: `Você curtiu ${updated.name}! ❤️`,
+          likeCount: updated.likeCount,
+          characterId: updated.id,
+        },
+      });
+    },
+  });
+
+  /**
+   * Consulta histórico de notificações do usuário
+   */
+  fastify.get('/api/web/user/:publicId/notifications', {
+    schema: {
+      description: 'Consulta lista paginada de notificações do usuário com contagem de não lidas',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: {
+          token: { type: 'string' },
+          page: { type: 'integer', minimum: 1, default: 1 },
+          limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+          unreadOnly: { type: 'boolean', default: false },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, page, limit, unreadOnly } = request.query as {
+        token: string;
+        page?: number;
+        limit?: number;
+        unreadOnly?: boolean;
+      };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await notificationService.getUserNotifications(session.userId, {
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 20,
+        unreadOnly: Boolean(unreadOnly),
+      });
+
+      return reply.send({
+        success: true,
+        data: result,
+      });
+    },
+  });
+
+  /**
+   * Marca notificações como lidas
+   */
+  fastify.post('/api/web/user/:publicId/notifications/read', {
+    schema: {
+      description: 'Marca notificações específicas ou todas as pendentes como lidas',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        properties: { token: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        properties: {
+          token: { type: 'string' },
+          notificationIds: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          all: { type: 'boolean' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const body = (request.body as any) || {};
+      const query = (request.query as any) || {};
+      const token = body.token || query.token;
+      const notificationIds = body.notificationIds as string[] | undefined;
+      const all = Boolean(body.all);
+
+      if (!token) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Token de sessão obrigatório.' },
+        });
+      }
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      if (all) {
+        await notificationService.markAllAsRead(session.userId);
+      } else {
+        await notificationService.markAsRead(session.userId, notificationIds);
+      }
+
+      return reply.send({
+        success: true,
+        data: { message: 'Notificações marcadas como lidas.' },
       });
     },
   });

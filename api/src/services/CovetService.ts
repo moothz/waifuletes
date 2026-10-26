@@ -2,6 +2,7 @@ import { PrismaClient, CovetStatus } from '@prisma/client';
 import { DomainError } from '../errors/DomainError.js';
 import { CharacterService } from './CharacterService.js';
 import { WishlistService } from './WishlistService.js';
+import { NotificationService } from './NotificationService.js';
 
 export class CovetService {
   constructor(
@@ -77,6 +78,15 @@ export class CovetService {
         notifiedOwner: false,
       },
     });
+
+    const coveter = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    new NotificationService(this.prisma).notifyMarketEvent(
+      haremEntry.userId,
+      'COVET_RECEIVED',
+      `👀 Alguém está cobiçando ${character.name}!`,
+      `${coveter?.name || 'Um jogador'} demonstrou interesse em ${character.name} do seu harém!`,
+      { characterId: character.id }
+    ).catch(() => {});
 
     return {
       success: true,

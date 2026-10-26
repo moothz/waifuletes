@@ -52,50 +52,37 @@ describe('💍 Regras de Sugestão de Raridade para Personagens Casados', () => 
     const userJson = await userRes.json();
     testPublicId = userJson.data.publicId;
 
-    const tokenRes = await fetch(`${BASE_URL}/api/web/user/${testPublicId}/auth-token`, {
+    const tokenRes = await fetch(`${BASE_URL}/user/session`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${API_KEY}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ userId: testUserId }),
     });
     const tokenJson = await tokenRes.json();
     testUserToken = tokenJson.data.token;
 
     // 4. Cria ou garante um personagem solteiro e um personagem casado
-    // Usaremos a rota de admin ou busca existente
-    const charsRes = await fetch(`${BASE_URL}/characters?limit=10`);
-    const charsJson = await charsRes.json();
-    const chars = charsJson.data?.data || [];
-
-    // Localiza um personagem solteiro
-    const single = chars.find((c: any) => !c.isClaimed && c.baseRarity !== 'EPIC' && c.baseRarity !== 'LEGENDARY');
-    if (single) {
-      singleCharId = single.id;
+    const singleRes = await fetch(`${BASE_URL}/characters?limit=1&maritalStatus=single&rarity=COMMON`);
+    const singleJson = await singleRes.json();
+    if (singleJson.data?.data?.[0]) {
+      singleCharId = singleJson.data.data[0].id;
     }
 
-    // Localiza um personagem casado
-    const married = chars.find((c: any) => c.isClaimed && c.baseRarity !== 'EPIC' && c.baseRarity !== 'LEGENDARY');
-    if (married) {
-      marriedCharId = married.id;
-    } else {
-      // Se não houver casado disponível, casa o usuário com o primeiro solteiro via claim/marry
-      const toClaim = chars.find((c: any) => !c.isClaimed && c.id !== singleCharId);
-      if (toClaim) {
-        marriedCharId = toClaim.id;
-        await fetch(`${BASE_URL}/marry`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: testUserId,
-            characterId: marriedCharId,
-            groupId: 'test_group_married_rules',
-          }),
-        });
-      }
+    const marryCandidateRes = await fetch(`${BASE_URL}/characters?limit=1&page=2&maritalStatus=single&rarity=COMMON`);
+    const marryJson = await marryCandidateRes.json();
+    if (marryJson.data?.data?.[0]) {
+      marriedCharId = marryJson.data.data[0].id;
+      // Casa via rota de admin
+      await fetch(`${BASE_URL}/api/admin/users/${encodeURIComponent(testUserId)}/marry`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ characterId: marriedCharId }),
+      });
     }
   });
 
@@ -238,6 +225,7 @@ describe('💍 Regras de Sugestão de Raridade para Personagens Casados', () => 
         Authorization: `Bearer ${adminToken}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({}),
     });
 
     expect(res.status).toBe(200);

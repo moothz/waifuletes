@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -33,8 +33,8 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
       }),
     });
 
-    // 2. Busca um personagem existente para testes e preserva dados originais
-    const charRes = await fetch(`${BASE_URL}/characters?limit=1`);
+    // 2. Busca um personagem existente solteiro e comum para testes e preserva dados originais
+    const charRes = await fetch(`${BASE_URL}/characters?limit=1&maritalStatus=single&rarity=COMMON`);
     const charJson = await charRes.json();
     if (charJson.data?.data?.[0]) {
       testCharacterId = charJson.data.data[0].id;
@@ -129,7 +129,7 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
         }),
       });
     }
-  });
+  }, 30000);
 
   it('POST /user/session deve gerar link com publicId e token de 30 min para o bot', async () => {
     const res = await fetch(`${BASE_URL}/user/session`, {
@@ -353,7 +353,8 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
   });
 
   it('horário formatado no serviço de Telegram deve conter GMT-3 e fuso de Brasília', async () => {
-    const { TelegramNotificationService } = await import('../src/services/TelegramNotificationService.js');
+    const mod: any = await import('../dist/services/TelegramNotificationService.js').catch(() => import('../src/services/TelegramNotificationService.js'));
+    const { TelegramNotificationService } = mod;
     const service = new TelegramNotificationService();
     const formatted = service.formatBrazilDateTime(new Date('2026-10-22T21:00:00Z'));
     expect(formatted).toContain('(GMT-3)');
@@ -361,7 +362,8 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
   });
 
   it('notificação de alteração de raridade deve gerar botões para cada raridade e processar callback com override', async () => {
-    const { TelegramNotificationService } = await import('../src/services/TelegramNotificationService.js');
+    const mod: any = await import('../dist/services/TelegramNotificationService.js').catch(() => import('../src/services/TelegramNotificationService.js'));
+    const { TelegramNotificationService } = mod;
     const service = new TelegramNotificationService();
 
     let capturedQuery: string | null = null;

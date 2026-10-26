@@ -2,6 +2,7 @@ import { PrismaClient, ListingStatus, OfferStatus, KakeraReason } from '@prisma/
 import { config } from '../config.js';
 import { DomainError } from '../errors/DomainError.js';
 import { CharacterService } from './CharacterService.js';
+import { NotificationService } from './NotificationService.js';
 
 export interface CreateOfferData {
   message?: string;
@@ -16,10 +17,14 @@ export interface CreateOfferData {
 }
 
 export class MarketService {
+  private notificationService: NotificationService;
+
   constructor(
     private prisma: PrismaClient,
     private characterService?: CharacterService
-  ) {}
+  ) {
+    this.notificationService = new NotificationService(this.prisma);
+  }
 
   public formatCharacter(character: any) {
     if (!character) return character;
@@ -105,6 +110,16 @@ export class MarketService {
           })),
           skipDuplicates: true,
         });
+
+        for (const u of interestedUsers) {
+          this.notificationService.notifyMarketEvent(
+            u.userId,
+            'MARKET_LISTING_MATCH',
+            `📢 ${listing.character.name} da sua Wishlist foi anunciada!`,
+            `Um jogador acabou de anunciar ${listing.character.name} nos classificados!`,
+            { listingId: listing.id, characterId }
+          ).catch(() => {});
+        }
       }
     } catch {
       // Ignora erro para não falhar a criação do anúncio
@@ -446,6 +461,17 @@ export class MarketService {
       },
     });
 
+    const buyerUser = await this.prisma.user.findUnique({ where: { id: buyerId }, select: { name: true } });
+    this.notificationService
+      .notifyMarketEvent(
+        listing.userId,
+        'MARKET_OFFER_RECEIVED',
+        `💰 Nova proposta para ${listing.character.name}!`,
+        `${buyerUser?.name || 'Um jogador'} enviou uma proposta no seu anúncio nos classificados.`,
+        { listingId, characterId: listing.characterId, offerId: offer.id }
+      )
+      .catch(() => {});
+
     return offer;
   }
 
@@ -469,14 +495,29 @@ export class MarketService {
       throw new DomainError('INVALID_STATUS', 'Esta oferta já foi finalizada.');
     }
 
-    return await this.prisma.marketOffer.update({
+    const rejected = await this.prisma.marketOffer.update({
       where: { id: offerId },
       data: {
         status: OfferStatus.REJECTED,
         notifiedBuyer: false,
         buyerNotifiedStatus: 'REJECTED',
       },
+      include: {
+        listing: { include: { character: true } },
+      },
     });
+
+    this.notificationService
+      .notifyMarketEvent(
+        offer.buyerId,
+        'MARKET_OFFER_REJECTED',
+        `❌ Proposta recusada para ${rejected.listing?.character?.name || 'personagem'}`,
+        'O vendedor não aceitou a sua proposta e os itens/zinthos ofertados foram devolvidos.',
+        { listingId: offer.listingId, offerId: offer.id }
+      )
+      .catch(() => {});
+
+    return rejected;
   }
 
   /**
@@ -759,6 +800,16 @@ export class MarketService {
         },
       });
     });
+
+    this.notificationService
+      .notifyMarketEvent(
+        offer.buyerId,
+        'MARKET_OFFER_ACCEPTED',
+        `🤝 Proposta aceita por ${listing.character.name}!`,
+        'Parabéns! Sua proposta foi aceita pelo vendedor e a negociação foi concluída com sucesso.',
+        { listingId: listing.id, characterId: listing.characterId, offerId: offer.id }
+      )
+      .catch(() => {});
 
     return {
       success: true,

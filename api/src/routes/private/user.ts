@@ -165,4 +165,118 @@ export const privateUserRoutes: FastifyPluginAsync = async (fastify) => {
       });
     },
   });
+
+  /**
+   * Leaderboard / Ranking específico do grupo (usado no WhatsApp pela Ravena)
+   */
+  fastify.get('/groups/:groupId/leaderboard', {
+    preHandler: verifyApiKey,
+    schema: {
+      description: 'Ranking de usuários e waifus específico de um grupo',
+      tags: ['Usuários (Privado)'],
+      params: {
+        type: 'object',
+        required: ['groupId'],
+        properties: { groupId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', minimum: 1, maximum: 25, default: 10 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { groupId } = request.params as { groupId: string };
+      const { limit = 10 } = (request.query as { limit?: number }) || {};
+      const take = Math.min(25, Math.max(1, Number(limit)));
+
+      // Busca membros do grupo
+      const members = await fastify.prisma.userGroup.findMany({
+        where: { groupId },
+        select: { userId: true },
+      });
+
+      const memberUserIds = members.map((m) => m.userId);
+
+      if (memberUserIds.length === 0) {
+        return reply.send({
+          success: true,
+          data: {
+            groupId,
+            totalMembers: 0,
+            topKakera: [],
+            topHarem: [],
+            topCharacters: [],
+          },
+        });
+      }
+
+      const [topKakera, topHaremUsers, topGroupClaims, totalClaimsInGroup] = await Promise.all([
+        fastify.prisma.user.findMany({
+          where: { id: { in: memberUserIds } },
+          orderBy: { kakera: 'desc' },
+          take,
+          select: { id: true, name: true, kakera: true, publicId: true },
+        }),
+        fastify.prisma.user.findMany({
+          where: { id: { in: memberUserIds } },
+          include: {
+            _count: { select: { harem: true } },
+          },
+          orderBy: { harem: { _count: 'desc' } },
+          take,
+        }),
+        fastify.prisma.haremEntry.findMany({
+          where: { claimedInGroup: groupId },
+          take,
+          orderBy: [{ keys: 'desc' }, { character: { popularityScore: 'desc' } }],
+          include: {
+            character: {
+              select: {
+                id: true,
+                name: true,
+                baseRarity: true,
+                rank: true,
+                waifuRank: true,
+                popularityScore: true,
+              },
+            },
+            user: {
+              select: { id: true, name: true, publicId: true },
+            },
+          },
+        }),
+        fastify.prisma.haremEntry.count({
+          where: { claimedInGroup: groupId },
+        }),
+      ]);
+
+      const topHarem = topHaremUsers.map((u) => ({
+        id: u.id,
+        name: u.name,
+        publicId: u.publicId,
+        haremCount: u._count.harem,
+      }));
+
+      const topCharacters = topGroupClaims.map((entry) => ({
+        character: entry.character,
+        owner: entry.user,
+        keys: entry.keys,
+        claimedAt: entry.claimedAt,
+      }));
+
+      return reply.send({
+        success: true,
+        data: {
+          groupId,
+          totalMembers: memberUserIds.length,
+          totalClaimsInGroup,
+          topKakera,
+          topHarem,
+          topCharacters,
+        },
+      });
+    },
+  });
 };

@@ -146,6 +146,8 @@ export class WishlistService {
       },
     });
 
+    this.characterService.updateCharacterScore(character.id).catch(() => {});
+
     return {
       success: true,
       data: {
@@ -182,6 +184,10 @@ export class WishlistService {
     await this.prisma.wishlistEntry.delete({
       where: { id: existing.id },
     });
+
+    if (targetId) {
+      this.characterService.updateCharacterScore(targetId).catch(() => {});
+    }
 
     return {
       success: true,

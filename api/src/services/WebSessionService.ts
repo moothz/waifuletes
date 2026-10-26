@@ -7,6 +7,7 @@ import { DomainError } from '../errors/DomainError.js';
 export interface UserSessionData {
   userId: string;
   publicId: string;
+  persistent?: boolean;
   inventory?: {
     fishes?: any[];
     buffs?: any[];
@@ -57,21 +58,28 @@ export class WebSessionService {
    */
   async validateUserSession(publicId: string, token?: string) {
     if (!token || typeof token !== 'string') {
-      return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
+      return { valid: false as const, userId: null, inventory: null, expiresIn: 0, isPersistent: false };
     }
 
     const raw = await this.redis.get(`web:session:${token}`);
     if (!raw) {
-      return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
+      return { valid: false as const, userId: null, inventory: null, expiresIn: 0, isPersistent: false };
     }
 
     try {
       const data = JSON.parse(raw) as UserSessionData;
       if (data.publicId !== publicId) {
-        return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
+        return { valid: false as const, userId: null, inventory: null, expiresIn: 0, isPersistent: false };
       }
 
-      const ttl = await this.redis.ttl(`web:session:${token}`);
+      const isPersistent = Boolean(data.persistent);
+      let ttl = await this.redis.ttl(`web:session:${token}`);
+
+      // Renovação automática de sessão persistente ao acessar (3 dias = 259200 segundos)
+      if (isPersistent) {
+        await this.redis.expire(`web:session:${token}`, 3 * 86400);
+        ttl = 3 * 86400;
+      }
 
       return {
         valid: true as const,
@@ -79,9 +87,48 @@ export class WebSessionService {
         publicId: data.publicId,
         inventory: data.inventory || null,
         expiresIn: Math.max(0, ttl),
+        isPersistent,
       };
     } catch (_) {
-      return { valid: false as const, userId: null, inventory: null, expiresIn: 0 };
+      return { valid: false as const, userId: null, inventory: null, expiresIn: 0, isPersistent: false };
+    }
+  }
+
+  /**
+   * Torna a sessão do usuário persistente por 3 dias sem acesso
+   */
+  async persistUserSession(publicId: string, token: string) {
+    if (!token || typeof token !== 'string') {
+      throw new DomainError('INVALID_SESSION_TOKEN', 'Token de sessão inválido.');
+    }
+
+    const raw = await this.redis.get(`web:session:${token}`);
+    if (!raw) {
+      throw new DomainError('SESSION_EXPIRED', 'Sessão expirada ou não encontrada.');
+    }
+
+    const data = JSON.parse(raw) as UserSessionData;
+    if (data.publicId !== publicId) {
+      throw new DomainError('FORBIDDEN', 'Token não pertence ao usuário solicitado.');
+    }
+
+    data.persistent = true;
+    // 3 dias = 259.200 segundos
+    await this.redis.set(`web:session:${token}`, JSON.stringify(data), 'EX', 3 * 86400);
+
+    return {
+      success: true,
+      expiresIn: 3 * 86400,
+      isPersistent: true,
+    };
+  }
+
+  /**
+   * Invalida sessão de usuário (logout)
+   */
+  async invalidateUserSession(token: string): Promise<void> {
+    if (token) {
+      await this.redis.del(`web:session:${token}`);
     }
   }
 

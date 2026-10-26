@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import { ManifestCharacter } from '../utils/manifestLoader.js';
 import { RARITY_BASE_WEIGHTS } from '../utils/rarityCalculator.js';
 import { config } from '../config.js';
+import { DomainError } from '../errors/DomainError.js';
 
 export interface CharacterFilter {
   series?: string;
@@ -235,6 +236,8 @@ export class CharacterService {
       orderBy = [{ baseRarity: 'desc' }, { claimCount: 'desc' }, { name: 'asc' }];
     } else if (filter.sort === 'wishlist') {
       orderBy = [{ wishlists: { _count: 'desc' } }, { claimCount: 'desc' }, { name: 'asc' }];
+    } else if (filter.sort === 'popularity' || filter.sort === 'rank' || filter.sort === 'ranking') {
+      orderBy = [{ popularityScore: 'desc' }, { rank: 'asc' }, { name: 'asc' }];
     }
 
     const [total, characters] = await Promise.all([
@@ -307,7 +310,7 @@ export class CharacterService {
         haremEntries: {
           include: {
             user: {
-              select: { id: true, name: true, platform: true },
+              select: { id: true, publicId: true, name: true, platform: true },
             },
           },
         },
@@ -328,7 +331,7 @@ export class CharacterService {
     if (rawOwner) {
       owner = isTrusted
         ? rawOwner
-        : { name: rawOwner.name };
+        : { name: rawOwner.name, publicId: rawOwner.publicId };
     }
 
     const { haremEntries, ...charRest } = character;
@@ -357,14 +360,178 @@ export class CharacterService {
       wasEverMarried,
       owner,
       claimedInGroup: isTrusted ? (character.haremEntries[0]?.claimedInGroup ?? null) : null,
+      wishlistCount: character._count?.wishlists ?? 0,
     };
   }
 
+  /**
+   * Retorna os segundos restantes até o próximo reset diário oficial (04:00 BRT / 07:00 UTC)
+   */
+  getSecondsUntilDailyReset(date: Date = new Date()): number {
+    const resetHourUtc = config.DAILY_RESET_HOUR_UTC;
+    const resetMinuteUtc = config.DAILY_RESET_MINUTE_UTC || 0;
+    const todayReset = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), resetHourUtc, resetMinuteUtc, 0, 0)
+    );
+
+    let nextReset: Date;
+    if (date.getTime() < todayReset.getTime()) {
+      nextReset = todayReset;
+    } else {
+      nextReset = new Date(todayReset.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    return Math.max(1, Math.ceil((nextReset.getTime() - date.getTime()) / 1000));
+  }
+
+  /**
+   * Calcula o score de popularidade unificado da waifu:
+   * Score = (likes * 10) + (wishlists * 5) + (casado * 5) + (favorita * 5) + (chaves * 2) + bonusMudae
+   */
+  calculatePopularityScore(char: {
+    likeCount?: number;
+    wishlistCount?: number;
+    isClaimed?: boolean;
+    isFavorite?: boolean;
+    keys?: number;
+    rank?: number | null;
+  }): number {
+    const likesScore = (char.likeCount || 0) * 10;
+    const wishScore = (char.wishlistCount || 0) * 5;
+    const claimScore = char.isClaimed ? 5 : 0;
+    const favoriteScore = char.isFavorite ? 5 : 0;
+    const keysScore = (char.keys || 0) * 2;
+    const mudaeBonus = char.rank ? Math.max(0, Math.floor((10000 - char.rank) / 100)) : 0;
+    return likesScore + wishScore + claimScore + favoriteScore + keysScore + mudaeBonus;
+  }
+
+  /**
+   * Recalcula pontualmente o popularityScore de um personagem
+   */
+  async updateCharacterScore(characterId: string): Promise<number> {
+    const char = await this.prisma.character.findUnique({
+      where: { id: characterId },
+      include: {
+        haremEntries: {
+          select: { id: true, keys: true, isFavorite: true },
+        },
+        _count: {
+          select: { wishlists: true },
+        },
+      },
+    });
+
+    if (!char) return 0;
+
+    const isClaimed = char.haremEntries.length > 0;
+    const isFavorite = char.haremEntries.some((h) => h.isFavorite);
+    const keys = char.haremEntries.reduce((acc, h) => acc + (h.keys || 0), 0);
+    const wishlistCount = char._count?.wishlists || 0;
+
+    const score = this.calculatePopularityScore({
+      likeCount: char.likeCount,
+      wishlistCount,
+      isClaimed,
+      isFavorite,
+      keys,
+      rank: char.rank,
+    });
+
+    await this.prisma.character.update({
+      where: { id: char.id },
+      data: { popularityScore: score },
+    });
+
+    return score;
+  }
+
+  /**
+   * Recalcula em lote as pontuações e o ranking global de todas as waifus ativas (waifuRank #1, #2, ...)
+   */
+  async recalculateAllWaifuRanks(): Promise<number> {
+    const result = await this.prisma.$executeRaw`
+      WITH char_metrics AS (
+        SELECT
+          c.id,
+          c."likeCount",
+          c.rank,
+          COALESCE(w.wish_cnt, 0) AS wish_cnt,
+          CASE WHEN h.char_id IS NOT NULL THEN 1 ELSE 0 END AS is_claimed,
+          COALESCE(h.is_fav, 0) AS is_fav,
+          COALESCE(h.total_keys, 0) AS total_keys
+        FROM characters c
+        LEFT JOIN (
+          SELECT "characterId", COUNT(*) as wish_cnt FROM wishlist_entries GROUP BY "characterId"
+        ) w ON w."characterId" = c.id
+        LEFT JOIN (
+          SELECT
+            "characterId" as char_id,
+            MAX(CASE WHEN "isFavorite" = true THEN 1 ELSE 0 END) as is_fav,
+            SUM(COALESCE("keys", 0)) as total_keys
+          FROM harem_entries
+          GROUP BY "characterId"
+        ) h ON h.char_id = c.id
+        WHERE c."isActive" = true
+      ),
+      calculated_scores AS (
+        SELECT
+          id,
+          (
+            ("likeCount" * 10) +
+            (wish_cnt * 5) +
+            (is_claimed * 5) +
+            (is_fav * 5) +
+            (total_keys * 2) +
+            CASE
+              WHEN rank IS NOT NULL AND rank < 10000 THEN FLOOR((10000 - rank) / 100)
+              ELSE 0
+            END
+          )::integer AS score
+        FROM char_metrics
+      ),
+      ranked AS (
+        SELECT
+          cs.id,
+          cs.score,
+          ROW_NUMBER() OVER (
+            ORDER BY cs.score DESC, c.rank ASC NULLS LAST, c."claimCount" DESC, c."likeCount" DESC, c.name ASC
+          ) as r
+        FROM calculated_scores cs
+        JOIN characters c ON c.id = cs.id
+      )
+      UPDATE characters
+      SET
+        "popularityScore" = ranked.score,
+        "waifuRank" = ranked.r
+      FROM ranked
+      WHERE characters.id = ranked.id;
+    `;
+    return Number(result);
+  }
+
+  /**
+   * Registra like no personagem respeitando limite diário (1 por personagem até as 04:00)
+   */
   async likeCharacter(userId: string, characterId: string) {
     const character = await this.findCharacter(characterId);
 
     if (!character) {
-      throw new Error('CHARACTER_NOT_FOUND');
+      throw new DomainError('CHARACTER_NOT_FOUND', 'Personagem não encontrado.', 404);
+    }
+
+    const cooldownKey = `cooldown:like:${userId}:${character.id}`;
+    if (this.redis) {
+      const ttl = await this.redis.ttl(cooldownKey);
+      if (ttl > 0) {
+        const hours = Math.floor(ttl / 3600);
+        const minutes = Math.floor((ttl % 3600) / 60);
+        const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        throw new DomainError(
+          'LIKE_ALREADY_GIVEN_TODAY',
+          `Você já curtiu ${character.name} hoje! Novo like disponível em ${timeStr} (às 04:00).`,
+          429
+        );
+      }
     }
 
     const updated = await this.prisma.character.update({
@@ -373,6 +540,14 @@ export class CharacterService {
         likeCount: { increment: 1 },
       },
     });
+
+    if (this.redis) {
+      const ttl = this.getSecondsUntilDailyReset();
+      await this.redis.set(cooldownKey, '1', 'EX', ttl);
+    }
+
+    // Atualiza o score de popularidade imediatamente
+    await this.updateCharacterScore(character.id);
 
     return updated;
   }

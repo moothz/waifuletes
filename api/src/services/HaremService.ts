@@ -78,6 +78,8 @@ export class HaremService {
         data: { isFavorite: false },
       });
 
+      this.characterService.updateCharacterScore(entry.characterId).catch(() => {});
+
       return {
         success: true,
         data: {
@@ -106,6 +108,8 @@ export class HaremService {
       where: { id: entry.id },
       data: { isFavorite: true },
     });
+
+    this.characterService.updateCharacterScore(entry.characterId).catch(() => {});
 
     return {
       success: true,

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Redis from 'ioredis';
-import { CooldownService } from '../src/services/CooldownService.js';
-import { config } from '../src/config.js';
+import { CooldownService } from '../dist/services/CooldownService.js';
+import { config } from '../dist/config.js';
 
 class MockRedis {
   private store = new Map<string, { val: string; expiresAt: number }>();

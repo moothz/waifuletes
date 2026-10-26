@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { DomainError } from '../errors/DomainError.js';
 import { CharacterService, slugify } from './CharacterService.js';
 import { TelegramNotificationService } from './TelegramNotificationService.js';
+import { NotificationService } from './NotificationService.js';
 
 export type SuggestionBlockDuration = '24h' | '7d' | '30d' | 'forever';
 
@@ -20,6 +21,7 @@ export interface UserSuggestionBlockInfo {
 
 export class SuggestionService {
   private telegramService: TelegramNotificationService;
+  private notificationService: NotificationService;
 
   constructor(
     private prisma: PrismaClient,
@@ -27,6 +29,7 @@ export class SuggestionService {
     private characterService: CharacterService
   ) {
     this.telegramService = new TelegramNotificationService(this.redis);
+    this.notificationService = new NotificationService(this.prisma);
   }
 
   /**
@@ -532,6 +535,8 @@ export class SuggestionService {
       name: string;
       series: string;
       rarity: Rarity;
+      gender?: Gender;
+      tags?: string[];
       description?: string;
       reason?: string;
       imageBuffer?: Buffer;
@@ -591,6 +596,8 @@ export class SuggestionService {
           series: data.series.trim(),
           description: data.description ? data.description.trim() : null,
           suggestedRarity: data.rarity || 'COMMON',
+          suggestedGender: data.gender || 'FEMALE',
+          suggestedTags: data.tags || [],
           imageUrl: relPath,
           reason: data.reason ? data.reason.trim() : null,
         },
@@ -932,6 +939,7 @@ export class SuggestionService {
       : null;
 
     let successMessage = 'Sugestão aprovada e aplicada com sucesso!';
+    const changesSummary: string[] = [];
 
     if (suggestion.type === 'RARITY' && suggestion.character) {
       const finalRarity = chosenRarity || suggestion.suggestedRarity || 'COMMON';
@@ -949,19 +957,38 @@ export class SuggestionService {
         where: { id: suggestion.character.id },
         data: { baseRarity: finalRarity },
       });
+      changesSummary.push(`Raridade alterada de ${suggestion.character.baseRarity} para ${finalRarity}`);
       successMessage = `Raridade de ${suggestion.character.name} alterada para ${finalRarity}!`;
     } else if (suggestion.type === 'EDIT' && suggestion.character) {
       const dataToUpdate: any = {};
-      if (suggestion.suggestedName) dataToUpdate.name = suggestion.suggestedName;
-      if (suggestion.suggestedSeries) dataToUpdate.series = suggestion.suggestedSeries;
-      if (suggestion.suggestedGender) dataToUpdate.gender = suggestion.suggestedGender;
+      if (suggestion.suggestedName) {
+        dataToUpdate.name = suggestion.suggestedName;
+        if (suggestion.suggestedName !== suggestion.character.name) {
+          changesSummary.push(`Nome atualizado para "${suggestion.suggestedName}"`);
+        }
+      }
+      if (suggestion.suggestedSeries) {
+        dataToUpdate.series = suggestion.suggestedSeries;
+        if (suggestion.suggestedSeries !== suggestion.character.series) {
+          changesSummary.push(`Série atualizada para "${suggestion.suggestedSeries}"`);
+        }
+      }
+      if (suggestion.suggestedGender) {
+        dataToUpdate.gender = suggestion.suggestedGender;
+        if (suggestion.suggestedGender !== suggestion.character.gender) {
+          changesSummary.push(`Gênero atualizado para ${suggestion.suggestedGender}`);
+        }
+      }
       if (suggestion.suggestedDescription !== null && suggestion.suggestedDescription !== undefined) {
         dataToUpdate.description = suggestion.suggestedDescription;
+        changesSummary.push('Biografia/Descrição atualizada');
       }
       if (chosenRarity) {
         dataToUpdate.baseRarity = chosenRarity;
+        changesSummary.push(`Raridade alterada para ${chosenRarity}`);
       } else if (suggestion.suggestedRarity) {
         dataToUpdate.baseRarity = suggestion.suggestedRarity;
+        changesSummary.push(`Raridade alterada para ${suggestion.suggestedRarity}`);
       }
       if (dataToUpdate.baseRarity === 'LEGENDARY') {
         const wasMarried = await this.wasCharacterEverMarried(suggestion.character.id);
@@ -973,8 +1000,9 @@ export class SuggestionService {
           );
         }
       }
-      if (suggestion.suggestedTags && suggestion.suggestedTags.length > 0) {
+      if (suggestion.suggestedTags !== undefined && suggestion.suggestedTags !== null) {
         dataToUpdate.tags = suggestion.suggestedTags;
+        changesSummary.push(`Tags atualizadas: ${suggestion.suggestedTags.length > 0 ? suggestion.suggestedTags.join(', ') : '(nenhuma)'}`);
       }
 
       const updated = await this.prisma.character.update({
@@ -999,6 +1027,7 @@ export class SuggestionService {
           where: { id: suggestion.character.id },
           data: { imageUrls: filtered },
         });
+        changesSummary.push('Foto removida da galeria');
         successMessage = `Foto de ${suggestion.character.name} removida com sucesso!`;
       } else if (actionData?.action === 'REPLACE' && actionData.targetPhoto && suggestion.imageUrl) {
         const sourcePath = path.resolve(config.MEDIA_DIR, suggestion.imageUrl);
@@ -1027,6 +1056,7 @@ export class SuggestionService {
             where: { id: suggestion.character.id },
             data: { imageUrls: currentList },
           });
+          changesSummary.push('Foto principal da galeria substituída');
           successMessage = `Foto de ${suggestion.character.name} substituída com sucesso!`;
         } catch (err: any) {
           throw new DomainError('IMAGE_APPLY_FAILED', `Falha ao processar substituição de imagem: ${err.message}`, 500);
@@ -1052,6 +1082,7 @@ export class SuggestionService {
         } catch (err: any) {
           throw new DomainError('IMAGE_APPLY_FAILED', `Falha ao mover arquivo de imagem: ${err.message}`, 500);
         }
+        changesSummary.push('Nova foto adicionada à galeria');
         successMessage = `Nova foto aplicada a ${suggestion.character.name}!`;
       }
     } else if (suggestion.type === 'NEW_CHARACTER') {
@@ -1089,6 +1120,8 @@ export class SuggestionService {
           id: targetId,
           name: charName,
           series: suggestion.series || 'Indefinida',
+          gender: suggestion.suggestedGender || 'FEMALE',
+          tags: suggestion.suggestedTags || [],
           description: suggestion.description || null,
           baseRarity: suggestion.suggestedRarity || 'COMMON',
           imageUrls: officialImages,
@@ -1124,6 +1157,23 @@ export class SuggestionService {
         data: { isActive: false },
       });
       successMessage = `Personagem desativado/removido do catálogo com sucesso.`;
+    }
+
+    // Notifica jogadores casados ou que têm na wishlist se houve alteração em waifu existente
+    if (changesSummary.length > 0 && suggestion.character?.id) {
+      this.notificationService
+        .notifyCharacterModification(suggestion.character.id, changesSummary)
+        .catch((err) => console.error('Erro ao notificar alteração de waifu:', err));
+
+      this.characterService.updateCharacterScore(suggestion.character.id).catch(() => {});
+    }
+
+    // Notifica o autor da sugestão
+    if (suggestion.userId) {
+      const charName = suggestion.character?.name || suggestion.characterName || 'Personagem';
+      this.notificationService
+        .notifySuggestionReview(suggestion.userId, charName, 'APPROVED', suggestion.type)
+        .catch((err) => console.error('Erro ao notificar autor da sugestão:', err));
     }
 
     const updated = await this.prisma.characterSuggestion.update({
@@ -1175,6 +1225,14 @@ export class SuggestionService {
         reviewedBy,
       },
     });
+
+    // Notifica o autor da sugestão sobre a rejeição
+    if (suggestion.userId) {
+      const charName = suggestion.characterName || 'Personagem';
+      this.notificationService
+        .notifySuggestionReview(suggestion.userId, charName, 'REJECTED', suggestion.type, rejectionReason)
+        .catch((err) => console.error('Erro ao notificar rejeição de sugestão:', err));
+    }
 
     return {
       success: true,

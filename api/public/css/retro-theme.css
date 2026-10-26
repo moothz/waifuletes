@@ -615,6 +615,155 @@ body.dark-mode .waifu-card.rarity-common {
   gap: 5px;
   box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(2px);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s ease;
+}
+.badge-wishes:hover {
+  transform: scale(1.08);
+}
+
+.badge-likes {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1.5px solid #ec4899;
+  color: #f472b6;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  user-select: none;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.badge-likes:hover {
+  transform: scale(1.08);
+  background: #ec4899;
+  color: #ffffff;
+}
+
+.btn-keep-login {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  border-color: #059669 !important;
+  font-weight: 800 !important;
+}
+.btn-keep-login:hover {
+  background: #059669 !important;
+}
+
+.btn-logout {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+  font-weight: 800 !important;
+}
+.btn-logout:hover {
+  background: #dc2626 !important;
+}
+
+/* Gerenciador de Tags Interativo */
+.tag-manager-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  min-height: 38px;
+  padding: 6px;
+  background: var(--bg-card-subtle);
+  border: var(--border-retro);
+  border-radius: 6px;
+  align-items: center;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--text-color);
+  color: var(--text-color);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.4);
+}
+.tag-chip-remove {
+  cursor: pointer;
+  color: #ef4444;
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 0.1s;
+}
+.tag-chip-remove:hover {
+  transform: scale(1.3);
+}
+
+/* Notificações */
+.notification-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: var(--border-retro);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.6);
+  position: relative;
+  transition: transform 0.15s ease;
+}
+.notification-card.unread {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+.notification-card.unread::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 9px;
+  height: 9px;
+  background: #3b82f6;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #3b82f6;
+}
+.notification-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+  background: var(--bg-card-subtle);
+  border: 1.5px solid var(--border-color);
+}
+.notification-title {
+  font-weight: 800;
+  font-size: 14px;
+  margin-bottom: 3px;
+  color: var(--text-color);
+}
+.notification-message {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.notification-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 5px;
+  font-style: italic;
 }
 
 .btn-card-fav {

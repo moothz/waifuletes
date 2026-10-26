@@ -23,12 +23,39 @@ let userSessionToken = '';
 let userSessionData = null;
 let cropperInstance = null;
 let activeSuggestCharacter = null;
+let suggestTagsState = [];
 let pendingDivorceTarget = null;
 let activeReportCharacter = null;
 let activeSellCharacter = null;
 let activeOfferListing = null;
 let activeCovetsChar = null;
 let userCovetedSet = new Set();
+
+// Helpers de Cookies para Persistência de Sessão (3 dias)
+function setCookie(name, value, days = 3) {
+  let expires = '';
+  if (days) {
+    const d = new Date();
+    d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+    expires = '; expires=' + d.toUTCString();
+  }
+  document.cookie = `${name}=${encodeURIComponent(value || '')}${expires}; path=/; SameSite=Lax`;
+}
+
+function getCookie(name) {
+  const nameEQ = name + '=';
+  const ca = document.cookie.split(';');
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+  }
+  return null;
+}
+
+function deleteCookie(name) {
+  document.cookie = `${name}=; Max-Age=-99999999; path=/; SameSite=Lax`;
+}
 
 let marketState = {
   search: '',
@@ -64,6 +91,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Extrai token da query string (?token=...)
   const params = new URLSearchParams(window.location.search);
   userSessionToken = params.get('token') || '';
+
+  // Se não houver token na URL, recupera token salvo no cookie da sessão persistente
+  if (!userSessionToken && userPublicId) {
+    const savedToken = getCookie(`waifu_session_${userPublicId}`) || getCookie('waifu_session');
+    if (savedToken) {
+      userSessionToken = savedToken;
+    }
+  }
 
   if (!userPublicId) {
     document.getElementById('user-title').textContent = 'Usuário não especificado';
@@ -102,6 +137,8 @@ function setupEventListeners() {
         loadUserSuggestions();
       } else if (targetId === 'tab-market') {
         loadMarketTab();
+      } else if (targetId === 'tab-notifications') {
+        loadUserNotifications();
       }
     });
   });
@@ -353,7 +390,9 @@ function setupEventListeners() {
 
       const name = document.getElementById('new-char-name').value.trim();
       const series = document.getElementById('new-char-series').value.trim();
+      const gender = document.getElementById('new-char-gender')?.value || 'FEMALE';
       const rarity = document.getElementById('new-char-rarity').value;
+      const tags = document.getElementById('new-char-tags')?.value.trim() || '';
       const description = document.getElementById('new-char-description').value.trim();
       const reason = document.getElementById('new-char-reason').value.trim();
       const photoFile = document.getElementById('new-char-photo').files?.[0];
@@ -363,7 +402,9 @@ function setupEventListeners() {
       formData.append('type', 'NEW_CHARACTER');
       formData.append('name', name);
       formData.append('series', series);
+      formData.append('gender', gender);
       formData.append('rarity', rarity);
+      formData.append('tags', tags);
       formData.append('description', description);
       formData.append('reason', reason);
       if (photoFile) {
@@ -455,6 +496,27 @@ function setupEventListeners() {
 
   // Botão de submeter proposta de oferta
   document.getElementById('btn-submit-offer')?.addEventListener('click', submitMarketOffer);
+
+  // Tag manager no modal de sugestão
+  document.getElementById('btn-add-suggest-tag')?.addEventListener('click', () => addSuggestTag());
+  document.getElementById('suggest-new-tag-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addSuggestTag();
+    }
+  });
+
+  // Notificações: Marcar todas como lidas e filtro não lidas
+  document.getElementById('btn-notifications-mark-read')?.addEventListener('click', markAllNotificationsAsRead);
+  document.getElementById('btn-mark-all-read')?.addEventListener('click', markAllNotificationsAsRead);
+  document.getElementById('btn-notifications-filter-unread')?.addEventListener('click', () => {
+    notificationsFilterUnreadOnly = !notificationsFilterUnreadOnly;
+    const btn = document.getElementById('btn-notifications-filter-unread');
+    if (btn) {
+      btn.className = notificationsFilterUnreadOnly ? 'btn-retro btn-sm btn-gold active' : 'btn-retro btn-sm';
+    }
+    renderNotificationsList();
+  });
 }
 
 async function loadUserData() {
@@ -488,6 +550,28 @@ async function loadUserData() {
       // Inicia contador de sessão ativa
       renderSessionTimer(userSessionData.expiresIn);
 
+      // Renderiza botão de Manter Login / Sair
+      renderSessionAuthButton(Boolean(userSessionData.isPersistent));
+
+      // Se a sessão for persistente, renova/salva cookies por 3 dias
+      if (userSessionData.isPersistent && userSessionToken) {
+        setCookie(`waifu_session_${userPublicId}`, userSessionToken, 3);
+        setCookie('waifu_session', userSessionToken, 3);
+        setCookie('waifu_user_public_id', userPublicId, 3);
+      }
+
+      // Atualiza badge de notificações não lidas
+      const unreadNotifs = Number(userSessionData.unreadNotificationsCount || 0);
+      const notifBadge = document.getElementById('notifications-count-badge');
+      if (notifBadge) {
+        if (unreadNotifs > 0) {
+          notifBadge.textContent = unreadNotifs > 99 ? '99+' : unreadNotifs;
+          notifBadge.classList.remove('hidden');
+        } else {
+          notifBadge.classList.add('hidden');
+        }
+      }
+
       // Exibe botão de compartilhar apenas para o dono
       document.getElementById('btn-share-public')?.classList.remove('hidden');
 
@@ -500,6 +584,7 @@ async function loadUserData() {
       loadUserSuggestions();
       updateMarketPendingBadge();
     } else {
+      document.getElementById('btn-session-auth')?.classList.add('hidden');
       document.getElementById('btn-share-public')?.classList.add('hidden');
       document.getElementById('private-panel').classList.add('hidden');
       document.getElementById('public-panel').classList.remove('hidden');
@@ -517,8 +602,69 @@ async function loadUserData() {
   }
 }
 
+function renderSessionAuthButton(isPersistent) {
+  const btn = document.getElementById('btn-session-auth');
+  if (!btn) return;
+
+  btn.classList.remove('hidden');
+
+  if (isPersistent) {
+    btn.classList.remove('btn-keep-login');
+    btn.classList.add('btn-logout');
+    btn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Sair';
+    btn.title = 'Encerrar sessão mantida neste navegador';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await Api.post(`/api/web/user/${userPublicId}/logout`, { token: userSessionToken });
+      } catch (_) {}
+      deleteCookie(`waifu_session_${userPublicId}`);
+      deleteCookie('waifu_session');
+      deleteCookie('waifu_user_public_id');
+      window.location.href = `/user/${userPublicId}`;
+    };
+  } else {
+    btn.classList.add('btn-keep-login');
+    btn.classList.remove('btn-logout');
+    btn.innerHTML = '<i class="fas fa-thumbtack"></i> Manter Login!';
+    btn.title = 'Salvar login por 3 dias sem precisar de novo link do bot';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const res = await Api.post(`/api/web/user/${userPublicId}/persist-session`, { token: userSessionToken });
+        if (res.success) {
+          setCookie(`waifu_session_${userPublicId}`, userSessionToken, 3);
+          setCookie('waifu_session', userSessionToken, 3);
+          setCookie('waifu_user_public_id', userPublicId, 3);
+          userSessionData.isPersistent = true;
+          Api.showToast('Login mantido por 3 dias com sucesso! Quando voltar ao site você continuará autenticado.', '🔒');
+          renderSessionAuthButton(true);
+          renderSessionTimer(259200);
+        } else {
+          Api.showToast(res.error?.message || 'Falha ao manter login.', '❌');
+          btn.disabled = false;
+        }
+      } catch (err) {
+        Api.showToast('Erro ao manter login.', '❌');
+        btn.disabled = false;
+      }
+    };
+  }
+}
+
 function renderSessionTimer(remainingSeconds) {
   const container = document.getElementById('session-badge-container');
+  if (!container) return;
+
+  if (userSessionData?.isPersistent) {
+    container.innerHTML = `
+      <span class="badge-rarity" style="position: static; background: #22c55e; color: #fff; font-size: 13px; font-weight: 800;">
+        <i class="fas fa-lock"></i> Sessão Fixada (3 dias)
+      </span>
+    `;
+    return;
+  }
+
   if (!remainingSeconds || remainingSeconds <= 0) {
     container.innerHTML = '<span class="badge-rarity" style="position: static; background: #ef4444; color: #fff;">Sessão Expirada</span>';
     return;
@@ -526,6 +672,7 @@ function renderSessionTimer(remainingSeconds) {
 
   let sec = remainingSeconds;
   const updateBadge = () => {
+    if (userSessionData?.isPersistent) return;
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     container.innerHTML = `
@@ -601,10 +748,16 @@ function renderPrivateHarem(harem) {
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
-        ${entry.keys ? `<div class="badge-wishes"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+        ${entry.keys ? `<div class="badge-wishes" style="top: 8px; right: 8px;"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
         ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
         ${unseenCovets > 0 ? `<div class="badge-married" style="background: #f59e0b; color: #000; left: 8px; right: auto; font-weight: 800;">👀 ${unseenCovets}</div>` : ''}
         ${photosBadgeHtml}
+        <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s). Clique para alternar Wishlist" onclick="event.stopPropagation(); toggleWishlist('${char.id}', null, event)">
+          <span>✨</span> <span>${char.wishlistCount || 0}</span>
+        </div>
+        <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
+          <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
+        </div>
       </div>
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
@@ -710,6 +863,12 @@ function renderPrivateWishlist(wishlist) {
         ${marriedBadgeHtml}
         ${entry.isStarWish ? '<div class="badge-married" title="Starwish!">⭐</div>' : ''}
         ${photosBadgeHtml}
+        <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s). Clique para remover da Wishlist" onclick="event.stopPropagation(); toggleWishlist('${char.id}', null, event)">
+          <span>✨</span> <span>${char.wishlistCount || 0}</span>
+        </div>
+        <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
+          <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
+        </div>
       </div>
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
@@ -784,16 +943,22 @@ function renderPublicHarem(harem) {
         card.style.width = '200px';
 
         card.innerHTML = `
-          <div class="card-img-wrapper">
+          <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
             <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
             <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
               ${rarity.emoji} ${rarity.label}
             </div>
-            ${entry.keys ? `<div class="badge-wishes"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+            ${entry.keys ? `<div class="badge-wishes" style="top: 8px; right: 8px;"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
             <div class="badge-married" style="background: #ec4899; color: white;">💖</div>
+            <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
+              <span>✨</span> <span>${char.wishlistCount || 0}</span>
+            </div>
+            <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
+              <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
+            </div>
           </div>
           <div class="card-info">
-            <div class="card-name">${escapeHtml(char.name)}</div>
+            <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
             <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
           </div>
         `;
@@ -825,16 +990,22 @@ function renderPublicHarem(harem) {
     card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
 
     card.innerHTML = `
-      <div class="card-img-wrapper">
+      <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
         <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
-        ${entry.keys ? `<div class="badge-wishes"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+        ${entry.keys ? `<div class="badge-wishes" style="top: 8px; right: 8px;"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
         ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
+        <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
+          <span>✨</span> <span>${char.wishlistCount || 0}</span>
+        </div>
+        <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
+          <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
+        </div>
       </div>
       <div class="card-info">
-        <div class="card-name">${escapeHtml(char.name)}</div>
+        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
       </div>
     `;
@@ -1014,18 +1185,21 @@ async function loadCatalogCharacters() {
       }
 
       card.innerHTML = `
-        <div class="card-img-wrapper">
+        <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
           <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
           <div class="badge-rarity" style="border-color: ${rarityCfg.color}; color: ${rarityCfg.color};" title="Raridade: ${rarityCfg.label}">
             ${rarityCfg.emoji} ${rarityCfg.label}
           </div>
           ${isMarried ? `<div class="badge-married ${spousePublicId ? 'badge-married-link' : ''}" title="${marriedTooltip}">💍</div>` : ''}
-          <div class="badge-wishes" title="${wishlistCount} pessoa(s) adicionaram à wishlist">
+          <div class="badge-wishes" data-char-id="${char.id}" title="${wishlistCount} pessoa(s) adicionaram à wishlist. Clique para alternar Wishlist" onclick="event.stopPropagation(); toggleWishlist('${char.id}', null, event)">
             <span>✨</span> <span>${wishlistCount}</span>
+          </div>
+          <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
+            <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
           </div>
         </div>
         <div class="card-info">
-          <div class="card-name" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
+          <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
           <div class="card-series" title="${escapeHtml(char.series || 'Sem série')}">${escapeHtml(char.series || 'Sem série')}</div>
           <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
             <button class="btn-retro btn-sm ${isAlreadyWish ? 'btn-wish-active' : 'btn-gold'}" style="width: 100%;" onclick="toggleWishlist('${char.id}', this, event)" title="${isAlreadyWish ? 'Clique para remover da Wishlist' : 'Adicionar à Wishlist'}">
@@ -1155,7 +1329,7 @@ async function executeDivorce() {
   }
 }
 
-async function toggleWishlist(charId, btn, event) {
+async function toggleWishlist(charId, btn = null, event = null) {
   if (event) {
     event.preventDefault();
     event.stopPropagation();
@@ -1169,10 +1343,7 @@ async function toggleWishlist(charId, btn, event) {
   const isAlreadyWish = Array.isArray(userSessionData?.wishlist) &&
     userSessionData.wishlist.some(w => (w.character?.id || w.characterId) === charId);
 
-  const card = btn.closest('.waifu-card');
-  const wishesSpan = card ? card.querySelector('.badge-wishes span:last-child') : null;
-
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
 
   try {
     if (isAlreadyWish) {
@@ -1183,10 +1354,6 @@ async function toggleWishlist(charId, btn, event) {
         return;
       }
 
-      btn.className = 'btn-retro btn-sm btn-gold';
-      btn.innerHTML = '<i class="fas fa-star"></i> + Wishlist';
-      btn.title = 'Adicionar à Wishlist';
-
       if (userSessionData) {
         userSessionData.wishlist = (userSessionData.wishlist || []).filter(w => (w.character?.id || w.characterId) !== charId);
         const countEl = document.getElementById('wishlist-count');
@@ -1196,11 +1363,6 @@ async function toggleWishlist(charId, btn, event) {
         const bonusFormatted = Number.isInteger(bonusPct) ? bonusPct : bonusPct.toFixed(1);
         const bonusEl = document.getElementById('wishlist-bonus-val');
         if (bonusEl) bonusEl.textContent = `+${bonusFormatted}%`;
-      }
-
-      if (wishesSpan) {
-        const cur = Math.max(0, parseInt(wishesSpan.textContent.trim(), 10) - 1);
-        wishesSpan.textContent = cur;
       }
 
       const wishTabCard = document.getElementById(`wish-card-${charId}`);
@@ -1219,10 +1381,6 @@ async function toggleWishlist(charId, btn, event) {
         Api.showToast(res.error?.message || 'Falha ao adicionar.', '❌');
         return;
       }
-
-      btn.className = 'btn-retro btn-sm btn-wish-active';
-      btn.innerHTML = '<i class="fas fa-check"></i> Na Wishlist';
-      btn.title = 'Clique para remover da Wishlist';
 
       if (userSessionData) {
         if (!Array.isArray(userSessionData.wishlist)) {
@@ -1243,17 +1401,92 @@ async function toggleWishlist(charId, btn, event) {
         if (bonusEl) bonusEl.textContent = `+${bonusFormatted}%`;
       }
 
-      if (wishesSpan) {
-        const cur = (parseInt(wishesSpan.textContent.trim(), 10) || 0) + 1;
-        wishesSpan.textContent = cur;
-      }
-
       Api.showToast('Adicionado à sua Wishlist com sucesso!', '✨');
+    }
+
+    // Sincroniza todos os botões de wishlist deste personagem na página
+    document.querySelectorAll(`button[onclick*="toggleWishlist('${charId}'"]`).forEach(b => {
+      if (isAlreadyWish) {
+        b.className = 'btn-retro btn-sm btn-gold';
+        b.innerHTML = '<i class="fas fa-star"></i> + Wishlist';
+        b.title = 'Adicionar à Wishlist';
+      } else {
+        b.className = 'btn-retro btn-sm btn-wish-active';
+        b.innerHTML = '<i class="fas fa-check"></i> Na Wishlist';
+        b.title = 'Clique para remover da Wishlist';
+      }
+    });
+
+    // Sincroniza todos os badges .badge-wishes deste personagem
+    document.querySelectorAll(`.badge-wishes[data-char-id="${charId}"] span:last-child`).forEach(span => {
+      const cur = parseInt(span.textContent.trim(), 10) || 0;
+      span.textContent = isAlreadyWish ? Math.max(0, cur - 1) : cur + 1;
+    });
+
+    // Sincroniza modal de preview se aberto
+    const modalWishBtn = document.getElementById('btn-preview-wish');
+    const modalWishSpan = document.getElementById('waifu-preview-wishes-count');
+    if (previewState?.characterId === charId) {
+      if (modalWishSpan) {
+        const cur = parseInt(modalWishSpan.textContent.trim(), 10) || 0;
+        modalWishSpan.textContent = isAlreadyWish ? Math.max(0, cur - 1) : cur + 1;
+      }
+      if (modalWishBtn) {
+        const newCount = modalWishSpan ? modalWishSpan.textContent : '';
+        if (isAlreadyWish) {
+          modalWishBtn.className = 'btn-retro btn-sm btn-gold';
+          modalWishBtn.innerHTML = `<i class="fas fa-star"></i> <span id="waifu-preview-wishes-count">${newCount}</span> Wishlist`;
+        } else {
+          modalWishBtn.className = 'btn-retro btn-sm btn-wish-active';
+          modalWishBtn.innerHTML = `<i class="fas fa-check"></i> <span id="waifu-preview-wishes-count">${newCount}</span> Na Wishlist`;
+        }
+      }
     }
   } catch (err) {
     Api.showToast('Erro de comunicação ao atualizar wishlist.', '❌');
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function registerCardLike(characterId, event = null) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (!userSessionToken) {
+    Api.showToast('Você precisa estar logado para curtir! Envie !mu-adm no WhatsApp.', '⚠️');
+    return;
+  }
+
+  try {
+    const res = await Api.post(`/api/web/user/${userPublicId}/characters/${characterId}/like`, {
+      token: userSessionToken
+    });
+
+    if (res.success) {
+      const newLikes = res.data?.likeCount;
+      Api.showToast(res.data?.message || 'Curtida registrada com sucesso! ❤️', '❤️');
+
+      // Atualiza todos os badges de likes deste personagem na tela
+      document.querySelectorAll(`.badge-likes[data-char-id="${characterId}"]`).forEach(badge => {
+        badge.innerHTML = `<span>❤️</span> <span class="likes-count">${newLikes}</span>`;
+      });
+
+      // Atualiza no modal de preview se estiver aberto com esta waifu
+      if (previewState?.characterId === characterId) {
+        const modalLikes = document.getElementById('waifu-preview-likes-count');
+        if (modalLikes && newLikes !== undefined) modalLikes.textContent = newLikes;
+        if (previewState.charData) {
+          previewState.charData.likeCount = newLikes;
+        }
+      }
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao registrar curtida.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro ao registrar curtida.', '❌');
   }
 }
 
@@ -1349,6 +1582,10 @@ async function openSuggestModal(charId, charName, currentRarity, preloadedChar =
     editTags.value = Array.isArray(activeSuggestCharacter.tags) ? activeSuggestCharacter.tags.join(', ') : '';
   }
 
+  // Tags Chips
+  suggestTagsState = Array.isArray(activeSuggestCharacter.tags) ? [...activeSuggestCharacter.tags] : [];
+  renderSuggestTagsChips();
+
   const editDesc = document.getElementById('suggest-edit-description');
   if (editDesc) editDesc.value = activeSuggestCharacter.description || '';
 
@@ -1385,6 +1622,56 @@ async function openSuggestModal(charId, charName, currentRarity, preloadedChar =
   });
 
   openModal('modal-suggest');
+}
+
+function renderSuggestTagsChips() {
+  const container = document.getElementById('suggest-tags-chips-container');
+  const hiddenInput = document.getElementById('suggest-edit-tags');
+  if (!container) return;
+
+  container.innerHTML = '';
+  if (suggestTagsState.length === 0) {
+    container.innerHTML = '<span style="font-size: 11px; color: #94a3b8; font-style: italic;">Nenhuma tag adicionada.</span>';
+  } else {
+    suggestTagsState.forEach(tag => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      chip.innerHTML = `
+        #${escapeHtml(tag)}
+        <button type="button" class="tag-chip-remove" title="Remover tag" onclick="removeSuggestTag('${escapeAttr(tag)}')">&times;</button>
+      `;
+      container.appendChild(chip);
+    });
+  }
+
+  if (hiddenInput) {
+    hiddenInput.value = suggestTagsState.join(', ');
+  }
+}
+
+function addSuggestTag(tag) {
+  const input = document.getElementById('suggest-new-tag-input');
+  const rawTag = (tag !== undefined ? tag : input?.value || '').trim().replace(/^#+/, '').toLowerCase();
+  if (!rawTag) return;
+
+  if (rawTag.length < 2 || rawTag.length > 30) {
+    Api.showToast('A tag deve ter entre 2 e 30 caracteres.', '⚠️');
+    return;
+  }
+
+  if (suggestTagsState.includes(rawTag)) {
+    Api.showToast('Esta tag já foi adicionada.', 'ℹ️');
+    return;
+  }
+
+  suggestTagsState.push(rawTag);
+  renderSuggestTagsChips();
+  if (input) input.value = '';
+}
+
+function removeSuggestTag(tagToRemove) {
+  suggestTagsState = suggestTagsState.filter(t => t !== tagToRemove);
+  renderSuggestTagsChips();
 }
 
 function renderUserPhotosGrid() {
@@ -1617,8 +1904,7 @@ async function submitEditInfoSuggestion() {
   const suggestedSeries = document.getElementById('suggest-edit-series')?.value.trim();
   const suggestedGender = document.getElementById('suggest-edit-gender')?.value;
   const suggestedRarity = document.getElementById('suggest-edit-rarity')?.value;
-  const suggestedTagsStr = document.getElementById('suggest-edit-tags')?.value.trim();
-  const suggestedTags = suggestedTagsStr ? suggestedTagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+  const suggestedTags = Array.isArray(suggestTagsState) ? suggestTagsState : [];
   const suggestedDescription = document.getElementById('suggest-edit-description')?.value.trim();
   const reason = document.getElementById('suggest-edit-reason')?.value.trim();
 
@@ -1827,6 +2113,107 @@ async function loadUserSuggestions() {
   }
 }
 
+// ========================================================
+// ABA 6: NOTIFICAÇÕES DO USUÁRIO
+// ========================================================
+let notificationsFilterUnreadOnly = false;
+let userNotificationsCache = [];
+
+async function loadUserNotifications() {
+  const loadingEl = document.getElementById('notifications-loading');
+  const listEl = document.getElementById('notifications-list');
+  if (!listEl) return;
+
+  if (loadingEl) loadingEl.style.display = 'block';
+
+  try {
+    const res = await Api.get(`/api/web/user/${userPublicId}/notifications?token=${encodeURIComponent(userSessionToken)}`);
+    if (!res.success) {
+      if (loadingEl) loadingEl.style.display = 'none';
+      listEl.innerHTML = `<div style="text-align: center; padding: 24px; color: #ef4444;">${escapeHtml(res.error?.message || 'Erro ao carregar notificações.')}</div>`;
+      return;
+    }
+
+    userNotificationsCache = res.data?.notifications || (Array.isArray(res.data) ? res.data : []);
+    if (loadingEl) loadingEl.style.display = 'none';
+    renderNotificationsList();
+  } catch (err) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    listEl.innerHTML = '<div style="text-align: center; padding: 24px; color: #ef4444;">Erro de comunicação ao carregar notificações.</div>';
+  }
+}
+
+function renderNotificationsList() {
+  const listEl = document.getElementById('notifications-list');
+  if (!listEl) return;
+
+  let items = userNotificationsCache;
+  if (notificationsFilterUnreadOnly) {
+    items = items.filter(n => !n.read);
+  }
+
+  if (items.length === 0) {
+    listEl.innerHTML = `
+      <div style="text-align: center; padding: 40px; font-weight: bold; color: var(--text-muted); background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro);">
+        <i class="fas fa-bell-slash" style="font-size: 28px; display: block; margin-bottom: 8px;"></i>
+        ${notificationsFilterUnreadOnly ? 'Nenhuma notificação não lida.' : 'Nenhuma notificação no momento. Tudo tranquilo por aqui! ✨'}
+      </div>
+    `;
+    return;
+  }
+
+  const typeIcons = {
+    CHARACTER_MODIFIED: '✨',
+    SUGGESTION_REVIEW: '💡',
+    MARKET_OFFER: '🤝',
+    MARKET_SALE: '💰',
+    COVET_ALERT: '👀',
+    WISHLIST_LISTED: '⭐'
+  };
+
+  listEl.innerHTML = items.map(n => {
+    const icon = typeIcons[n.type] || '🔔';
+    const dateStr = n.createdAt ? new Date(n.createdAt).toLocaleString('pt-BR') : '';
+    const isUnread = !n.read;
+    return `
+      <div class="notification-card ${isUnread ? 'unread' : ''}" id="notif-${n.id}">
+        <div class="notification-icon">${icon}</div>
+        <div class="notification-content">
+          <div class="notification-title">
+            <span>${escapeHtml(n.title)}</span>
+            ${isUnread ? '<span class="notification-badge-unread">NOVA</span>' : ''}
+          </div>
+          <div class="notification-message">${escapeHtml(n.message)}</div>
+          <div class="notification-time"><i class="far fa-clock"></i> ${dateStr}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function markAllNotificationsAsRead() {
+  const btn = document.getElementById('btn-notifications-mark-read');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await Api.post(`/api/web/user/${userPublicId}/notifications/read`, { token: userSessionToken, all: true });
+    if (res.success) {
+      Api.showToast('Todas as notificações foram marcadas como lidas!', '✅');
+      const badge = document.getElementById('notifications-count-badge');
+      if (badge) badge.classList.add('hidden');
+
+      userNotificationsCache.forEach(n => { n.read = true; });
+      renderNotificationsList();
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao marcar notificações.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro ao marcar notificações como lidas.', '❌');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 /* ────────────────────────────────────────────────────────────────────────── */
 /* MÓDULO DE CLASSIFICADOS E MERCADO (PAINEL WEB)                             */
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -1881,7 +2268,7 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
   const modal = document.getElementById('modal-waifu-preview');
   if (!modal) return;
 
-  // Busca dados completos atualizados do personagem (que traz todas as imageUrls)
+  // Busca dados completos atualizados do personagem (traz imageUrls, likes, wishlists, ranks, owner, tags)
   let fullChar = null;
   try {
     const res = await Api.get(`/characters/${encodeURIComponent(charId)}`);
@@ -1893,6 +2280,14 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
   const cRarity = fullChar?.baseRarity || rarity || 'COMMON';
   const cGender = fullChar?.gender || gender || 'OTHER';
   const cDesc = fullChar?.description || '';
+  const cLikes = Number(fullChar?.likeCount || 0);
+  const cWishes = Number(fullChar?.wishlistCount || 0);
+  const cWaifuRank = fullChar?.waifuRank || null;
+  const cMudaeRank = fullChar?.rank || null;
+  const cScore = Number(fullChar?.popularityScore || 0);
+  const cTags = Array.isArray(fullChar?.tags) ? fullChar.tags : [];
+  const cOwner = fullChar?.owner || null;
+  const isClaimed = Boolean(fullChar?.isClaimed || cOwner);
 
   // Lista de imagens
   let images = [];
@@ -1914,6 +2309,24 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
   document.getElementById('waifu-preview-name').textContent = cName;
   document.getElementById('waifu-preview-series').textContent = cSeries ? `Série: ${cSeries}` : '';
   
+  // Linha de Ranks
+  const rankLineEl = document.getElementById('waifu-preview-rank-line');
+  if (rankLineEl) {
+    rankLineEl.innerHTML = `
+      <span class="badge-tag" style="background: #eab308; color: #000; font-weight: 800;" title="Rank Oficial Waifuletes (baseado em curtidas, casamentos e wishlists)">
+        🏆 #${cWaifuRank ? cWaifuRank : '-'}
+      </span>
+      ${cMudaeRank ? `
+        <span class="badge-tag" style="background: #3b82f6; color: #fff; font-weight: 800;" title="Rank original do Mudae">
+          🌐 Mudae #${cMudaeRank}
+        </span>
+      ` : ''}
+      <span class="badge-tag" style="background: #64748b; color: #fff; font-weight: 800;" title="Pontuação total de popularidade">
+        ⭐ ${cScore} pts
+      </span>
+    `;
+  }
+
   const rarityEl = document.getElementById('waifu-preview-rarity');
   if (cRarity && RARITY_CONFIG[cRarity]) {
     const r = RARITY_CONFIG[cRarity];
@@ -1932,6 +2345,63 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
     genderEl.innerHTML = formatGender(cGender);
   }
 
+  // Linha de Casamento
+  const marriageLineEl = document.getElementById('waifu-preview-marriage-line');
+  if (marriageLineEl) {
+    if (isClaimed) {
+      const ownerName = cOwner?.name || (typeof cOwner === 'string' ? cOwner : 'Outro jogador');
+      const ownerPublicId = cOwner?.publicId || null;
+      if (ownerPublicId) {
+        marriageLineEl.innerHTML = `💍 Casada(o) com <a href="/user/${ownerPublicId}" target="_blank" style="color: #ec4899; text-decoration: underline; font-weight: 800;">${escapeHtml(ownerName)}</a>`;
+      } else {
+        marriageLineEl.innerHTML = `💍 Casada(o) com <span style="color: #ec4899; font-weight: 800;">${escapeHtml(ownerName)}</span>`;
+      }
+    } else {
+      marriageLineEl.innerHTML = `<span style="color: #22c55e; font-weight: 800;">💍 Solteira(o) (Livre para casamento!)</span>`;
+    }
+  }
+
+  // Botão de Likes
+  const likesCountEl = document.getElementById('waifu-preview-likes-count');
+  if (likesCountEl) likesCountEl.textContent = cLikes;
+  const btnLike = document.getElementById('btn-preview-like');
+  if (btnLike) {
+    btnLike.onclick = (e) => registerCardLike(charId, e);
+  }
+
+  // Botão de Wishlist
+  const wishesCountEl = document.getElementById('waifu-preview-wishes-count');
+  if (wishesCountEl) wishesCountEl.textContent = cWishes;
+  const btnWish = document.getElementById('btn-preview-wish');
+  if (btnWish) {
+    const isAlreadyWish = Array.isArray(userSessionData?.wishlist) &&
+      userSessionData.wishlist.some(w => (w.character?.id || w.characterId) === charId);
+    if (isAlreadyWish) {
+      btnWish.className = 'btn-retro btn-sm btn-wish-active';
+      btnWish.innerHTML = `<i class="fas fa-check"></i> <span id="waifu-preview-wishes-count">${cWishes}</span> Na Wishlist`;
+    } else {
+      btnWish.className = 'btn-retro btn-sm btn-gold';
+      btnWish.innerHTML = `<i class="fas fa-star"></i> <span id="waifu-preview-wishes-count">${cWishes}</span> Wishlist`;
+    }
+    btnWish.onclick = (e) => toggleWishlist(charId, btnWish, e);
+  }
+
+  // Tags
+  const tagsEl = document.getElementById('waifu-preview-tags');
+  if (tagsEl) {
+    tagsEl.innerHTML = '';
+    if (cTags && cTags.length > 0) {
+      cTags.forEach(tag => {
+        const tagSpan = document.createElement('span');
+        tagSpan.className = 'badge-tag';
+        tagSpan.textContent = `#${tag}`;
+        tagsEl.appendChild(tagSpan);
+      });
+    } else {
+      tagsEl.innerHTML = '<span style="font-size: 11px; color: var(--text-muted); font-style: italic;">Nenhuma tag cadastrada</span>';
+    }
+  }
+
   const descEl = document.getElementById('waifu-preview-description');
   if (descEl) {
     if (cDesc) {
@@ -1939,6 +2409,69 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
       descEl.style.display = 'block';
     } else {
       descEl.style.display = 'none';
+    }
+  }
+
+  // Ações contextuais
+  const actionsEl = document.getElementById('waifu-preview-actions');
+  if (actionsEl) {
+    actionsEl.innerHTML = '';
+    const isOwner = Boolean(userSessionData?.isAdmin);
+    const isMarriedToMe = isOwner && (
+      cOwner?.publicId === userPublicId ||
+      (userSessionData?.harem || []).some(h => (h.character?.id || h.characterId) === charId)
+    );
+
+    if (isOwner) {
+      if (isMarriedToMe) {
+        // Favoritar
+        const isFav = (userSessionData?.harem || []).some(h => (h.character?.id || h.characterId) === charId && h.isFavorite);
+        const favBtn = document.createElement('button');
+        favBtn.className = 'btn-retro btn-sm';
+        favBtn.style.cssText = 'width: 100%; background: #ec4899; color: white; border-color: #db2777; font-weight: 800;';
+        favBtn.innerHTML = `💖 ${isFav ? 'Desfavoritar' : 'Favoritar'}`;
+        favBtn.onclick = () => { closeModal('modal-waifu-preview'); toggleFavorite(charId); };
+        actionsEl.appendChild(favBtn);
+
+        // Vender
+        const sellBtn = document.createElement('button');
+        sellBtn.className = 'btn-retro btn-sm btn-gold';
+        sellBtn.style.cssText = 'width: 100%; font-weight: 800;';
+        sellBtn.innerHTML = '<i class="fas fa-tag"></i> 💰 Vender nos Classificados';
+        sellBtn.onclick = () => { closeModal('modal-waifu-preview'); openSellModal(charId, cName, images[0], cSeries); };
+        actionsEl.appendChild(sellBtn);
+
+        // Divorciar
+        const divBtn = document.createElement('button');
+        divBtn.className = 'btn-retro btn-sm btn-danger';
+        divBtn.style.cssText = 'width: 100%; font-weight: 800;';
+        divBtn.innerHTML = '<i class="fas fa-heart-crack"></i> Divorciar';
+        divBtn.onclick = () => { closeModal('modal-waifu-preview'); openDivorceModal(charId, cName); };
+        actionsEl.appendChild(divBtn);
+      } else {
+        // Não é casada com o usuário autenticado
+        if (isClaimed) {
+          // Cobiçar
+          const isCoveted = userCovetedSet.has(charId);
+          const covBtn = document.createElement('button');
+          covBtn.className = 'btn-retro btn-sm';
+          covBtn.style.cssText = 'width: 100%; border-color: #ec4899; color: #ec4899; font-weight: 800;';
+          covBtn.disabled = isCoveted;
+          covBtn.innerHTML = isCoveted ? '<i class="fas fa-check"></i> 👀 Cobiçado' : '<i class="fas fa-eye"></i> 👀 Cobiçar Personagem';
+          if (!isCoveted) {
+            covBtn.onclick = (e) => { covetCharacter(charId, covBtn, e); };
+          }
+          actionsEl.appendChild(covBtn);
+        } else {
+          // Investir
+          const invBtn = document.createElement('button');
+          invBtn.className = 'btn-retro btn-sm btn-gold';
+          invBtn.style.cssText = 'width: 100%; font-weight: 800; border-color: #d97706; color: #92400e; background: #fef3c7;';
+          invBtn.innerHTML = '<i class="fas fa-coins"></i> 📈 Investir Zinthos';
+          invBtn.onclick = () => { closeModal('modal-waifu-preview'); openInvestModal(charId); };
+          actionsEl.appendChild(invBtn);
+        }
+      }
     }
   }
 
