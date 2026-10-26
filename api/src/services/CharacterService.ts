@@ -333,11 +333,28 @@ export class CharacterService {
 
     const { haremEntries, ...charRest } = character;
 
+    const hasActiveHarem = character.haremEntries.length > 0;
+    const hasClaimCount = character.claimCount > 0;
+    const hasSoulmates = (character._count?.soulmates ?? 0) > 0;
+
+    let wasEverMarried = hasActiveHarem || hasClaimCount || hasSoulmates;
+    if (!wasEverMarried) {
+      const divorceTx = await this.prisma.kakeraTransaction.findFirst({
+        where: {
+          reason: 'DIVORCE',
+          metadata: { path: ['characterId'], equals: character.id },
+        },
+        select: { id: true },
+      });
+      if (divorceTx) wasEverMarried = true;
+    }
+
     return {
       ...charRest,
       imageUrl: this.getRandomImageUrl(character.id, character.imageUrls),
       imageUrls: character.imageUrls.map((img) => this.formatImageUrl(character.id, img)),
       isClaimed: !!rawOwner,
+      wasEverMarried,
       owner,
       claimedInGroup: isTrusted ? (character.haremEntries[0]?.claimedInGroup ?? null) : null,
     };

@@ -54,6 +54,49 @@ export class SuggestionService {
   }
 
   /**
+   * Verifica se o personagem já foi casado (possui registro atual no harém, já teve claimCount > 0, soulmate ou histórico de divórcio)
+   */
+  async wasCharacterEverMarried(characterId: string): Promise<boolean> {
+    const cleanId = String(characterId).trim();
+    const [haremEntry, character, soulmate, divorceTx] = await Promise.all([
+      this.prisma.haremEntry.findFirst({
+        where: { characterId: cleanId },
+        select: { id: true },
+      }),
+      this.prisma.character.findFirst({
+        where: {
+          OR: [
+            { id: cleanId },
+            { id: cleanId.toLowerCase() },
+          ],
+        },
+        select: { id: true, claimCount: true },
+      }),
+      this.prisma.soulmate.findFirst({
+        where: { characterId: cleanId },
+        select: { id: true },
+      }),
+      this.prisma.kakeraTransaction.findFirst({
+        where: {
+          reason: 'DIVORCE',
+          metadata: {
+            path: ['characterId'],
+            equals: cleanId,
+          },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    return Boolean(
+      haremEntry ||
+      (character && character.claimCount > 0) ||
+      soulmate ||
+      divorceTx
+    );
+  }
+
+  /**
    * Bloqueia um usuário para impedi-lo de enviar sugestões (24h, 7d, 30d ou pra sempre)
    */
   async blockUserFromSuggestions(
@@ -165,6 +208,17 @@ export class SuggestionService {
 
     if (character.baseRarity === suggestedRarity) {
       throw new DomainError('SAME_RARITY', 'A raridade sugerida é exatamente igual à raridade atual do personagem.', 400);
+    }
+
+    if (suggestedRarity === 'LEGENDARY') {
+      const wasMarried = await this.wasCharacterEverMarried(character.id);
+      if (wasMarried) {
+        throw new DomainError(
+          'MARRIED_CHARACTER_MAX_EPIC',
+          'Este personagem já foi casado. A raridade máxima permitida para o mesmo é ÉPICO. Para sugerir a versão Lendária, é necessário criar um novo personagem fornecendo uma nova foto.',
+          400
+        );
+      }
     }
 
     const user = await this.prisma.user.findFirst({
@@ -382,6 +436,17 @@ export class SuggestionService {
       throw new DomainError('NO_CHANGES', 'Nenhuma alteração foi sugerida em relação aos dados atuais do personagem.', 400);
     }
 
+    if (data.suggestedRarity === 'LEGENDARY') {
+      const wasMarried = await this.wasCharacterEverMarried(character.id);
+      if (wasMarried) {
+        throw new DomainError(
+          'MARRIED_CHARACTER_MAX_EPIC',
+          'Este personagem já foi casado. A raridade máxima permitida para o mesmo é ÉPICO. Para sugerir a versão Lendária, é necessário criar um novo personagem fornecendo uma nova foto.',
+          400
+        );
+      }
+    }
+
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ id: userId }, { publicId: userId }] },
       select: { id: true, name: true },
@@ -470,6 +535,7 @@ export class SuggestionService {
       description?: string;
       reason?: string;
       imageBuffer?: Buffer;
+      originCharacterId?: string;
     }
   ) {
     if (!data.name || data.name.trim().length < 2) {
@@ -478,6 +544,10 @@ export class SuggestionService {
 
     if (!data.series || data.series.trim().length < 2) {
       throw new DomainError('INVALID_SERIES', 'A série/origem deve conter ao menos 2 caracteres.', 400);
+    }
+
+    if (data.rarity === 'LEGENDARY' && (!data.imageBuffer || data.imageBuffer.length === 0)) {
+      throw new DomainError('IMAGE_REQUIRED', 'É obrigatório fornecer uma nova foto para sugerir um personagem na raridade Lendária.', 400);
     }
 
     const user = await this.prisma.user.findFirst({
@@ -493,7 +563,7 @@ export class SuggestionService {
     const imgHash = data.imageBuffer ? createHash('md5').update(data.imageBuffer).digest('hex') : 'no_img';
     const fingerprint = createHash('sha256')
       .update(
-        `new_char:${user.id}:${data.name.trim().toLowerCase()}:${data.series.trim().toLowerCase()}:${data.rarity}:${imgHash}`
+        `new_char:${user.id}:${data.name.trim().toLowerCase()}:${data.series.trim().toLowerCase()}:${data.rarity}:${data.originCharacterId || ''}:${imgHash}`
       )
       .digest('hex');
 
@@ -513,6 +583,7 @@ export class SuggestionService {
       const suggestion = await this.prisma.characterSuggestion.create({
         data: {
           id: suggestionId,
+          characterId: data.originCharacterId || null,
           userId: user.id,
           type: 'NEW_CHARACTER',
           status: 'PENDING',
@@ -525,10 +596,18 @@ export class SuggestionService {
         },
       });
 
+      let marriageInfo: any = { marriedUser: null, isMarriedToSuggester: false };
+      let originChar: any = null;
+      if (data.originCharacterId) {
+        originChar = await this.characterService.findCharacter(data.originCharacterId);
+        marriageInfo = await this.getCharacterMarriage(data.originCharacterId, user.id);
+      }
+
       // Notifica Telegram
       await this.telegramService.notifySuggestion({
         id: suggestion.id,
         type: 'NEW_CHARACTER',
+        characterId: data.originCharacterId || undefined,
         characterName: data.name.trim(),
         series: data.series.trim(),
         description: data.description ? data.description.trim() : null,
@@ -537,6 +616,18 @@ export class SuggestionService {
         reason: data.reason ? data.reason.trim() : null,
         userName: user.name || userId,
         userId: user.id,
+        character: originChar ? {
+          id: originChar.id,
+          name: originChar.name,
+          series: originChar.series,
+          baseRarity: originChar.baseRarity,
+          gender: originChar.gender,
+          description: originChar.description,
+          tags: originChar.tags,
+          imageUrl: this.characterService.getRandomImageUrl(originChar.id, originChar.imageUrls),
+        } : undefined,
+        marriedUser: marriageInfo.marriedUser,
+        isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
       return suggestion;
@@ -844,6 +935,16 @@ export class SuggestionService {
 
     if (suggestion.type === 'RARITY' && suggestion.character) {
       const finalRarity = chosenRarity || suggestion.suggestedRarity || 'COMMON';
+      if (finalRarity === 'LEGENDARY') {
+        const wasMarried = await this.wasCharacterEverMarried(suggestion.character.id);
+        if (wasMarried) {
+          throw new DomainError(
+            'MARRIED_CHARACTER_CANNOT_BE_LEGENDARY',
+            `O personagem ${suggestion.character.name} já foi casado e sua raridade máxima permitida é ÉPICO. Para versão Lendária, deve ser criado um novo personagem.`,
+            400
+          );
+        }
+      }
       await this.prisma.character.update({
         where: { id: suggestion.character.id },
         data: { baseRarity: finalRarity },
@@ -861,6 +962,16 @@ export class SuggestionService {
         dataToUpdate.baseRarity = chosenRarity;
       } else if (suggestion.suggestedRarity) {
         dataToUpdate.baseRarity = suggestion.suggestedRarity;
+      }
+      if (dataToUpdate.baseRarity === 'LEGENDARY') {
+        const wasMarried = await this.wasCharacterEverMarried(suggestion.character.id);
+        if (wasMarried) {
+          throw new DomainError(
+            'MARRIED_CHARACTER_CANNOT_BE_LEGENDARY',
+            `O personagem ${suggestion.character.name} já foi casado e sua raridade máxima permitida é ÉPICO. Para versão Lendária, deve ser criado um novo personagem.`,
+            400
+          );
+        }
       }
       if (suggestion.suggestedTags && suggestion.suggestedTags.length > 0) {
         dataToUpdate.tags = suggestion.suggestedTags;
@@ -951,7 +1062,11 @@ export class SuggestionService {
       // Verifica se id já existe
       const existing = await this.prisma.character.findUnique({ where: { id: targetId } });
       if (existing) {
-        targetId = `${baseSlug}-${Math.floor(Math.random() * 9000 + 1000)}`;
+        const candidateId = `${baseSlug}-legendary`;
+        const candidateExists = await this.prisma.character.findUnique({ where: { id: candidateId } });
+        targetId = candidateExists
+          ? `${baseSlug}-${Math.floor(Math.random() * 9000 + 1000)}`
+          : candidateId;
       }
 
       let officialImages: string[] = [];

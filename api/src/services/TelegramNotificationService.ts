@@ -126,6 +126,12 @@ export class TelegramNotificationService {
         text += `👤 <b>Personagem:</b> ${this.escapeHtml(data.characterName || 'Sem nome')}\n`;
         text += `📺 <b>Origem / Série:</b> ${this.escapeHtml(data.series || 'Sem série')}\n`;
         text += `⭐ <b>Raridade Sugerida:</b> ${data.suggestedRarity || 'COMMON'}\n`;
+        if (data.characterId) {
+          text += `✨ <i>(Versão Lendária derivada do personagem existente <code>${data.characterId}</code>)</i>\n`;
+        }
+        if (data.marriedUser) {
+          text += `💍 <b>Casamento Original:</b> Casado com <b>${this.escapeHtml(data.marriedUser.name)}</b>\n`;
+        }
         if (data.description) {
           text += `📝 <b>Descrição:</b> <i>${this.escapeHtml(data.description)}</i>\n`;
         }
@@ -224,9 +230,12 @@ export class TelegramNotificationService {
           { text: '🔵 Aceitar - Rare', callback_data: `sug_app_rar:${data.id}:RARE` },
           { text: '🟣 Aceitar - Epic', callback_data: `sug_app_rar:${data.id}:EPIC` },
         ]);
-        inlineKeyboard.push([
-          { text: '🟡 Aceitar - Legendary', callback_data: `sug_app_rar:${data.id}:LEGENDARY` },
-        ]);
+        // Se o personagem já foi casado, a raridade máxima permitida para o mesmo é EPIC
+        if (!data.marriedUser) {
+          inlineKeyboard.push([
+            { text: '🟡 Aceitar - Legendary', callback_data: `sug_app_rar:${data.id}:LEGENDARY` },
+          ]);
+        }
         inlineKeyboard.push([
           { text: '🌐 Abrir Painel Admin', url: `${config.PUBLIC_BASE_URL}/admin` },
         ]);

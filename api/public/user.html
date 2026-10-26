@@ -450,6 +450,25 @@
             </div>
           </div>
 
+          <!-- Alerta e Upload de Foto para Versão Lendária de Personagem Casado -->
+          <div id="suggest-legendary-married-box" class="hidden" style="margin-bottom: 12px; padding: 12px; border: 1.5px solid #ca8a04; background: #fefce8; border-radius: 6px; font-size: 12px; color: #854d0e;">
+            <div style="font-weight: 800; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+              <span>⚠️</span> <span>Regra Especial: Personagem Já Casado</span>
+            </div>
+            <p style="margin: 0 0 10px 0; line-height: 1.4;">
+              Este personagem <b>já foi casado</b>. A raridade máxima permitida para o personagem existente é <b>ÉPICO</b>.<br>
+              Para sugerir a mudança para <b>LENDÁRIO</b>, será criado um <b>NOVO personagem</b> no catálogo na versão lendária.<br>
+              📸 <b>É obrigatório fornecer uma nova foto neste caso!</b>
+            </p>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="retro-label" style="color: #854d0e; font-weight: 800;">Nova Foto para a Versão Lendária: *</label>
+              <input type="file" id="suggest-legendary-photo-input" class="retro-input" accept="image/*" style="background: #fff;">
+              <div id="suggest-legendary-preview-container" class="hidden" style="margin-top: 8px; text-align: center;">
+                <img id="suggest-legendary-preview-img" src="" style="max-height: 160px; border: var(--border-retro); border-radius: 6px;" alt="Prévia da Foto">
+              </div>
+            </div>
+          </div>
+
           <div class="form-group">
             <label class="retro-label">Tags Sugeridas (separadas por vírgula):</label>
             <input type="text" id="suggest-edit-tags" class="retro-input" placeholder="Ex: anime, protagonista, waifu">

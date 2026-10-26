@@ -291,6 +291,32 @@ function setupEventListeners() {
     });
   }
 
+  // Monitora seleção de raridade para regra de personagens já casados
+  const suggestEditRarity = document.getElementById('suggest-edit-rarity');
+  if (suggestEditRarity) {
+    suggestEditRarity.addEventListener('change', updateSuggestLegendaryMarriedBox);
+  }
+
+  // Pré-visualização da foto lendária para personagem casado
+  const suggestLegPhotoInput = document.getElementById('suggest-legendary-photo-input');
+  if (suggestLegPhotoInput) {
+    suggestLegPhotoInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      const prevBox = document.getElementById('suggest-legendary-preview-container');
+      const prevImg = document.getElementById('suggest-legendary-preview-img');
+      if (file && prevBox && prevImg) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          prevImg.src = evt.target.result;
+          prevBox.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+      } else if (prevBox) {
+        prevBox.classList.add('hidden');
+      }
+    });
+  }
+
   // Abrir modal de sugestão de novo personagem
   const btnOpenSuggestChar = document.getElementById('btn-open-suggest-char');
   if (btnOpenSuggestChar) {
@@ -1284,6 +1310,12 @@ async function openSuggestModal(charId, charName, currentRarity, preloadedChar =
   }
 
   activeSuggestCharacter = char || { id: charId, name: charName, baseRarity: currentRarity };
+  activeSuggestCharacter.wasEverMarried = Boolean(
+    activeSuggestCharacter.wasEverMarried ||
+    activeSuggestCharacter.isClaimed ||
+    (activeSuggestCharacter.claimCount && activeSuggestCharacter.claimCount > 0) ||
+    activeSuggestCharacter.owner
+  );
 
   const nameEl = document.getElementById('suggest-char-name');
   if (nameEl) nameEl.textContent = `Personagem: ${activeSuggestCharacter.name || charName}`;
@@ -1322,6 +1354,16 @@ async function openSuggestModal(charId, charName, currentRarity, preloadedChar =
 
   const editReason = document.getElementById('suggest-edit-reason');
   if (editReason) editReason.value = '';
+
+  // Reseta input de foto lendária para personagem casado
+  const legInput = document.getElementById('suggest-legendary-photo-input');
+  if (legInput) legInput.value = '';
+  const legPrevBox = document.getElementById('suggest-legendary-preview-container');
+  if (legPrevBox) legPrevBox.classList.add('hidden');
+  const legPrevImg = document.getElementById('suggest-legendary-preview-img');
+  if (legPrevImg) legPrevImg.src = '';
+
+  updateSuggestLegendaryMarriedBox();
 
   // Prepara fotos
   userPhotosList = Array.isArray(activeSuggestCharacter.imageUrls) && activeSuggestCharacter.imageUrls.length > 0
@@ -1549,6 +1591,24 @@ async function submitUserPhotoCropSuggestion() {
   }, 'image/png');
 }
 
+function updateSuggestLegendaryMarriedBox() {
+  const raritySelect = document.getElementById('suggest-edit-rarity');
+  const box = document.getElementById('suggest-legendary-married-box');
+  const btn = document.getElementById('btn-submit-edit-info');
+  if (!raritySelect || !box) return;
+
+  const isLegendary = raritySelect.value === 'LEGENDARY';
+  const wasEverMarried = Boolean(activeSuggestCharacter?.wasEverMarried);
+
+  if (wasEverMarried && isLegendary) {
+    box.classList.remove('hidden');
+    if (btn) btn.innerHTML = '<i class="fas fa-star"></i> Enviar Sugestão de Novo Personagem Lendário';
+  } else {
+    box.classList.add('hidden');
+    if (btn) btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Sugestão de Dados';
+  }
+}
+
 async function submitEditInfoSuggestion() {
   if (isSubmittingSuggestion) return;
   if (!activeSuggestCharacter) return;
@@ -1564,6 +1624,49 @@ async function submitEditInfoSuggestion() {
 
   if (!reason || reason.length < 5) {
     Api.showToast('Por favor, informe uma justificativa válida com pelo menos 5 caracteres.', '⚠️');
+    return;
+  }
+
+  // Regra especial: Personagem já casado sugerido como LENDÁRIO cria NOVO personagem e exige foto
+  const wasEverMarried = Boolean(activeSuggestCharacter.wasEverMarried);
+  if (wasEverMarried && suggestedRarity === 'LEGENDARY') {
+    const photoFile = document.getElementById('suggest-legendary-photo-input')?.files?.[0];
+    if (!photoFile) {
+      Api.showToast('É obrigatório fornecer uma nova foto para criar a versão lendária de um personagem já casado.', '⚠️');
+      return;
+    }
+
+    const btnEdit = document.getElementById('btn-submit-edit-info');
+    if (btnEdit) btnEdit.disabled = true;
+    isSubmittingSuggestion = true;
+
+    const formData = new FormData();
+    formData.append('token', userSessionToken);
+    formData.append('type', 'NEW_CHARACTER');
+    formData.append('characterId', activeSuggestCharacter.id);
+    formData.append('name', suggestedName || activeSuggestCharacter.name);
+    formData.append('series', suggestedSeries || activeSuggestCharacter.series);
+    formData.append('rarity', 'LEGENDARY');
+    if (suggestedDescription) formData.append('description', suggestedDescription);
+    formData.append('reason', reason ? `[Versão Lendária] ${reason}` : '[Versão Lendária]');
+    formData.append('photo', photoFile);
+
+    try {
+      const res = await Api.post(`/api/web/user/${userPublicId}/suggestions`, formData);
+      if (!res.success) {
+        Api.showToast(res.error?.message || 'Falha ao enviar sugestão lendária.', '❌');
+        return;
+      }
+
+      closeModal('modal-suggest');
+      Api.showToast('Sugestão de novo personagem na versão Lendária enviada para moderação!', '⭐');
+      if (typeof loadUserSuggestions === 'function') loadUserSuggestions();
+    } catch (err) {
+      Api.showToast('Erro de comunicação ao enviar sugestão.', '❌');
+    } finally {
+      if (btnEdit) btnEdit.disabled = false;
+      isSubmittingSuggestion = false;
+    }
     return;
   }
 

@@ -592,6 +592,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             description,
             reason,
             imageBuffer: imageBuffer || undefined,
+            originCharacterId: characterId || undefined,
           });
           return reply.send({
             success: true,
@@ -601,6 +602,36 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             },
           });
         } else if (type === 'EDIT') {
+          const wasMarried = characterId ? await suggestionService.wasCharacterEverMarried(characterId) : false;
+          if (wasMarried && suggestedRarity === 'LEGENDARY') {
+            if (!imageBuffer || imageBuffer.length === 0) {
+              return reply.status(400).send({
+                success: false,
+                error: {
+                  code: 'PHOTO_REQUIRED_FOR_LEGENDARY',
+                  message: 'Este personagem já foi casado. A raridade máxima permitida para o mesmo é ÉPICO. Para sugerir a versão Lendária, será criado um NOVO personagem e o envio de uma nova foto é obrigatório.',
+                },
+              });
+            }
+            const char = await characterService.findCharacter(characterId);
+            const suggestion = await suggestionService.submitNewCharacterSuggestion(session.userId, {
+              name: (suggestedName || characterName || char?.name || '').trim(),
+              series: (suggestedSeries || series || char?.series || '').trim(),
+              rarity: 'LEGENDARY',
+              description: suggestedDescription || description || char?.description || undefined,
+              reason: reason ? `[Versão Lendária] ${reason.trim()}` : '[Versão Lendária]',
+              imageBuffer,
+              originCharacterId: characterId,
+            });
+            return reply.send({
+              success: true,
+              data: {
+                message: 'Como o personagem já foi casado, sua sugestão foi registrada para a criação de um NOVO personagem na versão Lendária! A moderação irá analisar.',
+                suggestion,
+              },
+            });
+          }
+
           const suggestion = await suggestionService.submitEditSuggestion(session.userId, characterId, {
             suggestedName: suggestedName || (characterName ? characterName : undefined),
             suggestedSeries: suggestedSeries || (series ? series : undefined),
@@ -636,6 +667,36 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             },
           });
         } else if (type === 'RARITY') {
+          const wasMarried = characterId ? await suggestionService.wasCharacterEverMarried(characterId) : false;
+          if (wasMarried && suggestedRarity === 'LEGENDARY') {
+            if (!imageBuffer || imageBuffer.length === 0) {
+              return reply.status(400).send({
+                success: false,
+                error: {
+                  code: 'PHOTO_REQUIRED_FOR_LEGENDARY',
+                  message: 'Este personagem já foi casado. A raridade máxima permitida para o mesmo é ÉPICO. Para sugerir a versão Lendária, será criado um NOVO personagem e o envio de uma nova foto é obrigatório.',
+                },
+              });
+            }
+            const char = await characterService.findCharacter(characterId);
+            const suggestion = await suggestionService.submitNewCharacterSuggestion(session.userId, {
+              name: (characterName || char?.name || characterId).trim(),
+              series: (series || char?.series || 'Indefinida').trim(),
+              rarity: 'LEGENDARY',
+              description: char?.description || undefined,
+              reason: reason ? `[Versão Lendária] ${reason.trim()}` : '[Versão Lendária]',
+              imageBuffer,
+              originCharacterId: characterId,
+            });
+            return reply.send({
+              success: true,
+              data: {
+                message: 'Como o personagem já foi casado, sua sugestão foi registrada para a criação de um NOVO personagem na versão Lendária! A moderação irá analisar.',
+                suggestion,
+              },
+            });
+          }
+
           const suggestion = await suggestionService.submitRaritySuggestion(
             session.userId,
             characterId,
@@ -700,6 +761,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           description,
           reason,
           imageBuffer: buffer,
+          originCharacterId: characterId || undefined,
         });
         return reply.send({
           success: true,
@@ -709,6 +771,40 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       } else if (type === 'EDIT') {
+        const wasMarried = characterId ? await suggestionService.wasCharacterEverMarried(characterId) : false;
+        if (wasMarried && suggestedRarity === 'LEGENDARY') {
+          let buffer: Buffer | undefined;
+          if (imageBase64) {
+            buffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+          }
+          if (!buffer || buffer.length === 0) {
+            return reply.status(400).send({
+              success: false,
+              error: {
+                code: 'PHOTO_REQUIRED_FOR_LEGENDARY',
+                message: 'Este personagem já foi casado. A raridade máxima permitida para o mesmo é ÉPICO. Para sugerir a versão Lendária, será criado um NOVO personagem e o envio de uma nova foto é obrigatório.',
+              },
+            });
+          }
+          const char = await characterService.findCharacter(characterId);
+          const suggestion = await suggestionService.submitNewCharacterSuggestion(session.userId, {
+            name: (suggestedName || characterName || char?.name || '').trim(),
+            series: (suggestedSeries || series || char?.series || '').trim(),
+            rarity: 'LEGENDARY',
+            description: suggestedDescription || description || char?.description || undefined,
+            reason: reason ? `[Versão Lendária] ${reason.trim()}` : '[Versão Lendária]',
+            imageBuffer: buffer,
+            originCharacterId: characterId,
+          });
+          return reply.send({
+            success: true,
+            data: {
+              message: 'Como o personagem já foi casado, sua sugestão foi registrada para a criação de um NOVO personagem na versão Lendária! A moderação irá analisar.',
+              suggestion,
+            },
+          });
+        }
+
         const suggestion = await suggestionService.submitEditSuggestion(session.userId, characterId, {
           suggestedName: suggestedName || characterName,
           suggestedSeries: suggestedSeries || series,
@@ -728,6 +824,40 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       } else if (type === 'RARITY') {
+        const wasMarried = characterId ? await suggestionService.wasCharacterEverMarried(characterId) : false;
+        if (wasMarried && suggestedRarity === 'LEGENDARY') {
+          let buffer: Buffer | undefined;
+          if (imageBase64) {
+            buffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+          }
+          if (!buffer || buffer.length === 0) {
+            return reply.status(400).send({
+              success: false,
+              error: {
+                code: 'PHOTO_REQUIRED_FOR_LEGENDARY',
+                message: 'Este personagem já foi casado. A raridade máxima permitida para o mesmo é ÉPICO. Para sugerir a versão Lendária, será criado um NOVO personagem e o envio de uma nova foto é obrigatório.',
+              },
+            });
+          }
+          const char = await characterService.findCharacter(characterId);
+          const suggestion = await suggestionService.submitNewCharacterSuggestion(session.userId, {
+            name: (characterName || char?.name || characterId).trim(),
+            series: (series || char?.series || 'Indefinida').trim(),
+            rarity: 'LEGENDARY',
+            description: char?.description || undefined,
+            reason: reason ? `[Versão Lendária] ${reason.trim()}` : '[Versão Lendária]',
+            imageBuffer: buffer,
+            originCharacterId: characterId,
+          });
+          return reply.send({
+            success: true,
+            data: {
+              message: 'Como o personagem já foi casado, sua sugestão foi registrada para a criação de um NOVO personagem na versão Lendária! A moderação irá analisar.',
+              suggestion,
+            },
+          });
+        }
+
         const suggestion = await suggestionService.submitRaritySuggestion(
           session.userId,
           characterId,
