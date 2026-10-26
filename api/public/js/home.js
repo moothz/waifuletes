@@ -53,7 +53,7 @@ function checkLoggedInUser() {
       btnHarem.className = 'btn-retro btn-sm';
       btnHarem.style.cssText = 'background: #22c55e; color: #ffffff; border-color: #16a34a; font-weight: 800;';
       btnHarem.innerHTML = '<i class="fas fa-heart"></i> Meu Harém';
-      actions.prepend(btnHarem);
+      actions.appendChild(btnHarem);
     }
   }
 }
@@ -166,6 +166,28 @@ function bindHomeEvents() {
 
   // Confirmação de Denúncia (🔞)
   document.getElementById('btn-confirm-report').addEventListener('click', submitReport);
+
+  // Fechar modais ao clicar fora (fundo overlay escuro)
+  document.querySelectorAll('.modal-overlay').forEach((overlay) => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.classList.add('hidden');
+        state.pendingReportCharId = null;
+      }
+    });
+  });
+
+  // Fechar modal ao pressionar tecla Escape (Esc)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      const openOverlays = Array.from(document.querySelectorAll('.modal-overlay:not(.hidden)'));
+      if (openOverlays.length > 0) {
+        const topModal = openOverlays[openOverlays.length - 1];
+        topModal.classList.add('hidden');
+        state.pendingReportCharId = null;
+      }
+    }
+  });
 }
 
 async function loadCharacters() {

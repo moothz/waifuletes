@@ -168,6 +168,30 @@ body.dark-mode .badge-wishes {
   border-color: #9333ea;
 }
 
+body.dark-mode .modal-footer {
+  background: var(--bg-card-subtle) !important;
+  border-top: 2px solid #9333ea !important;
+  color: #f5f3ff !important;
+}
+
+body.dark-mode .badge-keys {
+  background: rgba(31, 19, 51, 0.95);
+  border-color: #facc15;
+  color: #fde047;
+}
+
+body.dark-mode .legendary-married-alert {
+  background: #2a1805 !important;
+  border-color: #f59e0b !important;
+  color: #fef08a !important;
+}
+
+body.dark-mode .legendary-married-alert input[type="file"] {
+  background: #170d26 !important;
+  color: #f5f3ff !important;
+  border-color: #9333ea !important;
+}
+
 /* ========================================================
    UTILITÁRIOS GLOBAIS
    ======================================================== */
@@ -647,6 +671,54 @@ body.dark-mode .waifu-card.rarity-common {
   transform: scale(1.08);
   background: #ec4899;
   color: #ffffff;
+}
+
+.badge-keys {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1.5px solid #facc15;
+  color: #fde047;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 2;
+}
+
+.badge-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+#waifu-preview-tags .badge-tag {
+  background: var(--bg-card-subtle);
+  border: 1.5px solid var(--border-color, #2d241e);
+  color: var(--text-main);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.legendary-married-alert {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1.5px solid #ca8a04;
+  background: #fefce8;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #854d0e;
 }
 
 .btn-keep-login {

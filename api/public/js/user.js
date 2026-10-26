@@ -133,6 +133,8 @@ function setupEventListeners() {
 
       if (targetId === 'tab-catalog') {
         loadCatalogCharacters();
+      } else if (targetId === 'tab-rankings') {
+        loadRankings();
       } else if (targetId === 'tab-suggestions') {
         loadUserSuggestions();
       } else if (targetId === 'tab-market') {
@@ -517,6 +519,26 @@ function setupEventListeners() {
     }
     renderNotificationsList();
   });
+
+  // Fechar modais ao clicar fora (fundo overlay escuro)
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.classList.add('hidden');
+      }
+    });
+  });
+
+  // Fechar modal ao pressionar tecla Escape (Esc)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      const openOverlays = Array.from(document.querySelectorAll('.modal-overlay:not(.hidden)'));
+      if (openOverlays.length > 0) {
+        const topModal = openOverlays[openOverlays.length - 1];
+        topModal.classList.add('hidden');
+      }
+    }
+  });
 }
 
 async function loadUserData() {
@@ -589,6 +611,22 @@ async function loadUserData() {
       document.getElementById('private-panel').classList.add('hidden');
       document.getElementById('public-panel').classList.remove('hidden');
 
+      // Se o visitante tiver sessão salva em cookie, adiciona atalho para seu próprio harém no extremo direito
+      const savedPublicId = getCookie('waifu_user_public_id');
+      const savedToken = getCookie('waifu_session');
+      const headerActions = document.querySelector('.header-actions');
+      if (headerActions && savedPublicId && savedToken && savedPublicId !== userPublicId) {
+        if (!document.getElementById('btn-my-harem-nav')) {
+          const btnHarem = document.createElement('a');
+          btnHarem.id = 'btn-my-harem-nav';
+          btnHarem.href = `/user/${savedPublicId}`;
+          btnHarem.className = 'btn-retro btn-sm';
+          btnHarem.style.cssText = 'background: #22c55e; color: #ffffff; border-color: #16a34a; font-weight: 800;';
+          btnHarem.innerHTML = '<i class="fas fa-heart"></i> Meu Harém';
+          headerActions.appendChild(btnHarem);
+        }
+      }
+
       const marketUserNameEl = document.getElementById('public-market-user-name');
       if (marketUserNameEl) marketUserNameEl.textContent = userSessionData.name || 'Jogador';
 
@@ -657,11 +695,7 @@ function renderSessionTimer(remainingSeconds) {
   if (!container) return;
 
   if (userSessionData?.isPersistent) {
-    container.innerHTML = `
-      <span class="badge-rarity" style="position: static; background: #22c55e; color: #fff; font-size: 13px; font-weight: 800;">
-        <i class="fas fa-lock"></i> Sessão Fixada (3 dias)
-      </span>
-    `;
+    container.innerHTML = '';
     return;
   }
 
@@ -748,16 +782,10 @@ function renderPrivateHarem(harem) {
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
-        ${entry.keys ? `<div class="badge-wishes" style="top: 8px; right: 8px;"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+        ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
         ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
         ${unseenCovets > 0 ? `<div class="badge-married" style="background: #f59e0b; color: #000; left: 8px; right: auto; font-weight: 800;">👀 ${unseenCovets}</div>` : ''}
         ${photosBadgeHtml}
-        <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s). Clique para alternar Wishlist" onclick="event.stopPropagation(); toggleWishlist('${char.id}', null, event)">
-          <span>✨</span> <span>${char.wishlistCount || 0}</span>
-        </div>
-        <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
-          <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
-        </div>
       </div>
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
@@ -948,7 +976,7 @@ function renderPublicHarem(harem) {
             <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
               ${rarity.emoji} ${rarity.label}
             </div>
-            ${entry.keys ? `<div class="badge-wishes" style="top: 8px; right: 8px;"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+            ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
             <div class="badge-married" style="background: #ec4899; color: white;">💖</div>
             <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
               <span>✨</span> <span>${char.wishlistCount || 0}</span>
@@ -995,7 +1023,7 @@ function renderPublicHarem(harem) {
         <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
           ${rarity.emoji} ${rarity.label}
         </div>
-        ${entry.keys ? `<div class="badge-wishes" style="top: 8px; right: 8px;"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+        ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
         ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
         <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
           <span>✨</span> <span>${char.wishlistCount || 0}</span>
@@ -3640,6 +3668,84 @@ async function confirmInvest() {
     }
   }
 }
+
+// ========================================================
+// RANKINGS GLOBAIS NO PAINEL DO USUÁRIO
+// ========================================================
+let userRankingsLoaded = false;
+async function loadRankings() {
+  const tbodyZinthos = document.getElementById('tbody-ranking-zinthos');
+  const tbodyWaifus = document.getElementById('tbody-ranking-waifus');
+  if (!tbodyZinthos || !tbodyWaifus) return;
+
+  if (userRankingsLoaded) return;
+
+  try {
+    const [resUsers, resHarem] = await Promise.all([
+      Api.get('/leaderboard/users?limit=25'),
+      Api.get('/leaderboard/harem?limit=25'),
+    ]);
+
+    // 1. Ranking por Zinthos
+    const topRich = resUsers?.data?.topRich || [];
+    if (topRich.length === 0) {
+      tbodyZinthos.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 20px;">Nenhum registro ainda.</td></tr>`;
+    } else {
+      tbodyZinthos.innerHTML = topRich
+        .map((u, i) => {
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`;
+          const nameHtml = u.publicId
+            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(u.name)}</a>`
+            : `<strong>${escapeHtml(u.name)}</strong>`;
+          const zinthos = Number(u.kakera || 0).toLocaleString('pt-BR');
+          const haremCount = u._count?.harem || 0;
+
+          return `
+            <tr>
+              <td style="text-align: center; font-weight: 800;">${medal}</td>
+              <td>${nameHtml}</td>
+              <td style="text-align: right; font-weight: 700; color: #9333ea;">${zinthos}</td>
+              <td style="text-align: center;">${haremCount}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+
+    // 2. Ranking por Waifus (Harém)
+    const topHarem = resHarem?.data?.topHarem || [];
+    if (topHarem.length === 0) {
+      tbodyWaifus.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 20px;">Nenhum registro ainda.</td></tr>`;
+    } else {
+      tbodyWaifus.innerHTML = topHarem
+        .map((u, i) => {
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`;
+          const nameHtml = u.publicId
+            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(u.name)}</a>`
+            : `<strong>${escapeHtml(u.name)}</strong>`;
+          const totalMarriages = Number(u.totalMarriages || 0).toLocaleString('pt-BR');
+          const points = Number(u.collectionPoints || 0).toLocaleString('pt-BR');
+
+          return `
+            <tr>
+              <td style="text-align: center; font-weight: 800;">${medal}</td>
+              <td>${nameHtml}</td>
+              <td style="text-align: center; font-weight: 700; color: #e11d48;">${totalMarriages} 💍</td>
+              <td style="text-align: right; font-weight: 700;">${points} pts</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+
+    userRankingsLoaded = true;
+  } catch (err) {
+    console.error('Erro ao carregar rankings no painel do usuário:', err);
+    tbodyZinthos.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #ef4444; padding: 20px;">Erro ao carregar dados.</td></tr>`;
+    tbodyWaifus.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #ef4444; padding: 20px;">Erro ao carregar dados.</td></tr>`;
+  }
+}
+
 
 
 

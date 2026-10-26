@@ -62,18 +62,15 @@
         </div>
       </a>
       <div class="header-actions">
-        <button id="btn-session-auth" class="btn-retro btn-sm hidden" title="Gerenciar sessão">
-          <i class="fas fa-lock"></i> Manter Login!
-        </button>
         <button id="btn-toggle-theme" class="btn-retro btn-sm" title="Alternar tema">
           <i class="fas fa-moon"></i> Dark
         </button>
         <button id="btn-share-public" class="btn-retro btn-sm btn-gold hidden" title="Copiar link público para amigos">
           <i class="fas fa-share-alt"></i> Compartilhar Harém
         </button>
-        <a href="/" class="btn-retro btn-sm">
-          <i class="fas fa-home"></i> Catálogo Geral
-        </a>
+        <button id="btn-session-auth" class="btn-retro btn-sm hidden" title="Gerenciar sessão">
+          <i class="fas fa-lock"></i> Manter Login!
+        </button>
       </div>
     </header>
 
@@ -89,6 +86,7 @@
     <div id="private-panel" class="hidden">
       <div class="retro-tabs">
         <button class="retro-tab active" data-tab="tab-catalog"><i class="fas fa-book"></i> Catálogo</button>
+        <button class="retro-tab" data-tab="tab-rankings"><i class="fas fa-trophy"></i> Rankings</button>
         <button class="retro-tab" data-tab="tab-harem"><i class="fas fa-ring"></i> Meu Harém (<span id="harem-count">0</span>)</button>
         <button class="retro-tab" data-tab="tab-wishlist"><i class="fas fa-star"></i> Minha Wishlist (<span id="wishlist-count">0</span>)</button>
         <button class="retro-tab" data-tab="tab-market"><i class="fas fa-store"></i> Classificados <span id="market-pending-badge" class="badge-tag hidden" style="background:#f59e0b;color:#000;margin-left:4px;font-weight:800;padding:3px 6px;border-radius:4px;font-size:11px;">0</span></button>
@@ -164,7 +162,58 @@
         </div>
       </div>
 
-      <!-- Aba 2: Harém -->
+      <!-- Aba 2: Rankings Globais em 2 Colunas (Zinthos e Waifus) -->
+      <div class="tab-content hidden" id="tab-rankings">
+        <div class="rankings-grid">
+          <!-- Coluna 1: Ranking por Zinthos -->
+          <div class="ranking-column">
+            <div class="ranking-header">
+              <i class="fas fa-coins" style="color: #9333ea;"></i>
+              <span>Mais Ricos em Zinthos</span>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="retro-table" id="table-ranking-zinthos">
+                <thead>
+                  <tr style="background: var(--bg-retro-accent);">
+                    <th style="width: 45px; text-align: center;">#</th>
+                    <th>Jogador</th>
+                    <th style="text-align: right;">Saldo Zinthos</th>
+                    <th style="text-align: center;">Harém</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-ranking-zinthos">
+                  <tr><td colspan="4" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Carregando ranking...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Coluna 2: Ranking por Waifus -->
+          <div class="ranking-column">
+            <div class="ranking-header">
+              <i class="fas fa-ring" style="color: #e11d48;"></i>
+              <span>Maiores Haréns (Por Waifus)</span>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="retro-table" id="table-ranking-waifus">
+                <thead>
+                  <tr style="background: var(--bg-retro-accent);">
+                    <th style="width: 45px; text-align: center;">#</th>
+                    <th>Jogador</th>
+                    <th style="text-align: center;">Waifus Casadas</th>
+                    <th style="text-align: right;">Pontos Coleção</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-ranking-waifus">
+                  <tr><td colspan="4" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Carregando ranking...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aba 3: Harém -->
       <div class="tab-content hidden" id="tab-harem">
         <div id="harem-grid" class="waifu-grid"></div>
       </div>
@@ -482,7 +531,7 @@
           </div>
 
           <!-- Alerta e Upload de Foto para Versão Lendária de Personagem Casado -->
-          <div id="suggest-legendary-married-box" class="hidden" style="margin-bottom: 12px; padding: 12px; border: 1.5px solid #ca8a04; background: #fefce8; border-radius: 6px; font-size: 12px; color: #854d0e;">
+          <div id="suggest-legendary-married-box" class="legendary-married-alert hidden">
             <div style="font-weight: 800; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
               <span>⚠️</span> <span>Regra Especial: Personagem Já Casado</span>
             </div>
@@ -492,8 +541,8 @@
               📸 <b>É obrigatório fornecer uma nova foto neste caso!</b>
             </p>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="retro-label" style="color: #854d0e; font-weight: 800;">Nova Foto para a Versão Lendária: *</label>
-              <input type="file" id="suggest-legendary-photo-input" class="retro-input" accept="image/*" style="background: #fff;">
+              <label class="retro-label" style="color: inherit; font-weight: 800;">Nova Foto para a Versão Lendária: *</label>
+              <input type="file" id="suggest-legendary-photo-input" class="retro-input" accept="image/*">
               <div id="suggest-legendary-preview-container" class="hidden" style="margin-top: 8px; text-align: center;">
                 <img id="suggest-legendary-preview-img" src="" style="max-height: 160px; border: var(--border-retro); border-radius: 6px;" alt="Prévia da Foto">
               </div>
@@ -879,14 +928,14 @@
 
   <!-- Modal Popup de Preview de Waifu (Sobreposto com z-index alto) -->
   <div class="modal-overlay hidden" id="modal-waifu-preview" style="z-index: 10005;">
-    <div class="modal-box" style="max-width: min(440px, 85vw); max-height: 85vh; text-align: center; border: 3px solid #000; box-shadow: 6px 6px 0px #000;">
+    <div class="modal-box" style="max-width: min(440px, 85vw); max-height: 88vh; text-align: center; border: var(--border-retro); box-shadow: var(--shadow-retro);">
       <div class="modal-header" style="justify-content: space-between;">
         <span class="modal-title" id="waifu-preview-name" style="font-size: 15px;">Detalhes da Waifu</span>
         <button class="modal-close" onclick="closeModal('modal-waifu-preview')">&times;</button>
       </div>
-      <div class="modal-body" style="padding: 12px; max-height: calc(85vh - 130px); overflow-y: auto;">
-        <div style="position: relative; width: 100%; height: 320px; overflow: hidden; border: 2px solid #000; border-radius: 4px; background: #111; margin-bottom: 8px;">
-          <img id="waifu-preview-img" src="/media/characters/default.jpg" style="width: 100%; height: 100%; object-fit: cover;" onerror="handleImgError(this)">
+      <div class="modal-body" style="padding: 12px; max-height: calc(88vh - 120px); overflow-y: auto;">
+        <div style="position: relative; width: 100%; height: 400px; max-height: 48vh; overflow: hidden; border: 2px solid #000; border-radius: 4px; background: #111; margin-bottom: 8px;">
+          <img id="waifu-preview-img" src="/media/characters/default.jpg" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;" onerror="handleImgError(this)">
           
           <!-- Controles de Carrossel de Fotos -->
           <button type="button" id="btn-preview-prev" onclick="changePreviewPhoto(-1)" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: #fff; border: 1px solid #fff; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 14px;">❮</button>
