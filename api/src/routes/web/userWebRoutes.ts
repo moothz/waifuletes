@@ -9,6 +9,7 @@ import { MarketService } from '../../services/MarketService.js';
 import { MarketInvestmentService } from '../../services/MarketInvestmentService.js';
 import { CovetService } from '../../services/CovetService.js';
 import { NotificationService } from '../../services/NotificationService.js';
+import { CatalogService } from '../../services/CatalogService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
 import { Rarity } from '@prisma/client';
@@ -83,6 +84,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   const marketInvestmentService = new MarketInvestmentService(fastify.prisma, characterService, fastify.redis);
   const covetService = new CovetService(fastify.prisma, characterService, wishlistService);
   const notificationService = new NotificationService(fastify.prisma);
+  const catalogService = new CatalogService(fastify.prisma, fastify.redis);
 
   /**
    * Retorna um número de WhatsApp ativo da Ravena para redirecionamento com !mu-adm
@@ -289,7 +291,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token } = request.body as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -361,7 +365,10 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, characterId } = request.params as { publicId: string; characterId: string };
       const { token } = request.body as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
+
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -376,6 +383,88 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           message: `Você curtiu ${updated.name}! ❤️`,
           likeCount: updated.likeCount,
           characterId: updated.id,
+        },
+      });
+    },
+  });
+
+  /**
+   * Obtém lote de cards para o catálogo estilo Tinder (Waifinder)
+   */
+  fastify.get('/api/web/catalog/deck', {
+    schema: {
+      description: 'Obtém deck de 15 personagens balanceados por raridade e não casados para o Waifinder',
+      tags: ['Usuário (Web)'],
+      querystring: {
+        type: 'object',
+        properties: {
+          token: { type: 'string' },
+          publicId: { type: 'string' },
+          excludeIds: { type: 'string' },
+          gender: { type: 'string', enum: ['ALL', 'FEMALE', 'MALE'] },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { token, publicId, excludeIds, gender } = request.query as {
+        token?: string;
+        publicId?: string;
+        excludeIds?: string;
+        gender?: 'ALL' | 'FEMALE' | 'MALE';
+      };
+
+      let sessionUserId: string | null = null;
+      let sessionPublicId: string | null = null;
+      let userKakera = 0;
+      let userName = '';
+
+      if (token) {
+        const session = publicId
+          ? await webSessionService.validateUserSession(publicId, token)
+          : await webSessionService.validateTokenOnly(token);
+
+        if (session.valid && session.userId) {
+          sessionUserId = session.userId;
+          sessionPublicId = session.publicId;
+
+          const user = await fastify.prisma.user.findUnique({
+            where: { id: sessionUserId },
+            select: { name: true, kakera: true, publicId: true },
+          });
+
+          if (user) {
+            userName = user.name;
+            userKakera = user.kakera;
+            sessionPublicId = user.publicId;
+          }
+        }
+      }
+
+      const parsedExclude = excludeIds
+        ? excludeIds
+            .split(',')
+            .map((id) => id.trim())
+            .filter(Boolean)
+        : [];
+
+      const result = await catalogService.getDeck({
+        userId: sessionUserId,
+        excludeIds: parsedExclude,
+        gender,
+      });
+
+      return reply.send({
+        success: true,
+        data: {
+          characters: result.characters,
+          authenticated: Boolean(sessionUserId),
+          user: sessionUserId
+            ? {
+                name: userName,
+                publicId: sessionPublicId,
+                kakera: userKakera,
+              }
+            : null,
         },
       });
     },
@@ -413,7 +502,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         unreadOnly?: boolean;
       };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -477,7 +568,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -612,7 +705,10 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         isStarWish?: boolean;
       };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
+
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -656,7 +752,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, characterId } = request.params as { publicId: string; characterId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -695,7 +793,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -730,7 +830,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -812,7 +914,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
 
-        const session = await webSessionService.validateUserSession(publicId, token);
+        const session = publicId === 'token-session'
+          ? await webSessionService.validateTokenOnly(token)
+          : await webSessionService.validateUserSession(publicId, token);
         if (!session.valid || !session.userId) {
           return reply.status(401).send({
             success: false,
@@ -977,7 +1081,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         imageBase64,
       } = (request.body as any) || {};
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1211,7 +1317,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1293,7 +1401,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1335,7 +1445,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         interest: string;
       };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1372,7 +1484,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, listingId } = request.params as { publicId: string; listingId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1409,7 +1523,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, listingId } = request.params as { publicId: string; listingId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1453,7 +1569,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         offeredItems: any;
       };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1494,7 +1612,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, offerId } = request.params as { publicId: string; offerId: string };
       const { token } = request.body as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1531,7 +1651,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, offerId } = request.params as { publicId: string; offerId: string };
       const { token } = request.body as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1568,7 +1690,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, characterId } = request.params as { publicId: string; characterId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1633,7 +1757,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         shares?: number;
       };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,

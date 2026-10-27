@@ -580,6 +580,13 @@ async function loadUserData() {
         setCookie(`waifu_session_${userPublicId}`, userSessionToken, 3);
         setCookie('waifu_session', userSessionToken, 3);
         setCookie('waifu_user_public_id', userPublicId, 3);
+        setCookie('waifu_public_id', userPublicId, 3);
+      }
+
+      // Atualiza link do Waifinder com sessão ativa
+      const btnWaifinder = document.getElementById('btn-open-waifinder');
+      if (btnWaifinder) {
+        btnWaifinder.href = `/catalogo?publicId=${encodeURIComponent(userPublicId)}&token=${encodeURIComponent(userSessionToken)}`;
       }
 
       // Atualiza badge de notificações não lidas

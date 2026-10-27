@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Waifinder • Descubra Waifus ✨</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/retro-theme.css?v=20261026-1">
+  <link rel="stylesheet" href="/css/waifinder.css?v=20261026-1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    window.DEFAULT_CHAR_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400' viewBox='0 0 300 400'%3E%3Crect width='100%25' height='100%25' fill='%231f1333'/%3E%3Ctext x='150' y='200' font-family='sans-serif' font-weight='800' font-size='18' fill='%23ec4899' text-anchor='middle'%3EWaifuletes%3C/text%3E%3C/svg%3E";
+    window.handleImgError = function(img) {
+      if (!img) return;
+      img.onerror = null;
+      img.src = '/media/characters/default.jpg';
+    };
+  </script>
+</head>
+<body>
+
+  <div class="waifinder-container">
+    <!-- Header Retrô Compacto -->
+    <header class="waifinder-header">
+      <a href="/" class="waifinder-brand" title="Ir para Página Principal">
+        <span class="brand-icon"><i class="fas fa-fire"></i></span>
+        <span>Waifinder</span>
+      </a>
+
+      <div class="waifinder-header-actions">
+        <span id="waifinder-user-badge" class="waifinder-header-btn waifinder-user-badge hidden"></span>
+        <a id="waifinder-harem-link" href="#" class="waifinder-header-btn hidden" title="Voltar ao Meu Harém">
+          <i class="fas fa-ring"></i> Harém
+        </a>
+        <button id="btn-waifinder-mute" class="waifinder-header-btn" title="Silenciar efeitos sonoros">
+          <i class="fas fa-volume-up"></i>
+        </button>
+        <button id="btn-waifinder-theme" class="waifinder-header-btn" title="Alternar tema">
+          <i class="fas fa-moon"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Deck Central de Cartões -->
+    <main class="waifinder-deck-area" id="waifinder-deck">
+      <div class="waifinder-empty-state">
+        <div class="empty-icon">✨</div>
+        <h3 style="font-weight:800;font-size:17px;margin-bottom:6px;">Embaralhando waifus...</h3>
+        <p style="font-size:12px;color:var(--text-muted);">Buscando os melhores personagens solteiros para você...</p>
+      </div>
+    </main>
+
+    <!-- Barra Inferior de Ações -->
+    <footer class="waifinder-actions-bar">
+      <!-- Botão Wishlist (Esquerda) -->
+      <button id="btn-action-wishlist" class="btn-waifinder-action btn-side-action btn-wishlist-action" title="Adicionar à Wishlist (Atalho: W)">
+        <i class="fas fa-star"></i> + Wishlist
+      </button>
+
+      <!-- Botão Passar (Centro Esquerdo) -->
+      <button id="btn-action-pass" class="btn-waifinder-action btn-circle-action btn-pass-action" title="Passar para a próxima (Atalho: ← ou A)">
+        <i class="fas fa-times"></i>
+      </button>
+
+      <!-- Botão Curtir (Centro Direito) -->
+      <button id="btn-action-like" class="btn-waifinder-action btn-circle-action btn-like-action" title="Curtir personagem (Atalho: → ou D)">
+        <i class="fas fa-heart"></i>
+      </button>
+
+      <!-- Botão Filtro de Gênero (Direita) -->
+      <button id="btn-action-gender" class="btn-waifinder-action btn-side-action btn-gender-action filter-all" title="Filtrar: Todos / Waifus / Husbandos (Atalho: G ou S)">
+        <i class="fas fa-venus-mars" id="icon-gender-filter"></i> <span id="label-gender-filter">Todos</span>
+      </button>
+    </footer>
+
+    <!-- Guia de Atalhos Desktop -->
+    <div class="waifinder-desktop-hints">
+      <kbd>← / A</kbd> Passar &nbsp;•&nbsp; <kbd>→ / D</kbd> Curtir &nbsp;•&nbsp; <kbd>W</kbd> Wishlist &nbsp;•&nbsp; <kbd>G / S</kbd> Gênero
+    </div>
+  </div>
+
+  <!-- Toast Retrô Notificação -->
+  <div id="retro-toast" class="retro-toast hidden"></div>
+
+  <!-- Modal: Como Autenticar com a Ravena (!mu-tinder / !waifinder) -->
+  <div class="modal-overlay hidden" id="modal-waifinder-auth">
+    <div class="modal-box" style="max-width: min(480px, 90vw);">
+      <div class="modal-header">
+        <span class="modal-title">🔒 Conecte sua Conta</span>
+        <button class="modal-close" onclick="Waifinder.closeModals()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px; text-align: center;">
+        <div style="font-size: 38px; margin-bottom: 10px;">✨</div>
+        <p id="auth-prompt-msg" style="font-weight: 700; font-size: 14px; margin-bottom: 12px;">
+          Para curtir personagens e adicioná-los à sua Wishlist, acesse com o link da sua conta!
+        </p>
+        <div style="background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 12px; margin-bottom: 14px; font-size: 13px; text-align: left; line-height: 1.5;">
+          <div style="font-weight: 800; margin-bottom: 4px; color: var(--text-main);">📱 Como gerar seu link de acesso:</div>
+          <ol style="margin-left: 20px;">
+            <li>No WhatsApp/Telegram com a <b>Ravena AI</b>, envie: <code style="font-weight:800;color:#e11d48;">!waifinder</code> ou <code style="font-weight:800;color:#e11d48;">!mu-tinder</code></li>
+            <li>Ou abra seu perfil com <code style="font-weight:800;">!mu</code> e clique no botão <b>Waifinder</b>.</li>
+            <li>Acesse o link recebido para salvar e curtir automaticamente!</li>
+          </ol>
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted);">
+          Dica: Se já clicou em "Manter Login" antes, sua sessão é salva neste navegador por 3 dias!
+        </p>
+      </div>
+      <div class="modal-footer" style="justify-content: center;">
+        <button class="btn-retro btn-sm btn-gold" onclick="Waifinder.closeModals()">
+          <i class="fas fa-check"></i> Entendi, continuar olhando
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/waifinder.js?v=20261026-1"></script>
+</body>
+</html>

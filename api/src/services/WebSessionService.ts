@@ -49,6 +49,7 @@ export class WebSessionService {
       token,
       url: `${config.PUBLIC_BASE_URL}/user/${user.publicId}?token=${token}`,
       publicUrl: `${config.PUBLIC_BASE_URL}/user/${user.publicId}`,
+      waifinderUrl: `${config.PUBLIC_BASE_URL}/catalogo?token=${token}`,
       expiresIn: 1800,
     };
   }
@@ -91,6 +92,42 @@ export class WebSessionService {
       };
     } catch (_) {
       return { valid: false as const, userId: null, inventory: null, expiresIn: 0, isPersistent: false };
+    }
+  }
+
+  /**
+   * Valida uma sessão web de usuário apenas pelo token (para rotas como /catalogo e /waifinder)
+   */
+  async validateTokenOnly(token?: string) {
+    if (!token || typeof token !== 'string') {
+      return { valid: false as const, userId: null, publicId: null, inventory: null, expiresIn: 0, isPersistent: false };
+    }
+
+    const raw = await this.redis.get(`web:session:${token}`);
+    if (!raw) {
+      return { valid: false as const, userId: null, publicId: null, inventory: null, expiresIn: 0, isPersistent: false };
+    }
+
+    try {
+      const data = JSON.parse(raw) as UserSessionData;
+      const isPersistent = Boolean(data.persistent);
+      let ttl = await this.redis.ttl(`web:session:${token}`);
+
+      if (isPersistent) {
+        await this.redis.expire(`web:session:${token}`, 3 * 86400);
+        ttl = 3 * 86400;
+      }
+
+      return {
+        valid: true as const,
+        userId: data.userId,
+        publicId: data.publicId,
+        inventory: data.inventory || null,
+        expiresIn: Math.max(0, ttl),
+        isPersistent,
+      };
+    } catch (_) {
+      return { valid: false as const, userId: null, publicId: null, inventory: null, expiresIn: 0, isPersistent: false };
     }
   }
 

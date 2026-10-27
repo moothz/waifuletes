@@ -149,6 +149,14 @@ async function buildServer() {
     return reply.sendFile('admin.html');
   });
 
+  fastify.get('/catalogo', async (req, reply) => {
+    return reply.sendFile('catalogo.html');
+  });
+
+  fastify.get('/waifinder', async (req, reply) => {
+    return reply.sendFile('catalogo.html');
+  });
+
   // Plugins de infraestrutura
   await fastify.register(prismaPlugin);
   await fastify.register(redisPlugin);

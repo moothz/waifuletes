@@ -1,0 +1,519 @@
+/* ========================================================
+   WAIFULETES - WAIFINDER (CATALOGO TINDER-STYLE) CSS
+   Estética Retrô Anos 90, Gestos de Cartão, Bordas Reais
+   ======================================================== */
+
+.waifinder-container {
+  max-width: 440px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 8px 12px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-height: 100dvh;
+  box-sizing: border-box;
+  overflow: hidden;
+  user-select: none;
+}
+
+.waifinder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: var(--border-retro);
+  border-radius: var(--radius-retro);
+  box-shadow: var(--shadow-retro-sm);
+  flex-shrink: 0;
+}
+
+.waifinder-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--text-main);
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.waifinder-brand .brand-icon {
+  font-size: 18px;
+  color: #ec4899;
+}
+
+.waifinder-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.waifinder-header-btn {
+  background: var(--bg-card-subtle);
+  border: var(--border-retro);
+  border-radius: var(--radius-retro);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  transition: transform 0.1s ease;
+}
+
+.waifinder-user-badge {
+  background: #fef08a;
+  color: #854d0e;
+  border-color: #ca8a04;
+}
+
+.waifinder-header-btn:active {
+  transform: translate(1px, 1px);
+}
+
+/* Dark mode para cabeçalho e botões */
+body.dark-mode .waifinder-header {
+  background: #1f1333;
+  border-color: #9333ea;
+  box-shadow: 2px 2px 0px #090514;
+}
+
+body.dark-mode .waifinder-brand {
+  color: #f5f3ff;
+}
+
+body.dark-mode .waifinder-header-btn {
+  background: #170d26;
+  color: #f5f3ff;
+  border-color: #9333ea;
+}
+
+body.dark-mode .waifinder-header-btn:hover {
+  background: #27163f;
+  color: #ffffff;
+}
+
+body.dark-mode .waifinder-user-badge {
+  background: #27163f;
+  color: #f5f3ff;
+  border-color: #9333ea;
+}
+
+/* Área da Pilha de Cards */
+.waifinder-deck-area {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  margin-bottom: 10px;
+  perspective: 1000px;
+}
+
+.waifinder-card {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-card);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 4px 6px 0px #1e1b18;
+  display: flex;
+  flex-direction: column;
+  touch-action: none;
+  cursor: grab;
+  transition: box-shadow 0.2s ease;
+  will-change: transform;
+}
+
+.waifinder-card:active {
+  cursor: grabbing;
+}
+
+/* Bordas Destacadas por Raridade */
+.waifinder-card.rarity-legendary {
+  border: 4px solid #eab308 !important;
+  box-shadow: 0 0 16px rgba(234, 179, 8, 0.45), 4px 6px 0px #2d241e;
+}
+.waifinder-card.rarity-epic {
+  border: 4px solid #a855f7 !important;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.4), 4px 6px 0px #2d241e;
+}
+.waifinder-card.rarity-rare {
+  border: 4px solid #3b82f6 !important;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.35), 4px 6px 0px #2d241e;
+}
+.waifinder-card.rarity-uncommon {
+  border: 3.5px solid #22c55e !important;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.3), 4px 6px 0px #2d241e;
+}
+.waifinder-card.rarity-common {
+  border: 3px solid #94a3b8 !important;
+  box-shadow: 4px 6px 0px #2d241e;
+}
+
+/* Camadas de Profundidade */
+.waifinder-card.card-layer-0 {
+  z-index: 10;
+}
+.waifinder-card.card-layer-1 {
+  z-index: 8;
+  transform: translateY(10px) scale(0.96) !important;
+  opacity: 0.92;
+  pointer-events: none;
+}
+.waifinder-card.card-layer-2 {
+  z-index: 6;
+  transform: translateY(20px) scale(0.92) !important;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* Imagem Hero do Card */
+.waifinder-card-img-wrap {
+  position: relative;
+  width: 100%;
+  height: 60%;
+  min-height: 240px;
+  background: #17111a;
+  overflow: hidden;
+}
+
+.waifinder-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+.waifinder-card-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(18, 13, 26, 0.95) 0%, rgba(18, 13, 26, 0.35) 45%, transparent 80%);
+  pointer-events: none;
+}
+
+/* Badges sobre a imagem */
+.waifinder-badges-top {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.waifinder-rarity-badge {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 2px solid #000;
+  box-shadow: 2px 2px 0px #000;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.waifinder-rank-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  color: #fde047;
+}
+
+/* Selos Dinâmicos de Swipe (LIKE e NOPE) */
+.waifinder-stamp {
+  position: absolute;
+  top: 40px;
+  padding: 6px 14px;
+  font-size: 26px;
+  font-weight: 900;
+  border-radius: 6px;
+  letter-spacing: 2px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 25;
+  text-transform: uppercase;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.05s linear;
+}
+
+.waifinder-stamp.stamp-like {
+  right: 20px;
+  color: #22c55e;
+  border: 4px solid #22c55e;
+  transform: rotate(14deg);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.waifinder-stamp.stamp-nope {
+  left: 20px;
+  color: #ef4444;
+  border: 4px solid #ef4444;
+  transform: rotate(-14deg);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.waifinder-stamp.stamp-wishlist {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #eab308;
+  border: 4px solid #eab308;
+  background: rgba(0, 0, 0, 0.85);
+  font-size: 20px;
+}
+
+/* Informações do Personagem dentro do Card */
+.waifinder-card-info {
+  flex: 1;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.waifinder-char-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.2;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.waifinder-char-series {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.waifinder-char-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.waifinder-char-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-main);
+  opacity: 0.9;
+  overflow-y: auto;
+  max-height: 90px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.waifinder-char-desc::-webkit-scrollbar {
+  width: 4px;
+}
+.waifinder-char-desc::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+}
+
+/* Barra Inferior de Ações */
+.waifinder-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-card);
+  border: var(--border-retro);
+  border-radius: var(--radius-retro);
+  box-shadow: var(--shadow-retro-sm);
+  flex-shrink: 0;
+}
+
+.btn-waifinder-action {
+  background: var(--bg-card-subtle);
+  border: var(--border-retro);
+  border-radius: var(--radius-retro);
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px #000;
+  transition: all 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-waifinder-action:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px #000;
+}
+
+/* Botões Laterais (+ Wishlist e Sugerir) */
+.btn-side-action {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-main);
+  gap: 6px;
+  flex: 1;
+  max-width: 115px;
+}
+
+.btn-wishlist-action {
+  border-color: #ca8a04;
+  background: #fefce8;
+  color: #854d0e;
+}
+body.dark-mode .btn-wishlist-action {
+  background: #2b1f0b;
+  color: #fde047;
+  border-color: #eab308;
+}
+
+/* Botão de Alternância de Gênero (Todos / Waifus / Husbandos) */
+.btn-gender-action {
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 800;
+}
+
+/* 1. Todos os Gêneros (Padrão) */
+.btn-gender-action.filter-all {
+  border-color: #64748b;
+  background: #f1f5f9;
+  color: #334155;
+}
+body.dark-mode .btn-gender-action.filter-all {
+  background: #1e1333;
+  color: #e2e8f0;
+  border-color: #9333ea;
+}
+
+/* 2. Waifus (Rosa) */
+.btn-gender-action.filter-waifus {
+  border-color: #f43f5e !important;
+  background: #fff1f2 !important;
+  color: #e11d48 !important;
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.35), 2px 2px 0px #000 !important;
+}
+body.dark-mode .btn-gender-action.filter-waifus {
+  background: #380d19 !important;
+  color: #fda4af !important;
+  border-color: #f43f5e !important;
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.45), 2px 2px 0px #000 !important;
+}
+
+/* 3. Husbandos (Azul) */
+.btn-gender-action.filter-husbandos {
+  border-color: #3b82f6 !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.35), 2px 2px 0px #000 !important;
+}
+body.dark-mode .btn-gender-action.filter-husbandos {
+  background: #0f1d38 !important;
+  color: #93c5fd !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45), 2px 2px 0px #000 !important;
+}
+
+/* Botões Centrais Circulares (Passar e Curtir) */
+.btn-circle-action {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 22px;
+}
+
+.btn-pass-action {
+  border-color: #dc2626;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+body.dark-mode .btn-pass-action {
+  background: #361014;
+  color: #f87171;
+  border-color: #ef4444;
+}
+
+.btn-like-action {
+  border-color: #16a34a;
+  background: #dcfce7;
+  color: #15803d;
+}
+body.dark-mode .btn-like-action {
+  background: #0d2e18;
+  color: #4ade80;
+  border-color: #22c55e;
+}
+
+/* Barra de Atalhos Desktop */
+.waifinder-desktop-hints {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.waifinder-desktop-hints kbd {
+  background: var(--bg-card);
+  border: 1px solid var(--text-muted);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  box-shadow: 1px 1px 0px rgba(0,0,0,0.3);
+}
+
+/* Estado Vazio ou Carregando */
+.waifinder-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 20px;
+}
+
+.waifinder-empty-state .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  animation: pulse 1.8s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+@media (max-width: 480px) {
+  .waifinder-container {
+    padding: 4px 8px 10px 8px;
+  }
+  .waifinder-desktop-hints {
+    display: none;
+  }
+}
