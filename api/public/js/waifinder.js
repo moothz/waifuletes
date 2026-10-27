@@ -476,8 +476,24 @@ const Waifinder = {
         <div class="waifinder-char-desc">
           ${char.description || 'Nenhuma descrição cadastrada para este personagem.'}
         </div>
+
+        <div class="waifinder-rarity-action-wrap">
+          <button type="button" class="btn-waifinder-change-rarity" title="Sugerir alteração de raridade">
+            <i class="fas fa-gem"></i> Mudar Raridade
+          </button>
+          <div class="waifinder-rarity-options hidden">
+            <button type="button" class="btn-rarity-opt opt-common ${char.baseRarity === 'COMMON' ? 'is-current' : ''}" data-rarity="COMMON" title="Comum">Comum</button>
+            <button type="button" class="btn-rarity-opt opt-uncommon ${char.baseRarity === 'UNCOMMON' ? 'is-current' : ''}" data-rarity="UNCOMMON" title="Incomum">Incomum</button>
+            <button type="button" class="btn-rarity-opt opt-rare ${char.baseRarity === 'RARE' ? 'is-current' : ''}" data-rarity="RARE" title="Raro">Raro</button>
+            <button type="button" class="btn-rarity-opt opt-epic ${char.baseRarity === 'EPIC' ? 'is-current' : ''}" data-rarity="EPIC" title="Épico">Épico</button>
+            <button type="button" class="btn-rarity-opt opt-legendary ${char.baseRarity === 'LEGENDARY' ? 'is-current' : ''}" data-rarity="LEGENDARY" title="Lendário">Lendário</button>
+            <button type="button" class="btn-rarity-opt opt-cancel" title="Fechar">✕</button>
+          </div>
+        </div>
       </div>
     `;
+
+    this.bindRarityActions(card, char);
 
     return card;
   },
@@ -489,6 +505,9 @@ const Waifinder = {
       if (e.target.closest('.waifinder-char-desc')) {
         // Permite scroll dentro da descrição sem disparar swipe
         if (e.target.scrollHeight > e.target.clientHeight) return;
+      }
+      if (e.target.closest('.waifinder-rarity-action-wrap')) {
+        return;
       }
 
       this.isDragging = true;
@@ -648,6 +667,120 @@ const Waifinder = {
       }
     } catch (err) {
       this.showToast('Erro ao comunicar com o servidor.', '❌');
+    }
+  },
+
+  bindRarityActions(cardEl, char) {
+    const wrap = cardEl.querySelector('.waifinder-rarity-action-wrap');
+    if (!wrap) return;
+
+    // Impede que eventos de clique e toque no container iniciem drag ou gestures
+    const stopProp = (e) => e.stopPropagation();
+    wrap.addEventListener('pointerdown', stopProp);
+    wrap.addEventListener('pointermove', stopProp);
+    wrap.addEventListener('pointerup', stopProp);
+    wrap.addEventListener('touchstart', stopProp, { passive: true });
+    wrap.addEventListener('mousedown', stopProp);
+    wrap.addEventListener('click', stopProp);
+
+    const btnChange = wrap.querySelector('.btn-waifinder-change-rarity');
+    const optionsWrap = wrap.querySelector('.waifinder-rarity-options');
+    const btnCancel = wrap.querySelector('.opt-cancel');
+
+    if (btnChange && optionsWrap) {
+      btnChange.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        btnChange.classList.add('hidden');
+        optionsWrap.classList.remove('hidden');
+        WaifinderAudio.playPop();
+      });
+    }
+
+    if (btnCancel && optionsWrap && btnChange) {
+      btnCancel.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        optionsWrap.classList.add('hidden');
+        btnChange.classList.remove('hidden');
+      });
+    }
+
+    const rarityBtns = wrap.querySelectorAll('.btn-rarity-opt[data-rarity]');
+    rarityBtns.forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const targetRarity = btn.dataset.rarity;
+        await this.handleRaritySuggestion(char, targetRarity, wrap);
+      });
+    });
+  },
+
+  async handleRaritySuggestion(char, targetRarity, wrapEl) {
+    const targetInfo = RARITY_MAP[targetRarity] || { label: targetRarity };
+
+    if (char.baseRarity === targetRarity) {
+      this.showToast(`${char.name} já é da raridade ${targetInfo.label}!`, 'ℹ️');
+      return;
+    }
+
+    if (!this.token) {
+      this.showAuthPrompt('Para sugerir alterações de raridade, conecte-se com seu link da Ravena no WhatsApp!');
+      return;
+    }
+
+    const btnChange = wrapEl.querySelector('.btn-waifinder-change-rarity');
+    const optionsWrap = wrapEl.querySelector('.waifinder-rarity-options');
+
+    const btns = wrapEl.querySelectorAll('button');
+    btns.forEach((b) => (b.disabled = true));
+
+    this.showToast(`Enviando sugestão para ${targetInfo.label}...`, '⏳');
+
+    try {
+      const publicId = this.publicId || 'token-session';
+      const res = await fetch(`/api/web/user/${publicId}/suggestions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: this.token,
+          type: 'RARITY',
+          characterId: char.id,
+          characterName: char.name,
+          series: char.series,
+          suggestedRarity: targetRarity,
+          reason: 'Sugerido via Waifinder',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        WaifinderAudio.playPop();
+        this.showToast(`Sugestão enviada com sucesso! (${targetInfo.label}) ✨`, '💎');
+        if (optionsWrap) optionsWrap.classList.add('hidden');
+        if (btnChange) {
+          btnChange.classList.remove('hidden');
+          btnChange.innerHTML = `<i class="fas fa-check" style="color:#22c55e;"></i> Sugerido: ${targetInfo.label}`;
+          setTimeout(() => {
+            btnChange.innerHTML = `<i class="fas fa-gem"></i> Mudar Raridade`;
+          }, 3500);
+        }
+      } else {
+        const errorMsg = data.error?.message || 'Falha ao enviar sugestão de raridade.';
+        this.showToast(errorMsg, '⚠️');
+        if (optionsWrap) optionsWrap.classList.add('hidden');
+        if (btnChange) btnChange.classList.remove('hidden');
+      }
+    } catch (err) {
+      this.showToast('Erro ao comunicar com o servidor.', '❌');
+      if (optionsWrap) optionsWrap.classList.add('hidden');
+      if (btnChange) btnChange.classList.remove('hidden');
+    } finally {
+      btns.forEach((b) => (b.disabled = false));
     }
   },
 

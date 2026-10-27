@@ -337,6 +337,154 @@ body.dark-mode .waifinder-user-badge {
   border-radius: 4px;
 }
 
+/* Troca rápida de Raridade no Card */
+.waifinder-rarity-action-wrap {
+  margin-top: auto;
+  padding-top: 6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.btn-waifinder-change-rarity {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px dashed var(--border-color, #4a3e64);
+  color: var(--text-muted, #94a3b8);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.btn-waifinder-change-rarity:hover {
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid #eab308;
+  color: #eab308;
+  transform: translateY(-1px);
+}
+
+.btn-waifinder-change-rarity:active {
+  transform: scale(0.96);
+}
+
+.waifinder-rarity-options {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  width: 100%;
+  animation: waifinderRarityPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+}
+
+.waifinder-rarity-options.hidden {
+  display: none !important;
+}
+
+@keyframes waifinderRarityPop {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.btn-rarity-opt {
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-shadow: 1px 1px 0px rgba(0,0,0,0.4);
+}
+
+.btn-rarity-opt:active {
+  transform: scale(0.95);
+}
+
+.btn-rarity-opt.opt-common {
+  background: #334155;
+  color: #cbd5e1;
+  border-color: #475569;
+}
+.btn-rarity-opt.opt-common:hover {
+  background: #475569;
+  color: #ffffff;
+}
+
+.btn-rarity-opt.opt-uncommon {
+  background: #15803d;
+  color: #dcfce7;
+  border-color: #166534;
+}
+.btn-rarity-opt.opt-uncommon:hover {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.btn-rarity-opt.opt-rare {
+  background: #1d4ed8;
+  color: #dbeafe;
+  border-color: #1e40af;
+}
+.btn-rarity-opt.opt-rare:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.btn-rarity-opt.opt-epic {
+  background: #7e22ce;
+  color: #f3e8ff;
+  border-color: #6b21a8;
+}
+.btn-rarity-opt.opt-epic:hover {
+  background: #9333ea;
+  color: #ffffff;
+}
+
+.btn-rarity-opt.opt-legendary {
+  background: #b45309;
+  color: #fef3c7;
+  border-color: #92400e;
+}
+.btn-rarity-opt.opt-legendary:hover {
+  background: #d97706;
+  color: #ffffff;
+}
+
+.btn-rarity-opt.opt-cancel {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  padding: 3px 6px;
+  font-weight: 900;
+}
+.btn-rarity-opt.opt-cancel:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.btn-rarity-opt.is-current {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
 /* Barra Inferior de Ações */
 .waifinder-actions-bar {
   display: flex;
