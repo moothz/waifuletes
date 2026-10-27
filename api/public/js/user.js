@@ -2620,7 +2620,6 @@ async function confirmPublishListing() {
     if (res.success) {
       closeModal('modal-market-sell');
       Api.showToast('Personagem anunciado nos classificados com sucesso!', '✨');
-      switchTab('tab-market');
       loadMyListings();
       loadGlobalMarket();
       updateMarketPendingBadge();
