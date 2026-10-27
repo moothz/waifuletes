@@ -43,10 +43,9 @@ const RARITY_ORDER = {
 
 export function calculateRarityFromMudaeRank(rank) {
   if (!rank || rank <= 0) return 'COMMON';
-  if (rank <= 50) return 'LEGENDARY';
-  if (rank <= 250) return 'EPIC';
-  if (rank <= 1000) return 'RARE';
-  if (rank <= 3000) return 'UNCOMMON';
+  if (rank <= 1000) return 'LEGENDARY';
+  if (rank <= 3000) return 'EPIC';
+  if (rank <= 10000) return 'RARE';
   return 'COMMON';
 }
 
