@@ -477,23 +477,41 @@ const Waifinder = {
           ${char.description || 'Nenhuma descrição cadastrada para este personagem.'}
         </div>
 
-        <div class="waifinder-rarity-action-wrap">
-          <button type="button" class="btn-waifinder-change-rarity" title="Sugerir alteração de raridade">
-            <i class="fas fa-gem"></i> Mudar Raridade
-          </button>
-          <div class="waifinder-rarity-options hidden">
-            <button type="button" class="btn-rarity-opt opt-common ${char.baseRarity === 'COMMON' ? 'is-current' : ''}" data-rarity="COMMON" title="Comum">Comum</button>
-            <button type="button" class="btn-rarity-opt opt-uncommon ${char.baseRarity === 'UNCOMMON' ? 'is-current' : ''}" data-rarity="UNCOMMON" title="Incomum">Incomum</button>
-            <button type="button" class="btn-rarity-opt opt-rare ${char.baseRarity === 'RARE' ? 'is-current' : ''}" data-rarity="RARE" title="Raro">Raro</button>
-            <button type="button" class="btn-rarity-opt opt-epic ${char.baseRarity === 'EPIC' ? 'is-current' : ''}" data-rarity="EPIC" title="Épico">Épico</button>
-            <button type="button" class="btn-rarity-opt opt-legendary ${char.baseRarity === 'LEGENDARY' ? 'is-current' : ''}" data-rarity="LEGENDARY" title="Lendário">Lendário</button>
-            <button type="button" class="btn-rarity-opt opt-cancel" title="Fechar">✕</button>
+        <div class="waifinder-card-actions-wrap waifinder-rarity-action-wrap">
+          <!-- Grupo: Mudar Raridade -->
+          <div class="waifinder-action-group group-rarity">
+            <button type="button" class="btn-waifinder-sub-action btn-waifinder-change-rarity" title="Sugerir alteração de raridade">
+              <i class="fas fa-gem"></i> Mudar Raridade
+            </button>
+            <div class="waifinder-rarity-options hidden">
+              <button type="button" class="btn-rarity-opt opt-common ${char.baseRarity === 'COMMON' ? 'is-current' : ''}" data-rarity="COMMON" title="Comum">Comum</button>
+              <button type="button" class="btn-rarity-opt opt-uncommon ${char.baseRarity === 'UNCOMMON' ? 'is-current' : ''}" data-rarity="UNCOMMON" title="Incomum">Incomum</button>
+              <button type="button" class="btn-rarity-opt opt-rare ${char.baseRarity === 'RARE' ? 'is-current' : ''}" data-rarity="RARE" title="Raro">Raro</button>
+              <button type="button" class="btn-rarity-opt opt-epic ${char.baseRarity === 'EPIC' ? 'is-current' : ''}" data-rarity="EPIC" title="Épico">Épico</button>
+              <button type="button" class="btn-rarity-opt opt-legendary ${char.baseRarity === 'LEGENDARY' ? 'is-current' : ''}" data-rarity="LEGENDARY" title="Lendário">Lendário</button>
+              <button type="button" class="btn-rarity-opt opt-cancel" title="Fechar">✕</button>
+            </div>
+          </div>
+
+          <!-- Grupo: Denunciar/Apagar -->
+          <div class="waifinder-action-group group-report">
+            <button type="button" class="btn-waifinder-sub-action btn-waifinder-report" title="Denunciar ou solicitar exclusão deste personagem">
+              <i class="fas fa-trash-alt"></i> Denunciar/Apagar
+            </button>
+            <div class="waifinder-report-options hidden">
+              <button type="button" class="btn-report-opt opt-confirm-report" title="Confirmar Denúncia">
+                <i class="fas fa-check"></i> Confirmar
+              </button>
+              <button type="button" class="btn-report-opt opt-cancel-report" title="Cancelar">
+                <i class="fas fa-times"></i> Cancelar
+              </button>
+            </div>
           </div>
         </div>
       </div>
     `;
 
-    this.bindRarityActions(card, char);
+    this.bindCardActionButtons(card, char);
 
     return card;
   },
@@ -506,7 +524,7 @@ const Waifinder = {
         // Permite scroll dentro da descrição sem disparar swipe
         if (e.target.scrollHeight > e.target.clientHeight) return;
       }
-      if (e.target.closest('.waifinder-rarity-action-wrap')) {
+      if (e.target.closest('.waifinder-card-actions-wrap') || e.target.closest('.waifinder-rarity-action-wrap')) {
         return;
       }
 
@@ -670,8 +688,8 @@ const Waifinder = {
     }
   },
 
-  bindRarityActions(cardEl, char) {
-    const wrap = cardEl.querySelector('.waifinder-rarity-action-wrap');
+  bindCardActionButtons(cardEl, char) {
+    const wrap = cardEl.querySelector('.waifinder-card-actions-wrap');
     if (!wrap) return;
 
     // Impede que eventos de clique e toque no container iniciem drag ou gestures
@@ -683,26 +701,36 @@ const Waifinder = {
     wrap.addEventListener('mousedown', stopProp);
     wrap.addEventListener('click', stopProp);
 
-    const btnChange = wrap.querySelector('.btn-waifinder-change-rarity');
-    const optionsWrap = wrap.querySelector('.waifinder-rarity-options');
-    const btnCancel = wrap.querySelector('.opt-cancel');
+    const groupRarity = wrap.querySelector('.group-rarity');
+    const btnChangeRarity = wrap.querySelector('.btn-waifinder-change-rarity');
+    const optionsRarity = wrap.querySelector('.waifinder-rarity-options');
+    const btnCancelRarity = wrap.querySelector('.opt-cancel');
 
-    if (btnChange && optionsWrap) {
-      btnChange.addEventListener('click', (e) => {
+    const groupReport = wrap.querySelector('.group-report');
+    const btnReport = wrap.querySelector('.btn-waifinder-report');
+    const optionsReport = wrap.querySelector('.waifinder-report-options');
+    const btnConfirmReport = wrap.querySelector('.opt-confirm-report');
+    const btnCancelReport = wrap.querySelector('.opt-cancel-report');
+
+    // === MUDAR RARIDADE ===
+    if (btnChangeRarity && optionsRarity) {
+      btnChangeRarity.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        btnChange.classList.add('hidden');
-        optionsWrap.classList.remove('hidden');
+        btnChangeRarity.classList.add('hidden');
+        if (groupReport) groupReport.classList.add('hidden');
+        optionsRarity.classList.remove('hidden');
         WaifinderAudio.playPop();
       });
     }
 
-    if (btnCancel && optionsWrap && btnChange) {
-      btnCancel.addEventListener('click', (e) => {
+    if (btnCancelRarity && optionsRarity && btnChangeRarity) {
+      btnCancelRarity.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        optionsWrap.classList.add('hidden');
-        btnChange.classList.remove('hidden');
+        optionsRarity.classList.add('hidden');
+        btnChangeRarity.classList.remove('hidden');
+        if (groupReport) groupReport.classList.remove('hidden');
       });
     }
 
@@ -715,6 +743,36 @@ const Waifinder = {
         await this.handleRaritySuggestion(char, targetRarity, wrap);
       });
     });
+
+    // === DENUNCIAR / APAGAR ===
+    if (btnReport && optionsReport) {
+      btnReport.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        btnReport.classList.add('hidden');
+        if (groupRarity) groupRarity.classList.add('hidden');
+        optionsReport.classList.remove('hidden');
+        WaifinderAudio.playPop();
+      });
+    }
+
+    if (btnCancelReport && optionsReport && btnReport) {
+      btnCancelReport.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        optionsReport.classList.add('hidden');
+        btnReport.classList.remove('hidden');
+        if (groupRarity) groupRarity.classList.remove('hidden');
+      });
+    }
+
+    if (btnConfirmReport) {
+      btnConfirmReport.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        await this.handleReportSuggestion(char, wrap);
+      });
+    }
   },
 
   async handleRaritySuggestion(char, targetRarity, wrapEl) {
@@ -730,6 +788,7 @@ const Waifinder = {
       return;
     }
 
+    const groupReport = wrapEl.querySelector('.group-report');
     const btnChange = wrapEl.querySelector('.btn-waifinder-change-rarity');
     const optionsWrap = wrapEl.querySelector('.waifinder-rarity-options');
 
@@ -762,6 +821,7 @@ const Waifinder = {
         WaifinderAudio.playPop();
         this.showToast(`Sugestão enviada com sucesso! (${targetInfo.label}) ✨`, '💎');
         if (optionsWrap) optionsWrap.classList.add('hidden');
+        if (groupReport) groupReport.classList.remove('hidden');
         if (btnChange) {
           btnChange.classList.remove('hidden');
           btnChange.innerHTML = `<i class="fas fa-check" style="color:#22c55e;"></i> Sugerido: ${targetInfo.label}`;
@@ -774,11 +834,74 @@ const Waifinder = {
         this.showToast(errorMsg, '⚠️');
         if (optionsWrap) optionsWrap.classList.add('hidden');
         if (btnChange) btnChange.classList.remove('hidden');
+        if (groupReport) groupReport.classList.remove('hidden');
       }
     } catch (err) {
       this.showToast('Erro ao comunicar com o servidor.', '❌');
       if (optionsWrap) optionsWrap.classList.add('hidden');
       if (btnChange) btnChange.classList.remove('hidden');
+      if (groupReport) groupReport.classList.remove('hidden');
+    } finally {
+      btns.forEach((b) => (b.disabled = false));
+    }
+  },
+
+  async handleReportSuggestion(char, wrapEl) {
+    if (!this.token) {
+      this.showAuthPrompt('Para denunciar personagens, conecte-se com seu link da Ravena no WhatsApp!');
+      return;
+    }
+
+    const groupRarity = wrapEl.querySelector('.group-rarity');
+    const btnReport = wrapEl.querySelector('.btn-waifinder-report');
+    const optionsReport = wrapEl.querySelector('.waifinder-report-options');
+
+    const btns = wrapEl.querySelectorAll('button');
+    btns.forEach((b) => (b.disabled = true));
+
+    this.showToast('Enviando denúncia...', '⏳');
+
+    try {
+      const publicId = this.publicId || 'token-session';
+      const res = await fetch(`/api/web/user/${publicId}/suggestions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: this.token,
+          type: 'DELETE_CHARACTER',
+          characterId: char.id,
+          reason: 'Denunciado via Waifinder',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        WaifinderAudio.playPop();
+        this.showToast('Denúncia enviada com sucesso para a moderação! 🚩', '⚠️');
+        if (optionsReport) optionsReport.classList.add('hidden');
+        if (groupRarity) groupRarity.classList.remove('hidden');
+        if (btnReport) {
+          btnReport.classList.remove('hidden');
+          btnReport.innerHTML = `<i class="fas fa-check" style="color:#22c55e;"></i> Denunciado`;
+          setTimeout(() => {
+            btnReport.innerHTML = `<i class="fas fa-trash-alt"></i> Denunciar/Apagar`;
+          }, 3500);
+        }
+      } else {
+        const errorMsg = data.error?.message || 'Falha ao enviar denúncia.';
+        this.showToast(errorMsg, '⚠️');
+        if (optionsReport) optionsReport.classList.add('hidden');
+        if (btnReport) btnReport.classList.remove('hidden');
+        if (groupRarity) groupRarity.classList.remove('hidden');
+      }
+    } catch (err) {
+      this.showToast('Erro ao comunicar com o servidor.', '❌');
+      if (optionsReport) optionsReport.classList.add('hidden');
+      if (btnReport) btnReport.classList.remove('hidden');
+      if (groupRarity) groupRarity.classList.remove('hidden');
     } finally {
       btns.forEach((b) => (b.disabled = false));
     }

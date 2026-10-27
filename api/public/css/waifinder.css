@@ -324,7 +324,7 @@ body.dark-mode .waifinder-user-badge {
   color: var(--text-main);
   opacity: 0.9;
   overflow-y: auto;
-  max-height: 90px;
+  max-height: 65px;
   padding-right: 4px;
   scrollbar-width: thin;
 }
@@ -337,37 +337,54 @@ body.dark-mode .waifinder-user-badge {
   border-radius: 4px;
 }
 
-/* Troca rápida de Raridade no Card */
+/* Container de Ações Rápidas no Card (Raridade e Denúncia) */
+.waifinder-card-actions-wrap,
 .waifinder-rarity-action-wrap {
   margin-top: auto;
   padding-top: 6px;
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 8px;
   width: 100%;
   flex-shrink: 0;
   z-index: 5;
 }
 
+.waifinder-action-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Botões principais aumentados em ~50% */
+.btn-waifinder-sub-action,
 .btn-waifinder-change-rarity {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px dashed var(--border-color, #4a3e64);
-  color: var(--text-muted, #94a3b8);
-  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px dashed var(--border-color, #4a3e64);
+  color: var(--text-main, #f8fafc);
+  padding: 7px 15px;
   border-radius: 9999px;
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   transition: all 0.18s ease;
   user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
+.btn-waifinder-sub-action i,
+.btn-waifinder-change-rarity i {
+  font-size: 13.5px;
+}
+
+/* Botão Mudar Raridade */
 .btn-waifinder-change-rarity:hover {
-  background: rgba(234, 179, 8, 0.12);
-  border: 1px solid #eab308;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1.5px solid #eab308;
   color: #eab308;
   transform: translateY(-1px);
 }
@@ -376,6 +393,19 @@ body.dark-mode .waifinder-user-badge {
   transform: scale(0.96);
 }
 
+/* Botão Denunciar/Apagar */
+.btn-waifinder-report:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1.5px solid #ef4444;
+  color: #ef4444;
+  transform: translateY(-1px);
+}
+
+.btn-waifinder-report:active {
+  transform: scale(0.96);
+}
+
+/* Opções de Raridade */
 .waifinder-rarity-options {
   display: flex;
   align-items: center;
@@ -383,14 +413,16 @@ body.dark-mode .waifinder-user-badge {
   gap: 4px;
   flex-wrap: wrap;
   width: 100%;
-  animation: waifinderRarityPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+  animation: waifinderActionPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2);
 }
 
-.waifinder-rarity-options.hidden {
+.waifinder-rarity-options.hidden,
+.waifinder-report-options.hidden,
+.waifinder-action-group.hidden {
   display: none !important;
 }
 
-@keyframes waifinderRarityPop {
+@keyframes waifinderActionPop {
   from {
     opacity: 0;
     transform: scale(0.9);
@@ -402,9 +434,9 @@ body.dark-mode .waifinder-user-badge {
 }
 
 .btn-rarity-opt {
-  padding: 3px 7px;
+  padding: 4px 8px;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   cursor: pointer;
   border: 1px solid transparent;
@@ -471,7 +503,7 @@ body.dark-mode .waifinder-user-badge {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.3);
-  padding: 3px 6px;
+  padding: 4px 7px;
   font-weight: 900;
 }
 .btn-rarity-opt.opt-cancel:hover {
@@ -483,6 +515,55 @@ body.dark-mode .waifinder-user-badge {
   opacity: 0.45;
   cursor: not-allowed;
   filter: grayscale(0.5);
+}
+
+/* Opções de Denúncia (Confirmar / Cancelar) */
+.waifinder-report-options {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  animation: waifinderActionPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+}
+
+.btn-report-opt {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.btn-report-opt:active {
+  transform: scale(0.96);
+}
+
+/* Verde com símbolo de check */
+.btn-report-opt.opt-confirm-report {
+  background: #15803d;
+  color: #ffffff;
+  border: 1.5px solid #22c55e;
+}
+.btn-report-opt.opt-confirm-report:hover {
+  background: #16a34a;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+}
+
+/* Vermelho com símbolo de cancel */
+.btn-report-opt.opt-cancel-report {
+  background: #b91c1c;
+  color: #ffffff;
+  border: 1.5px solid #ef4444;
+}
+.btn-report-opt.opt-cancel-report:hover {
+  background: #dc2626;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
 }
 
 /* Barra Inferior de Ações */
