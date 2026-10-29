@@ -13,7 +13,7 @@ const state = {
   gender: '',
   maritalStatus: '',
   rarity: '',
-  sortBy: 'random',
+  sortBy: 'wishlist',
   page: 1,
   limit: 24,
   total: 0,
@@ -42,14 +42,28 @@ function getCookie(name) {
 }
 
 function checkLoggedInUser() {
-  const publicId = getCookie('waifu_user_public_id');
-  const token = getCookie('waifu_session');
+  const sp = new URLSearchParams(window.location.search);
+  const allowStay = sp.has('stay') || sp.has('home') || sp.has('noredirect');
+
+  let publicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id') || localStorage.getItem('waifu_public_id');
+  const token = getCookie('waifu_session') || localStorage.getItem('waifu_session');
+
+  if (publicId) {
+    publicId = publicId.replace(/^=+/, '').trim();
+    try { localStorage.setItem('waifu_user_public_id', publicId); } catch (_) {}
+  }
+
   if (publicId && token) {
+    if (!allowStay) {
+      window.location.replace(`/user/${encodeURIComponent(publicId)}`);
+      return;
+    }
+
     const actions = document.querySelector('.header-actions');
     if (actions && !document.getElementById('btn-my-harem-nav')) {
       const btnHarem = document.createElement('a');
       btnHarem.id = 'btn-my-harem-nav';
-      btnHarem.href = `/user/${publicId}`;
+      btnHarem.href = `/user/${encodeURIComponent(publicId)}`;
       btnHarem.className = 'btn-retro btn-sm';
       btnHarem.style.cssText = 'background: #22c55e; color: #ffffff; border-color: #16a34a; font-weight: 800;';
       btnHarem.innerHTML = '<i class="fas fa-heart"></i> Meu Harém';

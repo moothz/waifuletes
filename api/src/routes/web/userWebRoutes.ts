@@ -10,6 +10,7 @@ import { MarketInvestmentService } from '../../services/MarketInvestmentService.
 import { CovetService } from '../../services/CovetService.js';
 import { NotificationService } from '../../services/NotificationService.js';
 import { CatalogService } from '../../services/CatalogService.js';
+import { CollectionService } from '../../services/CollectionService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
 import { Rarity } from '@prisma/client';
@@ -85,6 +86,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
   const covetService = new CovetService(fastify.prisma, characterService, wishlistService);
   const notificationService = new NotificationService(fastify.prisma);
   const catalogService = new CatalogService(fastify.prisma, fastify.redis);
+  const collectionService = new CollectionService(fastify.prisma, characterService);
 
   /**
    * Retorna um número de WhatsApp ativo da Ravena para redirecionamento com !mu-adm
@@ -177,8 +179,11 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const session = await webSessionService.validateUserSession(publicId, token);
       const isOwner = session.valid && session.userId === user.id;
 
-      // Busca o harém completo do usuário (sem teto artificial)
-      const haremResult = await haremService.getUserHarem(user.id, 1, 0, 'keys');
+      // Busca o harém completo do usuário (sem teto artificial) e coleções
+      const [haremResult, userCollections] = await Promise.all([
+        haremService.getUserHarem(user.id, 1, 0, 'keys'),
+        collectionService.listUserCollections(user.id),
+      ]);
 
       if (isOwner) {
         const wishlistResult = await wishlistService.getWishlist(user.id);
@@ -206,6 +211,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             unreadNotificationsCount,
             harem: enrichedHarem,
             totalHarem: haremResult.total,
+            collections: userCollections,
             wishlist: wishlistResult,
             covetedCharacterIds,
             inventory: session.inventory || null,
@@ -227,6 +233,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         keys: item.keys,
         isFavorite: item.isFavorite,
         claimedAt: item.claimedAt,
+        collectionId: item.collectionId,
+        collection: item.collection,
       }));
 
       // Busca os classificados ativos deste usuário para a aba pública de classificados
@@ -262,6 +270,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           name: user.name,
           kakera: user.kakera,
           harem: publicHarem,
+          collections: userCollections,
           totalHarem: haremResult.total,
           listings: publicListings,
         },
@@ -672,6 +681,168 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       return reply.send(result);
+    },
+  });
+
+  /**
+   * Cria uma nova coleção via painel web do usuário
+   */
+  fastify.post('/api/web/user/:publicId/collections', {
+    schema: {
+      description: 'Cria uma nova coleção de personagens (limite de 15) no harém',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: { publicId: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'name'],
+        properties: {
+          token: { type: 'string' },
+          name: { type: 'string', minLength: 1, maxLength: 50 },
+          description: { type: 'string', maxLength: 200 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token, name, description } = request.body as { token: string; name: string; description?: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await collectionService.createCollection(session.userId, name, description);
+      return reply.send({ success: true, data: result });
+    },
+  });
+
+  /**
+   * Remove uma coleção via painel web
+   */
+  fastify.delete('/api/web/user/:publicId/collections/:collectionId', {
+    schema: {
+      description: 'Apaga uma coleção do usuário, retornando os personagens ao harém geral',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'collectionId'],
+        properties: {
+          publicId: { type: 'string' },
+          collectionId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          token: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, collectionId } = request.params as { publicId: string; collectionId: string };
+      const { token } = (request.query as { token?: string }) || {};
+      const bodyToken = (request.body as { token?: string })?.token;
+      const actualToken = token || bodyToken;
+
+      const session = await webSessionService.validateUserSession(publicId, actualToken);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await collectionService.deleteCollection(session.userId, collectionId);
+      return reply.send({ success: true, data: result });
+    },
+  });
+
+  /**
+   * Adiciona waifu a uma coleção via painel web
+   */
+  fastify.post('/api/web/user/:publicId/collections/:collectionId/characters', {
+    schema: {
+      description: 'Adiciona ou move uma waifu do harém para a coleção especificada',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'collectionId'],
+        properties: {
+          publicId: { type: 'string' },
+          collectionId: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['token', 'characterId'],
+        properties: {
+          token: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, collectionId } = request.params as { publicId: string; collectionId: string };
+      const { token, characterId } = request.body as { token: string; characterId: string };
+
+      const session = await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await collectionService.addCharacterToCollection(session.userId, collectionId, characterId);
+      return reply.send({ success: true, data: result });
+    },
+  });
+
+  /**
+   * Remove waifu de sua coleção via painel web
+   */
+  fastify.delete('/api/web/user/:publicId/collections/characters/:characterId', {
+    schema: {
+      description: 'Remove uma waifu de qualquer coleção, voltando ao harém geral',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId', 'characterId'],
+        properties: {
+          publicId: { type: 'string' },
+          characterId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          token: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId, characterId } = request.params as { publicId: string; characterId: string };
+      const { token } = (request.query as { token?: string }) || {};
+      const bodyToken = (request.body as { token?: string })?.token;
+      const actualToken = token || bodyToken;
+
+      const session = await webSessionService.validateUserSession(publicId, actualToken);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const result = await collectionService.removeCharacterFromCollection(session.userId, characterId);
+      return reply.send({ success: true, data: result });
     },
   });
 

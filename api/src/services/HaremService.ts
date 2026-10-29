@@ -7,7 +7,13 @@ export class HaremService {
     private characterService: CharacterService
   ) {}
 
-  async getUserHarem(userId: string, page = 1, limit = 20, sort: 'keys' | 'date' | 'rarity' = 'keys') {
+  async getUserHarem(
+    userId: string,
+    page = 1,
+    limit = 20,
+    sort: 'keys' | 'date' | 'rarity' = 'keys',
+    withoutCollection = false
+  ) {
     const skip = limit > 0 ? (page - 1) * limit : undefined;
     const take = limit > 0 ? limit : undefined;
 
@@ -19,15 +25,21 @@ export class HaremService {
       orderBy = [{ isFavorite: 'desc' }, { character: { baseRarity: 'desc' } }, { keys: 'desc' }];
     }
 
+    const where: any = { userId };
+    if (withoutCollection) {
+      where.collectionId = null;
+    }
+
     const [total, entries] = await Promise.all([
-      this.prisma.haremEntry.count({ where: { userId } }),
+      this.prisma.haremEntry.count({ where }),
       this.prisma.haremEntry.findMany({
-        where: { userId },
+        where,
         skip,
         take,
         orderBy,
         include: {
           character: true,
+          collection: true,
         },
       }),
     ]);
@@ -44,6 +56,8 @@ export class HaremService {
         keys: e.keys,
         isFavorite: e.isFavorite,
         note: e.note,
+        collectionId: e.collectionId || null,
+        collection: e.collection ? { id: e.collection.id, name: e.collection.name } : null,
         character: {
           ...e.character,
           imageUrl: this.characterService.getRandomImageUrl(e.character.id, e.character.imageUrls),

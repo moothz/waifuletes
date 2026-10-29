@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Card de Personagem • Waifuletes ✨</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/retro-theme.css?v=20261029-col2">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      margin: 0;
+      background: var(--bg-main, #0f0a1c);
+    }
+    .char-card-container {
+      width: 100%;
+      max-width: 460px;
+      margin: 0 auto;
+    }
+    .char-card-box {
+      background: var(--bg-card, #1e162e);
+      border: var(--border-retro, 2px solid #000);
+      box-shadow: var(--shadow-retro, 4px 4px 0px #000);
+      border-radius: var(--radius-retro, 8px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .char-card-header {
+      padding: 12px 16px;
+      background: var(--bg-card-subtle, #281d3d);
+      border-bottom: var(--border-retro, 2px solid #000);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .char-card-body {
+      padding: 14px;
+      text-align: center;
+    }
+    .char-carousel-wrap {
+      position: relative;
+      width: 100%;
+      height: 420px;
+      max-height: 52vh;
+      overflow: hidden;
+      border: 2px solid #000;
+      border-radius: 6px;
+      background: #111;
+      margin-bottom: 10px;
+    }
+    .char-carousel-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+    .carousel-nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(0,0,0,0.65);
+      color: #fff;
+      border: 1.5px solid #fff;
+      border-radius: 50%;
+      width: 34px;
+      height: 34px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      z-index: 2;
+      transition: background 0.15s ease;
+    }
+    .carousel-nav-btn:hover {
+      background: rgba(0,0,0,0.85);
+    }
+    .carousel-prev { left: 8px; }
+    .carousel-next { right: 8px; }
+    .carousel-counter {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.4);
+      display: none;
+      z-index: 2;
+    }
+    .char-thumbs-row {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 12px;
+      overflow-x: auto;
+      padding: 4px 0;
+    }
+    .char-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 4px;
+      border: 2px solid transparent;
+      object-fit: cover;
+      cursor: pointer;
+      opacity: 0.6;
+      transition: all 0.15s ease;
+    }
+    .char-thumb.active {
+      border-color: #ec4899;
+      opacity: 1;
+      transform: scale(1.05);
+    }
+    .char-badge-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .char-footer {
+      padding: 12px 16px;
+      background: var(--bg-card-subtle, #281d3d);
+      border-top: var(--border-retro, 2px solid #000);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .unauth-cta-box {
+      background: var(--bg-card-subtle, #281d3d);
+      border: 1.5px dashed var(--border-color, #ec4899);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      text-align: center;
+    }
+  </style>
+  <script>
+    window.DEFAULT_CHAR_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400' viewBox='0 0 300 400'%3E%3Crect width='100%25' height='100%25' fill='%231f1333'/%3E%3Ctext x='150' y='200' font-family='sans-serif' font-weight='800' font-size='18' fill='%23ec4899' text-anchor='middle'%3EWaifuletes%3C/text%3E%3C/svg%3E";
+    window.handleImgError = function(img) {
+      if (!img) return;
+      img.onerror = null;
+      img.src = '/media/characters/default.jpg';
+    };
+  </script>
+</head>
+<body>
+
+  <div class="char-card-container">
+    <div class="char-card-box" id="char-main-card">
+      <!-- Header do Card -->
+      <div class="char-card-header">
+        <a href="/" class="btn-retro btn-sm" title="Ir para Home">
+          <i class="fas fa-home"></i> Home
+        </a>
+        <span id="char-card-title" style="font-weight: 800; font-size: 15px;">Detalhes da Waifu</span>
+        <a href="/catalogo" class="btn-retro btn-sm" title="Catálogo de Personagens">
+          <i class="fas fa-book"></i> Catálogo
+        </a>
+      </div>
+
+      <!-- Conteúdo do Card -->
+      <div class="char-card-body">
+        <!-- Carrossel de Fotos -->
+        <div class="char-carousel-wrap">
+          <img id="char-main-img" src="/media/characters/default.jpg" alt="Personagem" onerror="handleImgError(this)">
+          <button type="button" id="btn-char-prev" class="carousel-nav-btn carousel-prev" onclick="CharacterPage.changePhoto(-1)">❮</button>
+          <button type="button" id="btn-char-next" class="carousel-nav-btn carousel-next" onclick="CharacterPage.changePhoto(1)">❯</button>
+          <span id="char-photo-count" class="carousel-counter">Foto 1 de 1</span>
+        </div>
+
+        <!-- Miniaturas de Fotos -->
+        <div id="char-thumbs-row" class="char-thumbs-row"></div>
+
+        <!-- Ranks Oficiais e Mudae -->
+        <div id="char-rank-line" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 6px; font-weight: 800; font-size: 12px; flex-wrap: wrap;"></div>
+
+        <!-- Nome e Série -->
+        <h3 id="char-name" style="font-size: 20px; font-weight: 800; margin: 4px 0 2px 0;">Carregando...</h3>
+        <div id="char-series" style="font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px;"></div>
+
+        <!-- Gênero e Raridade -->
+        <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 6px; font-size: 12px; font-weight: 800;">
+          <span id="char-gender"></span>
+          <span id="char-rarity"></span>
+        </div>
+
+        <!-- Status de Casamento -->
+        <div id="char-marriage-line" style="font-size: 13px; font-weight: 700; margin-bottom: 10px;"></div>
+
+        <!-- Linha de Curtidas e Wishlists -->
+        <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 10px;">
+          <button type="button" class="btn-retro btn-sm" id="btn-char-like" style="border-color: #ec4899; color: #ec4899; font-weight: 800;">
+            <i class="fas fa-heart"></i> <span id="char-likes-count">0</span> Curtir
+          </button>
+          <button type="button" class="btn-retro btn-sm btn-gold" id="btn-char-wish" style="font-weight: 800;">
+            <i class="fas fa-star"></i> <span id="char-wishes-count">0</span> Wishlist
+          </button>
+        </div>
+
+        <!-- Tags -->
+        <div id="char-tags" style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 8px;"></div>
+
+        <!-- Biografia / Descrição -->
+        <div id="char-description" style="font-size: 12px; color: var(--text-muted); font-style: italic; max-height: 90px; overflow-y: auto; text-align: left; background: var(--bg-card-subtle); border: 1px dashed var(--border-retro); border-radius: 4px; padding: 6px 10px; margin-bottom: 10px; display: none;"></div>
+
+        <!-- Ações Contextuais Autenticadas (Visíveis apenas se autenticado) -->
+        <div id="char-actions-authenticated" style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;" class="hidden"></div>
+
+        <!-- Banner Não Autenticado (Visível para visitantes sem login) -->
+        <div id="char-unauth-box" class="unauth-cta-box hidden">
+          <div style="font-weight: 800; margin-bottom: 6px;">🎮 Jogue no WhatsApp com a Ravena AI!</div>
+          <p style="margin: 0 0 10px 0; color: var(--text-muted); line-height: 1.4;">
+            Envie <code style="font-weight:800;color:#ec4899;">!mu-roll</code> no WhatsApp para encontrar waifus e casar. Acesse seu painel completo com <code style="font-weight:800;color:#ec4899;">!mu-adm</code>!
+          </p>
+          <a id="btn-char-whatsapp" href="#" target="_blank" rel="noopener noreferrer" class="btn-retro btn-sm btn-gold" style="display: inline-block;">
+            <i class="fab fa-whatsapp"></i> Chamar a Ravena no WhatsApp
+          </a>
+        </div>
+      </div>
+
+      <!-- Rodapé com Navegação -->
+      <div class="char-footer">
+        <a id="btn-harem-nav" href="#" class="btn-retro btn-sm btn-gold hidden">
+          <i class="fas fa-heart"></i> Meu Harém
+        </a>
+        <button type="button" class="btn-retro btn-sm" onclick="CharacterPage.copyShareLink()">
+          <i class="fas fa-share-alt"></i> Compartilhar Link
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Retrô Notificação -->
+  <div id="retro-toast" class="retro-toast hidden"></div>
+
+  <script src="/js/api.js?v=20261029-col2"></script>
+  <script src="/js/character.js?v=20261029-col2"></script>
+</body>
+</html>

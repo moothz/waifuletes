@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Harém do Usuário • Waifuletes ✨</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/retro-theme.css?v=20261020-1">
+  <link rel="stylesheet" href="/css/retro-theme.css?v=20261029-col2">
   <link rel="stylesheet" href="/vendor/cropper.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
@@ -143,9 +143,9 @@
             <div class="filter-group">
               <span><i class="fas fa-sort"></i> Ordem:</span>
               <select id="catalog-sort-select" class="retro-select">
+                <option value="wishlist" selected>Mais Desejados (Wishlist)</option>
                 <option value="ranking">Popularidade (Ranking)</option>
                 <option value="rarity">Raridade</option>
-                <option value="wishlist">Mais Desejados (Wishlist)</option>
                 <option value="name">Nome (A-Z)</option>
               </select>
             </div>
@@ -218,6 +218,39 @@
 
       <!-- Aba 3: Harém -->
       <div class="tab-content hidden" id="tab-harem">
+        <!-- Seção de Favoritas Privadas -->
+        <div id="private-favorites-section" class="hidden" style="margin-bottom: 24px; text-align: center;">
+          <div style="display: inline-block; background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 8px 24px; box-shadow: var(--shadow-retro-sm); margin-bottom: 14px;">
+            <span style="font-weight: 800; font-size: 16px; color: #ec4899;">💖 Favoritas em Destaque 💖</span>
+          </div>
+          <div id="private-favorites-grid" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px;"></div>
+        </div>
+
+        <!-- Seção de Coleções / Pastas -->
+        <div id="private-collections-section" style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 12px 16px; border: var(--border-retro); border-radius: var(--radius-retro); box-shadow: var(--shadow-retro-sm); margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <span style="font-weight: 800; font-size: 15px;">📁 Pastas & Coleções</span>
+              <span id="collections-count-badge" class="badge-tag" style="background: #3b82f6; color: #fff; margin-left: 8px; font-weight: 800;">0/15</span>
+              <p style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">
+                Organize seu harém em pastas temáticas exclusivas. Cada waifu pertence a no máximo uma coleção por vez.
+              </p>
+            </div>
+            <button class="btn-retro btn-sm btn-gold" id="btn-open-new-collection" onclick="openNewCollectionModal()">
+              <i class="fas fa-folder-plus"></i> + Nova Coleção
+            </button>
+          </div>
+          <div id="private-collections-container" style="display: flex; flex-direction: column; gap: 16px;"></div>
+        </div>
+
+        <!-- Título do Harém Geral -->
+        <div id="private-harem-general-title" style="margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted);"><i class="fas fa-ring"></i> Harém Geral</span>
+            <div style="flex: 1; height: 2px; background: var(--border-color, #2d241e);"></div>
+          </div>
+        </div>
+
         <div id="harem-grid" class="waifu-grid"></div>
       </div>
 
@@ -416,6 +449,11 @@
             <span style="font-weight: 800; font-size: 16px; color: #ec4899;">💖 Favoritas 💖</span>
           </div>
           <div id="public-favorites-grid" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; max-width: 1200px; margin: 0 auto;"></div>
+        </div>
+
+        <!-- Seção de Coleções / Pastas no Harém Público -->
+        <div id="public-collections-section" class="hidden" style="margin-bottom: 28px;">
+          <div id="public-collections-container" style="display: flex; flex-direction: column; gap: 20px;"></div>
         </div>
 
         <!-- Título de quebra de linha para o Harém Geral -->
@@ -975,9 +1013,14 @@
         <div id="waifu-preview-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;"></div>
       </div>
       <div class="modal-footer" style="justify-content: space-between; gap: 8px;">
-        <button class="btn-retro btn-sm btn-gold" id="btn-preview-suggest" onclick="openSuggestFromPreview()">
-          <i class="fas fa-lightbulb"></i> Sugerir Alterações
-        </button>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn-retro btn-sm btn-gold" id="btn-preview-suggest" onclick="openSuggestFromPreview()">
+            <i class="fas fa-lightbulb"></i> Sugerir Alterações
+          </button>
+          <a class="btn-retro btn-sm" id="btn-preview-link" target="_blank" title="Abrir página dedicada da waifu">
+            <i class="fas fa-external-link-alt"></i> Página
+          </a>
+        </div>
         <button class="btn-retro btn-sm" onclick="closeModal('modal-waifu-preview')">Fechar</button>
       </div>
     </div>
@@ -1100,11 +1143,75 @@
     </div>
   </div>
 
+  <!-- Modal: Nova Coleção -->
+  <div class="modal-overlay hidden" id="modal-new-collection" style="z-index: 10007;">
+    <div class="modal-box" style="max-width: min(480px, 90vw);">
+      <div class="modal-header">
+        <span class="modal-title">📁 Nova Coleção de Waifus</span>
+        <button class="modal-close" onclick="closeModal('modal-new-collection')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+          Crie uma pasta temática para agrupar suas waifus favoritas (ex: <i>"Loiras"</i>, <i>"Frieren"</i>, <i>"Guerreiras"</i>).
+        </p>
+        <div style="margin-bottom: 12px; text-align: left;">
+          <label style="font-weight: 800; font-size: 13px; display: block; margin-bottom: 4px;">Nome da Coleção:</label>
+          <input type="text" id="new-collection-name" class="retro-input" placeholder="Ex: Melhores Waifus" maxlength="50" style="width: 100%;">
+        </div>
+        <div style="margin-bottom: 14px; text-align: left;">
+          <label style="font-weight: 700; font-size: 12px; display: block; margin-bottom: 4px; color: var(--text-muted);">Descrição (opcional):</label>
+          <textarea id="new-collection-desc" class="retro-input" placeholder="Ex: Minhas personagens preferidas" rows="2" maxlength="200" style="width: 100%;"></textarea>
+        </div>
+        <div id="new-collection-count-info" style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-align: right;">
+          Limite: até 15 coleções
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn-retro btn-sm" onclick="closeModal('modal-new-collection')">Cancelar</button>
+        <button type="button" class="btn-retro btn-sm btn-gold" id="btn-submit-new-collection" onclick="submitNewCollection()">
+          <i class="fas fa-check"></i> Criar Coleção
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Atribuir Waifu a Coleção -->
+  <div class="modal-overlay hidden" id="modal-assign-collection" style="z-index: 10007;">
+    <div class="modal-box" style="max-width: min(480px, 90vw);">
+      <div class="modal-header">
+        <span class="modal-title">📁 Mover para Coleção</span>
+        <button class="modal-close" onclick="closeModal('modal-assign-collection')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px; text-align: center;">
+        <div id="assign-col-char-preview" style="display: flex; align-items: center; gap: 12px; background: var(--bg-card-subtle); border: var(--border-retro); border-radius: 6px; padding: 10px; margin-bottom: 14px; text-align: left;">
+          <img id="assign-col-char-img" src="/media/characters/default.jpg" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: var(--border-retro);" onerror="handleImgError(this)">
+          <div>
+            <div id="assign-col-char-name" style="font-weight: 800; font-size: 15px;">Nome</div>
+            <div id="assign-col-char-current" style="font-size: 12px; color: var(--text-muted);">Coleção atual: Nenhuma</div>
+          </div>
+        </div>
+        <div style="text-align: left; margin-bottom: 14px;">
+          <label style="font-weight: 800; font-size: 13px; display: block; margin-bottom: 6px;">Escolha a pasta de destino:</label>
+          <select id="assign-col-select" class="retro-select" style="width: 100%;"></select>
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted); line-height: 1.4; margin: 0;">
+          💡 Cada waifu pode pertencer a apenas <b>uma coleção</b> por vez. Ao selecionar uma nova coleção, ela será movida automaticamente.
+        </p>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn-retro btn-sm" onclick="closeModal('modal-assign-collection')">Cancelar</button>
+        <button type="button" class="btn-retro btn-sm btn-gold" id="btn-submit-assign-collection" onclick="submitAssignCollection()">
+          <i class="fas fa-check"></i> Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast de Notificação -->
   <div id="retro-toast" class="retro-toast hidden"></div>
 
   <script src="/vendor/cropper.min.js"></script>
-  <script src="/js/api.js?v=20261015-6"></script>
-  <script src="/js/user.js?v=20261020-1"></script>
+  <script src="/js/api.js?v=20261029-col2"></script>
+  <script src="/js/user.js?v=20261029-col2"></script>
 </body>
 </html>

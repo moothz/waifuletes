@@ -79,13 +79,18 @@ export class CovetService {
       },
     });
 
-    const coveter = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    const coveter = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true, publicId: true } });
     new NotificationService(this.prisma).notifyMarketEvent(
       haremEntry.userId,
       'COVET_RECEIVED',
       `👀 Alguém está cobiçando ${character.name}!`,
       `${coveter?.name || 'Um jogador'} demonstrou interesse em ${character.name} do seu harém!`,
-      { characterId: character.id }
+      {
+        characterId: character.id,
+        characterName: character.name,
+        actorPublicId: coveter?.publicId || null,
+        actorName: coveter?.name || 'Jogador',
+      }
     ).catch(() => {});
 
     return {

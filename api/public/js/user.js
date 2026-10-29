@@ -57,6 +57,32 @@ function deleteCookie(name) {
   document.cookie = `${name}=; Max-Age=-99999999; path=/; SameSite=Lax`;
 }
 
+function performFullLogout() {
+  const cookies = document.cookie.split(';');
+  for (let i = 0; i < cookies.length; i++) {
+    const c = cookies[i].trim();
+    const eq = c.indexOf('=');
+    if (eq !== -1) {
+      const name = c.substring(0, eq).trim();
+      if (name.startsWith('waifu_')) {
+        deleteCookie(name);
+      }
+    }
+  }
+  deleteCookie('waifu_session');
+  deleteCookie('waifu_user_public_id');
+  deleteCookie('waifu_public_id');
+  if (userPublicId) {
+    deleteCookie(`waifu_session_${userPublicId}`);
+    deleteCookie(`waifu_session_${userPublicId.replace(/^=+/, '')}`);
+  }
+  try {
+    localStorage.removeItem('waifu_session');
+    localStorage.removeItem('waifu_user_public_id');
+    localStorage.removeItem('waifu_public_id');
+  } catch (_) {}
+}
+
 let marketState = {
   search: '',
   sortBy: 'rarity',
@@ -72,7 +98,7 @@ let catalogState = {
   gender: '',
   maritalStatus: '',
   rarity: '',
-  sort: 'ranking',
+  sort: 'wishlist',
   page: 1,
   limit: 18,
   total: 0,
@@ -85,7 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const pathParts = window.location.pathname.split('/').filter(Boolean);
   const userIdx = pathParts.indexOf('user');
   if (userIdx !== -1 && pathParts[userIdx + 1]) {
-    userPublicId = pathParts[userIdx + 1];
+    const rawId = decodeURIComponent(pathParts[userIdx + 1]);
+    userPublicId = rawId.replace(/^=+/, '').trim();
+    // Limpa a URL no navegador caso tenha entrado com %3D ou =
+    if (pathParts[userIdx + 1].includes('=') || pathParts[userIdx + 1].startsWith('%3D')) {
+      const cleanPath = `/user/${encodeURIComponent(userPublicId)}${window.location.search}`;
+      window.history.replaceState(null, '', cleanPath);
+    }
   }
 
   // Extrai token da query string (?token=...)
@@ -549,6 +581,27 @@ async function loadUserData() {
     if (!res.success) {
       document.getElementById('user-title').textContent = 'Usuário não encontrado';
       document.getElementById('user-subtitle').textContent = res.error?.message || 'Link inválido ou expirado.';
+
+      let errContainer = document.getElementById('user-error-container');
+      if (!errContainer) {
+        errContainer = document.createElement('div');
+        errContainer.id = 'user-error-container';
+        errContainer.style.cssText = 'margin-top: 20px; display: flex; justify-content: center; gap: 12px;';
+        const userHeader = document.getElementById('user-header');
+        if (userHeader) userHeader.appendChild(errContainer);
+      }
+      errContainer.innerHTML = `
+        <button id="btn-error-logout-home" class="btn-retro" style="background: #ec4899; color: #fff; font-weight: 800; padding: 10px 20px; font-size: 15px; border-color: #db2777; cursor: pointer;">
+          <i class="fas fa-home"></i> Voltar para a Home (Limpar Sessão)
+        </button>
+      `;
+      const btnLogoutHome = document.getElementById('btn-error-logout-home');
+      if (btnLogoutHome) {
+        btnLogoutHome.onclick = () => {
+          performFullLogout();
+          window.location.href = '/?stay=1';
+        };
+      }
       return;
     }
 
@@ -643,7 +696,28 @@ async function loadUserData() {
   } catch (err) {
     console.error('Erro ao carregar dados do usuário:', err);
     document.getElementById('user-title').textContent = 'Erro ao carregar dados';
-    document.getElementById('user-subtitle').textContent = 'Tente recarregar a página.';
+    document.getElementById('user-subtitle').textContent = err?.message || 'Tente recarregar a página.';
+
+    let errContainer = document.getElementById('user-error-container');
+    if (!errContainer) {
+      errContainer = document.createElement('div');
+      errContainer.id = 'user-error-container';
+      errContainer.style.cssText = 'margin-top: 20px; display: flex; justify-content: center; gap: 12px;';
+      const userHeader = document.getElementById('user-header');
+      if (userHeader) userHeader.appendChild(errContainer);
+    }
+    errContainer.innerHTML = `
+      <button id="btn-error-logout-home" class="btn-retro" style="background: #ec4899; color: #fff; font-weight: 800; padding: 10px 20px; font-size: 15px; border-color: #db2777; cursor: pointer;">
+        <i class="fas fa-home"></i> Voltar para a Home (Limpar Sessão)
+      </button>
+    `;
+    const btnLogoutHome = document.getElementById('btn-error-logout-home');
+    if (btnLogoutHome) {
+      btnLogoutHome.onclick = () => {
+        performFullLogout();
+        window.location.href = '/?stay=1';
+      };
+    }
   }
 }
 
@@ -752,77 +826,167 @@ function sortHaremCards(harem) {
   });
 }
 
+function createPrivateHaremCard(entry) {
+  const char = entry.character;
+  const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
+  const card = document.createElement('div');
+  card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
+  card.id = `harem-card-${char.id}`;
+  card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
+
+  const unseenCovets = Number(entry.unseenCovetsCount || 0);
+  const covetsLabel = unseenCovets > 0 ? `Interessados (${unseenCovets})` : 'Interessados';
+  const covetsBtnClass = unseenCovets > 0 ? 'btn-gold' : '';
+  const covetsBtnStyle = unseenCovets > 0 ? 'border-color: #f59e0b; font-weight: 800;' : '';
+
+  if (entry.collectionId) {
+    try { localStorage.setItem(`waifu_last_col_${char.id}`, entry.collectionId); } catch (_) {}
+  }
+
+  const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
+  const photosBadgeHtml = photosCount > 1
+    ? `<div class="badge-married" style="background: rgba(0,0,0,0.8); color: #facc15; border: 1.5px solid #facc15; left: 8px; right: auto; top: ${unseenCovets > 0 ? '36px' : '8px'}; font-weight: 800; font-size: 11px; cursor: pointer; padding: 2px 6px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
+    : '';
+
+  const colBadgeHtml = entry.collection
+    ? `<div class="badge-married" style="background: #3b82f6; color: #fff; left: 8px; right: auto; bottom: 8px; top: auto; font-size: 10px; font-weight: 800; padding: 2px 6px;" title="Coleção: ${escapeHtml(entry.collection.name)}">📁 ${escapeHtml(entry.collection.name)}</div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
+      <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
+      <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
+        ${rarity.emoji} ${rarity.label}
+      </div>
+      ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+      ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
+      ${unseenCovets > 0 ? `<div class="badge-married" style="background: #f59e0b; color: #000; left: 8px; right: auto; font-weight: 800;">👀 ${unseenCovets}</div>` : ''}
+      ${photosBadgeHtml}
+      ${colBadgeHtml}
+    </div>
+    <div class="card-info">
+      <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
+      <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+      <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+        <!-- 1. Favoritar -->
+        <button class="btn-retro btn-sm" style="width: 100%; background: #ec4899; color: white; border-color: #db2777;" onclick="toggleFavorite('${char.id}')">
+          💖 ${entry.isFavorite ? 'Desfavoritar' : 'Favoritar'}
+        </button>
+        <!-- 2. Coleção -->
+        <button class="btn-retro btn-sm" style="width: 100%; border-color: #3b82f6; color: #3b82f6; font-weight: 800;" onclick="openAssignCollectionModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${entry.collectionId || ''}')">
+          📁 ${entry.collection ? `Pasta: ${escapeHtml(entry.collection.name)}` : 'Mover para Coleção'}
+        </button>
+        <!-- 3. Divorciar -->
+        <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="openDivorceModal('${char.id}', '${escapeHtml(char.name)}')">
+          <i class="fas fa-heart-crack"></i> Divorciar
+        </button>
+        <!-- 4. Vender -->
+        <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openSellModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
+          <i class="fas fa-tag"></i> 💰 Vender
+        </button>
+        <!-- 5. Interessados -->
+        <button class="btn-retro btn-sm ${covetsBtnClass}" style="width: 100%; ${covetsBtnStyle}" onclick="openHaremCovetsModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
+          <i class="fas fa-eye"></i> 👀 ${covetsLabel}
+        </button>
+        <!-- 6. Sugerir Mudança -->
+        <button class="btn-retro btn-sm" style="width: 100%;" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
+          <i class="fas fa-lightbulb"></i> Sugerir Alterações
+        </button>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
 function renderPrivateHarem(harem) {
   const grid = document.getElementById('harem-grid');
+  const favSection = document.getElementById('private-favorites-section');
+  const favGrid = document.getElementById('private-favorites-grid');
+  const colSection = document.getElementById('private-collections-section');
+  const colContainer = document.getElementById('private-collections-container');
+  const colBadge = document.getElementById('collections-count-badge');
+  const generalTitle = document.getElementById('private-harem-general-title');
+
   const totalCount = userSessionData?.totalHarem !== undefined ? userSessionData.totalHarem : harem.length;
   document.getElementById('harem-count').textContent = totalCount;
 
   if (harem.length === 0) {
+    if (favSection) favSection.classList.add('hidden');
+    if (generalTitle) generalTitle.style.display = 'none';
     grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Seu harém ainda está vazio. Jogue no WhatsApp usando !mu-roll para casar com waifus!</div>';
     return;
   }
 
   sortHaremCards(harem);
 
+  // 1. Favoritas (até 5)
+  const favorites = harem.filter(e => e.isFavorite).slice(0, 5);
+  if (favorites.length > 0 && favSection && favGrid) {
+    favSection.classList.remove('hidden');
+    favGrid.innerHTML = '';
+    favorites.forEach(entry => favGrid.appendChild(createPrivateHaremCard(entry)));
+  } else if (favSection) {
+    favSection.classList.add('hidden');
+  }
+
+  // 2. Coleções
+  const collections = userSessionData?.collections || [];
+  if (colBadge) colBadge.textContent = `${collections.length}/15`;
+  const btnNewCol = document.getElementById('btn-open-new-collection');
+  if (btnNewCol) btnNewCol.disabled = collections.length >= 15;
+
+  if (colContainer) {
+    colContainer.innerHTML = '';
+    if (collections.length === 0) {
+      colContainer.innerHTML = `
+        <div style="text-align: center; padding: 18px; border: 1.5px dashed var(--border-retro); border-radius: var(--radius-retro); font-size: 13px; color: var(--text-muted); background: var(--bg-card);">
+          <i class="fas fa-folder-open" style="font-size: 24px; display: block; margin-bottom: 6px;"></i>
+          Você ainda não possui pastas criadas. Crie até 15 coleções usando o botão acima para organizar suas waifus!
+        </div>
+      `;
+    } else {
+      collections.forEach(col => {
+        const colCard = document.createElement('div');
+        colCard.style.cssText = 'background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px; box-shadow: var(--shadow-retro-sm);';
+
+        const colChars = harem.filter(e => e.collectionId === col.id);
+
+        colCard.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 16px; font-weight: 800;">📂 ${escapeHtml(col.name)}</span>
+              <span class="badge-tag" style="background: #3b82f6; color: #fff; font-weight: 800;">${colChars.length} waifus</span>
+            </div>
+            <button class="btn-retro btn-sm btn-danger" onclick="confirmDeleteCollection('${col.id}', '${escapeHtml(col.name)}')">
+              <i class="fas fa-trash"></i> Excluir Pasta
+            </button>
+          </div>
+          ${col.description ? `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">${escapeHtml(col.description)}</div>` : ''}
+          <div class="waifu-grid" id="col-grid-${col.id}"></div>
+        `;
+
+        const subGrid = colCard.querySelector(`#col-grid-${col.id}`);
+        if (colChars.length > 0) {
+          colChars.forEach(entry => subGrid.appendChild(createPrivateHaremCard(entry)));
+        } else {
+          subGrid.innerHTML = `<div style="grid-column: 1 / -1; padding: 14px; text-align: center; font-size: 13px; color: var(--text-muted); font-style: italic;">Esta pasta está vazia. Clique em "📁 Coleção" em qualquer waifu abaixo para movê-la para cá.</div>`;
+        }
+
+        colContainer.appendChild(colCard);
+      });
+    }
+  }
+
+  // 3. Harém Geral (waifus que não estão em nenhuma coleção)
+  const generalEntries = harem.filter(e => !e.collectionId);
+  if (generalTitle) generalTitle.style.display = 'block';
+
   grid.innerHTML = '';
-  harem.forEach(entry => {
-    const char = entry.character;
-    const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
-    const card = document.createElement('div');
-    card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
-    card.id = `harem-card-${char.id}`;
-    card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
-
-    const unseenCovets = Number(entry.unseenCovetsCount || 0);
-    const covetsLabel = unseenCovets > 0 ? `Interessados (${unseenCovets})` : 'Interessados';
-    const covetsBtnClass = unseenCovets > 0 ? 'btn-gold' : '';
-    const covetsBtnStyle = unseenCovets > 0 ? 'border-color: #f59e0b; font-weight: 800;' : '';
-
-    const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
-    const photosBadgeHtml = photosCount > 1
-      ? `<div class="badge-married" style="background: rgba(0,0,0,0.8); color: #facc15; border: 1.5px solid #facc15; left: 8px; right: auto; top: ${unseenCovets > 0 ? '36px' : '8px'}; font-weight: 800; font-size: 11px; cursor: pointer; padding: 2px 6px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
-      : '';
-
-    card.innerHTML = `
-      <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
-        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
-        <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
-          ${rarity.emoji} ${rarity.label}
-        </div>
-        ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
-        ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
-        ${unseenCovets > 0 ? `<div class="badge-married" style="background: #f59e0b; color: #000; left: 8px; right: auto; font-weight: 800;">👀 ${unseenCovets}</div>` : ''}
-        ${photosBadgeHtml}
-      </div>
-      <div class="card-info">
-        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
-        <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-          <!-- 1. Favoritar (rosa com coração rosa) -->
-          <button class="btn-retro btn-sm" style="width: 100%; background: #ec4899; color: white; border-color: #db2777;" onclick="toggleFavorite('${char.id}')">
-            💖 ${entry.isFavorite ? 'Desfavoritar' : 'Favoritar'}
-          </button>
-          <!-- 2. Divorciar -->
-          <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="openDivorceModal('${char.id}', '${escapeHtml(char.name)}')">
-            <i class="fas fa-heart-crack"></i> Divorciar
-          </button>
-          <!-- 3. Vender -->
-          <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openSellModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
-            <i class="fas fa-tag"></i> 💰 Vender
-          </button>
-          <!-- 4. Interessados -->
-          <button class="btn-retro btn-sm ${covetsBtnClass}" style="width: 100%; ${covetsBtnStyle}" onclick="openHaremCovetsModal('${char.id}', '${escapeHtml(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeHtml(char.series || '')}')">
-            <i class="fas fa-eye"></i> 👀 ${covetsLabel}
-          </button>
-          <!-- 5. Sugerir Mudança -->
-          <button class="btn-retro btn-sm" style="width: 100%;" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
-            <i class="fas fa-lightbulb"></i> Sugerir Alterações
-          </button>
-        </div>
-      </div>
-    `;
-    grid.appendChild(card);
-  });
+  if (generalEntries.length > 0) {
+    generalEntries.forEach(entry => grid.appendChild(createPrivateHaremCard(entry)));
+  } else {
+    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--text-muted); font-weight: bold;">Todas as waifus do seu harém estão organizadas em coleções! ✨</div>';
+  }
 }
 
 async function toggleFavorite(characterId) {
@@ -884,7 +1048,11 @@ function renderPrivateWishlist(wishlist) {
       `;
     }
 
-    const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
+    if (entry.collectionId) {
+    try { localStorage.setItem(`waifu_last_col_${char.id}`, entry.collectionId); } catch (_) {}
+  }
+
+  const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
     const photosBadgeHtml = photosCount > 1
       ? `<div class="badge-married" style="background: rgba(0,0,0,0.8); color: #facc15; border: 1.5px solid #facc15; left: 8px; right: auto; font-weight: 800; font-size: 11px; cursor: pointer; padding: 2px 6px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
       : '';
@@ -940,6 +1108,41 @@ function renderPrivateWishlist(wishlist) {
   });
 }
 
+function createPublicHaremCard(entry) {
+  const char = entry.character;
+  const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
+  const card = document.createElement('div');
+  card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
+  card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
+
+  const colBadgeHtml = entry.collection
+    ? `<div class="badge-married" style="background: #3b82f6; color: #fff; left: 8px; right: auto; bottom: 8px; top: auto; font-size: 10px; font-weight: 800; padding: 2px 6px;" title="Coleção: ${escapeHtml(entry.collection.name)}">📁 ${escapeHtml(entry.collection.name)}</div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
+      <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
+      <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
+        ${rarity.emoji} ${rarity.label}
+      </div>
+      ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
+      ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
+      <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
+        <span>✨</span> <span>${char.wishlistCount || 0}</span>
+      </div>
+      <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
+        <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
+      </div>
+      ${colBadgeHtml}
+    </div>
+    <div class="card-info">
+      <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
+      <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+    </div>
+  `;
+  return card;
+}
+
 function renderPublicHarem(harem) {
   const haremCountBadge = document.getElementById('public-harem-count');
   const totalCount = userSessionData?.totalHarem !== undefined ? userSessionData.totalHarem : (harem ? harem.length : 0);
@@ -947,105 +1150,231 @@ function renderPublicHarem(harem) {
 
   const favoritesSection = document.getElementById('public-favorites-section');
   const favoritesGrid = document.getElementById('public-favorites-grid');
+  const collectionsSection = document.getElementById('public-collections-section');
+  const collectionsContainer = document.getElementById('public-collections-container');
   const sectionTitle = document.getElementById('public-harem-section-title');
   const grid = document.getElementById('public-harem-grid');
 
   if (harem.length === 0) {
     if (favoritesSection) favoritesSection.classList.add('hidden');
+    if (collectionsSection) collectionsSection.classList.add('hidden');
     if (sectionTitle) sectionTitle.classList.add('hidden');
     grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Este usuário ainda não possui personagens no harém.</div>';
     return;
   }
 
-  // Ordena os cards: Chaves -> Raridade -> Popularidade -> Wishlist
   sortHaremCards(harem);
 
-  // Separa favoritas (máximo 5) e demais personagens
+  // 1. Favoritas (em cima)
   const favorites = harem.filter(entry => entry.isFavorite).slice(0, 5);
-  const others = harem.filter(entry => !favorites.includes(entry));
-
-  // 1. Renderiza Favoritas (em cima, centralizado)
-  if (favorites.length > 0) {
-    if (favoritesSection) favoritesSection.classList.remove('hidden');
-    if (favoritesGrid) {
-      favoritesGrid.innerHTML = '';
-      favorites.forEach(entry => {
-        const char = entry.character;
-        const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
-        const card = document.createElement('div');
-        card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
-        card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
-        card.style.width = '200px';
-
-        card.innerHTML = `
-          <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
-            <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
-            <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
-              ${rarity.emoji} ${rarity.label}
-            </div>
-            ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
-            <div class="badge-married" style="background: #ec4899; color: white;">💖</div>
-            <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
-              <span>✨</span> <span>${char.wishlistCount || 0}</span>
-            </div>
-            <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
-              <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
-            </div>
-          </div>
-          <div class="card-info">
-            <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
-            <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
-          </div>
-        `;
-        favoritesGrid.appendChild(card);
-      });
-    }
-  } else {
-    if (favoritesSection) favoritesSection.classList.add('hidden');
+  if (favorites.length > 0 && favoritesSection && favoritesGrid) {
+    favoritesSection.classList.remove('hidden');
+    favoritesGrid.innerHTML = '';
+    favorites.forEach(entry => favoritesGrid.appendChild(createPublicHaremCard(entry)));
+  } else if (favoritesSection) {
+    favoritesSection.classList.add('hidden');
   }
 
-  // 2. Renderiza Demais Personagens (em baixo, na grid normal)
-  if (favorites.length > 0 && others.length > 0) {
+  // 2. Coleções do Usuário (separadas em pastas)
+  const collections = userSessionData?.collections || [];
+  const colWithChars = collections.filter(c => harem.some(e => e.collectionId === c.id));
+
+  if (colWithChars.length > 0 && collectionsSection && collectionsContainer) {
+    collectionsSection.classList.remove('hidden');
+    collectionsContainer.innerHTML = '';
+
+    colWithChars.forEach(col => {
+      const colChars = harem.filter(e => e.collectionId === col.id);
+      if (colChars.length === 0) return;
+
+      const colBox = document.createElement('div');
+      colBox.style.cssText = 'background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px; box-shadow: var(--shadow-retro-sm);';
+      colBox.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+          <span style="font-size: 16px; font-weight: 800; color: var(--text-main);">📂 ${escapeHtml(col.name)}</span>
+          <span class="badge-tag" style="background: #3b82f6; color: #fff; font-weight: 800;">${colChars.length}</span>
+        </div>
+        ${col.description ? `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">${escapeHtml(col.description)}</div>` : ''}
+        <div class="waifu-grid" id="public-col-grid-${col.id}"></div>
+      `;
+
+      const subGrid = colBox.querySelector(`#public-col-grid-${col.id}`);
+      colChars.forEach(entry => subGrid.appendChild(createPublicHaremCard(entry)));
+      collectionsContainer.appendChild(colBox);
+    });
+  } else if (collectionsSection) {
+    collectionsSection.classList.add('hidden');
+  }
+
+  // 3. Harém Geral (demais personagens sem coleção e não favoritos)
+  const generalOthers = harem.filter(e => !e.collectionId && !favorites.includes(e));
+  if (generalOthers.length > 0) {
     if (sectionTitle) sectionTitle.classList.remove('hidden');
+    grid.innerHTML = '';
+    generalOthers.forEach(entry => grid.appendChild(createPublicHaremCard(entry)));
   } else {
     if (sectionTitle) sectionTitle.classList.add('hidden');
+    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: var(--text-muted); font-weight: bold;">Todas as waifus estão organizadas acima nas coleções! ✨</div>';
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* GERENCIAMENTO DE COLEÇÕES (PASTAS DE HARÉM)                                */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+let currentAssignCharId = null;
+
+function openAssignCollectionModal(characterId, characterName, charImg, currentCollectionId) {
+  currentAssignCharId = characterId;
+  const modal = document.getElementById('modal-assign-collection');
+  if (!modal) return;
+
+  document.getElementById('assign-col-char-name').textContent = characterName || characterId;
+  const imgEl = document.getElementById('assign-col-char-img');
+  if (imgEl) imgEl.src = charImg || '/media/characters/default.jpg';
+
+  const collections = userSessionData?.collections || [];
+  const selectEl = document.getElementById('assign-col-select');
+
+  // Recupera a última coleção salva para este personagem (ou atual, ou global recente)
+  const lastForChar = localStorage.getItem(`waifu_last_col_${characterId}`) || '';
+  const lastGlobal = localStorage.getItem('waifu_last_col_global') || '';
+
+  let effectiveColId = currentCollectionId;
+  if (!effectiveColId && lastForChar && collections.some(c => c.id === lastForChar)) {
+    effectiveColId = lastForChar;
+  } else if (!effectiveColId && lastGlobal && collections.some(c => c.id === lastGlobal)) {
+    effectiveColId = lastGlobal;
   }
 
-  grid.innerHTML = '';
-  if (others.length === 0 && favorites.length === 0) {
-    grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Este usuário ainda não possui personagens no harém.</div>';
+  if (selectEl) {
+    selectEl.innerHTML = `
+      <option value="">-- Nenhuma (Harém Geral) --</option>
+      ${collections.map(c => `
+        <option value="${c.id}" ${c.id === effectiveColId ? 'selected' : ''}>
+          📁 ${escapeHtml(c.name)} (${c.characterCount || 0} personagens)
+        </option>
+      `).join('')}
+    `;
+    if (effectiveColId && collections.some(c => c.id === effectiveColId)) {
+      selectEl.value = effectiveColId;
+    } else {
+      selectEl.value = '';
+    }
+  }
+
+  const currentCol = collections.find(c => c.id === currentCollectionId);
+  const currentLabelEl = document.getElementById('assign-col-char-current');
+  if (currentLabelEl) {
+    currentLabelEl.textContent = currentCol ? `Coleção atual: 📁 ${currentCol.name}` : 'Coleção atual: Nenhuma (Harém Geral)';
+  }
+
+  openModal('modal-assign-collection');
+}
+
+async function submitAssignCollection() {
+  if (!currentAssignCharId) return;
+  const selectEl = document.getElementById('assign-col-select');
+  const targetColId = selectEl?.value;
+  const btn = document.getElementById('btn-submit-assign-collection');
+  if (btn) btn.disabled = true;
+
+  try {
+    let res;
+    if (targetColId) {
+      res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/collections/${encodeURIComponent(targetColId)}/characters`, {
+        token: userSessionToken,
+        characterId: currentAssignCharId,
+      });
+    } else {
+      res = await Api.delete(`/api/web/user/${encodeURIComponent(userPublicId)}/collections/characters/${encodeURIComponent(currentAssignCharId)}?token=${encodeURIComponent(userSessionToken)}`);
+    }
+
+    if (res?.success) {
+      if (targetColId) {
+        try {
+          localStorage.setItem(`waifu_last_col_${currentAssignCharId}`, targetColId);
+          localStorage.setItem('waifu_last_col_global', targetColId);
+        } catch (_) {}
+      }
+      Api.showToast(res.data?.message || 'Coleção atualizada com sucesso!', '📁');
+      closeModal('modal-assign-collection');
+      loadUserData();
+    } else {
+      Api.showToast(res?.error?.message || 'Falha ao mover personagem.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação.', '❌');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function openNewCollectionModal() {
+  const collections = userSessionData?.collections || [];
+  if (collections.length >= 15) {
+    Api.showToast('Você atingiu o limite máximo de 15 coleções.', '⚠️');
+    return;
+  }
+  const nameInput = document.getElementById('new-collection-name');
+  const descInput = document.getElementById('new-collection-desc');
+  if (nameInput) nameInput.value = '';
+  if (descInput) descInput.value = '';
+  const infoEl = document.getElementById('new-collection-count-info');
+  if (infoEl) infoEl.textContent = `Coleções atuais: ${collections.length}/15`;
+  openModal('modal-new-collection');
+}
+
+async function submitNewCollection() {
+  const nameInput = document.getElementById('new-collection-name');
+  const descInput = document.getElementById('new-collection-desc');
+  const name = nameInput?.value.trim();
+  const description = descInput?.value.trim();
+
+  if (!name) {
+    Api.showToast('Informe o nome da coleção.', '⚠️');
     return;
   }
 
-  others.forEach(entry => {
-    const char = entry.character;
-    const rarity = RARITY_CONFIG[char.baseRarity] || RARITY_CONFIG.COMMON;
-    const card = document.createElement('div');
-    card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
-    card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
+  const btn = document.getElementById('btn-submit-new-collection');
+  if (btn) btn.disabled = true;
 
-    card.innerHTML = `
-      <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
-        <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
-        <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
-          ${rarity.emoji} ${rarity.label}
-        </div>
-        ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
-        ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
-        <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
-          <span>✨</span> <span>${char.wishlistCount || 0}</span>
-        </div>
-        <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
-          <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
-        </div>
-      </div>
-      <div class="card-info">
-        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
-      </div>
-    `;
-    grid.appendChild(card);
-  });
+  try {
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/collections`, {
+      token: userSessionToken,
+      name,
+      description,
+    });
+    if (res?.success) {
+      Api.showToast(res.data?.message || 'Coleção criada com sucesso!', '📁');
+      closeModal('modal-new-collection');
+      loadUserData();
+    } else {
+      Api.showToast(res?.error?.message || 'Falha ao criar coleção.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao criar coleção.', '❌');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function confirmDeleteCollection(collectionId, collectionName) {
+  if (!confirm(`Deseja realmente apagar a coleção "${collectionName}"?\n\nOs personagens não serão excluídos nem divorciados, apenas retornarão ao harém geral.`)) {
+    return;
+  }
+
+  try {
+    const res = await Api.delete(`/api/web/user/${encodeURIComponent(userPublicId)}/collections/${encodeURIComponent(collectionId)}?token=${encodeURIComponent(userSessionToken)}`);
+    if (res?.success) {
+      Api.showToast(res.data?.message || 'Coleção apagada com sucesso!', '🗑️');
+      loadUserData();
+    } else {
+      Api.showToast(res?.error?.message || 'Falha ao apagar coleção.', '❌');
+    }
+  } catch (err) {
+    Api.showToast('Erro ao apagar coleção.', '❌');
+  }
 }
 
 async function loadPublicUserListings() {
@@ -2210,6 +2539,22 @@ function renderNotificationsList() {
     const icon = typeIcons[n.type] || '🔔';
     const dateStr = n.createdAt ? new Date(n.createdAt).toLocaleString('pt-BR') : '';
     const isUnread = !n.read;
+
+    let meta = {};
+    try {
+      meta = typeof n.metadata === 'string' ? JSON.parse(n.metadata || '{}') : (n.metadata || {});
+    } catch (_) {}
+
+    const charLinkHtml = meta.characterId
+      ? `<a href="/character/${encodeURIComponent(meta.characterId)}" target="_blank" class="btn-retro btn-sm" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:3px 8px; font-size:11px; font-weight:800;"><i class="fas fa-id-card"></i> ${escapeHtml(meta.characterName || 'Ver Personagem')}</a>`
+      : '';
+    const userLinkHtml = meta.actorPublicId
+      ? `<a href="/user/${encodeURIComponent(meta.actorPublicId)}" target="_blank" class="btn-retro btn-sm" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:3px 8px; font-size:11px; font-weight:800;"><i class="fas fa-user"></i> ${escapeHtml(meta.actorName || 'Ver Perfil')}</a>`
+      : '';
+    const linksRowHtml = (charLinkHtml || userLinkHtml)
+      ? `<div class="notification-links" style="display:flex; flex-wrap:wrap; gap:6px; margin: 8px 0 4px 0;">${charLinkHtml}${userLinkHtml}</div>`
+      : '';
+
     return `
       <div class="notification-card ${isUnread ? 'unread' : ''}" id="notif-${n.id}">
         <div class="notification-icon">${icon}</div>
@@ -2219,6 +2564,7 @@ function renderNotificationsList() {
             ${isUnread ? '<span class="notification-badge-unread">NOVA</span>' : ''}
           </div>
           <div class="notification-message">${escapeHtml(n.message)}</div>
+          ${linksRowHtml}
           <div class="notification-time"><i class="far fa-clock"></i> ${dateStr}</div>
         </div>
       </div>
@@ -2445,6 +2791,11 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
     } else {
       descEl.style.display = 'none';
     }
+  }
+
+  const directLinkEl = document.getElementById('btn-preview-link');
+  if (directLinkEl) {
+    directLinkEl.href = `/character/${encodeURIComponent(charId)}`;
   }
 
   // Ações contextuais

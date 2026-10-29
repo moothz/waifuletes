@@ -5,8 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Waifuletes ✨ Catálogo & Harém Retrô</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/retro-theme.css?v=20261020-1">
+  <link rel="stylesheet" href="/css/retro-theme.css?v=20261029-col2">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    (function() {
+      try {
+        var sp = new URLSearchParams(window.location.search);
+        if (!sp.has('stay') && !sp.has('home') && !sp.has('noredirect')) {
+          var cookies = document.cookie.split(';');
+          var publicId = null, token = null;
+          for (var i = 0; i < cookies.length; i++) {
+            var c = cookies[i].trim();
+            var eq = c.indexOf('=');
+            if (eq === -1) continue;
+            var key = c.substring(0, eq).trim();
+            var val = decodeURIComponent(c.substring(eq + 1).trim());
+            if (key === 'waifu_user_public_id') publicId = val;
+            else if (key === 'waifu_public_id' && !publicId) publicId = val;
+            else if (key === 'waifu_session') token = val;
+          }
+          if (!publicId) publicId = localStorage.getItem('waifu_user_public_id') || localStorage.getItem('waifu_public_id');
+          if (!token) token = localStorage.getItem('waifu_session');
+          if (publicId) {
+            publicId = publicId.replace(/^=+/, '').trim();
+            try { localStorage.setItem('waifu_user_public_id', publicId); } catch(e){}
+          }
+          if (publicId && token) {
+            window.location.replace('/user/' + encodeURIComponent(publicId));
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 
@@ -98,11 +128,11 @@
           <div class="filter-group">
             <span><i class="fas fa-sort"></i> Ordem:</span>
             <select id="sort-select" class="retro-select">
-              <option value="random" selected>Selecione...</option>
+              <option value="wishlist" selected>Mais Desejados (Wishlist)</option>
               <option value="ranking">Popularidade (Ranking)</option>
               <option value="rarity">Raridade</option>
-              <option value="wishlist">Mais Desejados (Wishlist)</option>
               <option value="name">Nome (A-Z)</option>
+              <option value="random">Aleatório</option>
             </select>
           </div>
         </div>
@@ -218,7 +248,7 @@
   <!-- Toast de Notificação -->
   <div id="retro-toast" class="retro-toast hidden"></div>
 
-  <script src="/js/api.js?v=20261015-2"></script>
-  <script src="/js/home.js?v=20261015-2"></script>
+  <script src="/js/api.js?v=20261029-col2"></script>
+  <script src="/js/home.js?v=20261029-col2"></script>
 </body>
 </html>

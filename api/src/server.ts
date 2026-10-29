@@ -35,6 +35,7 @@ import { privateKakeraRoutes } from './routes/private/kakera.js';
 import { privateAdminRoutes } from './routes/private/admin.js';
 import { privateMarketRoutes } from './routes/private/market.js';
 import { privateCovetRoutes } from './routes/private/covet.js';
+import { privateCollectionRoutes } from './routes/private/collection.js';
 
 const fastify = Fastify({
   trustProxy: true,
@@ -157,6 +158,14 @@ async function buildServer() {
     return reply.sendFile('catalogo.html');
   });
 
+  fastify.get('/character/:id', async (req, reply) => {
+    return reply.sendFile('character.html');
+  });
+
+  fastify.get('/char/:id', async (req, reply) => {
+    return reply.sendFile('character.html');
+  });
+
   // Plugins de infraestrutura
   await fastify.register(prismaPlugin);
   await fastify.register(redisPlugin);
@@ -268,6 +277,7 @@ async function buildServer() {
   await fastify.register(privateAdminRoutes);
   await fastify.register(privateMarketRoutes);
   await fastify.register(privateCovetRoutes);
+  await fastify.register(privateCollectionRoutes);
 
   return fastify;
 }

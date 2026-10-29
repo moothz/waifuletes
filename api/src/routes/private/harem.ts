@@ -24,6 +24,7 @@ export const privateHaremRoutes: FastifyPluginAsync = async (fastify) => {
           page: { type: 'integer', minimum: 1, maximum: 1000, default: 1 },
           limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
           sort: { type: 'string', enum: ['keys', 'date', 'rarity'], default: 'keys' },
+          withoutCollection: { type: 'boolean', default: false },
         },
       },
     },
@@ -31,11 +32,14 @@ export const privateHaremRoutes: FastifyPluginAsync = async (fastify) => {
       const { userId } = request.params as { userId: string };
       const query = request.query as any;
 
+      const withoutCol = query.withoutCollection === true || query.withoutCollection === 'true' || query.withoutCollection === 1 || query.withoutCollection === '1';
+
       const result = await haremService.getUserHarem(
         userId,
         query.page ? Number(query.page) : 1,
         query.limit ? Number(query.limit) : 20,
-        query.sort || 'keys'
+        query.sort || 'keys',
+        withoutCol
       );
 
       return reply.send({

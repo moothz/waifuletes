@@ -87,6 +87,7 @@ export class MarketService {
       },
       include: {
         character: true,
+        user: { select: { name: true, publicId: true } },
       },
     });
 
@@ -117,7 +118,13 @@ export class MarketService {
             'MARKET_LISTING_MATCH',
             `📢 ${listing.character.name} da sua Wishlist foi anunciada!`,
             `Um jogador acabou de anunciar ${listing.character.name} nos classificados!`,
-            { listingId: listing.id, characterId }
+            {
+              listingId: listing.id,
+              characterId,
+              characterName: listing.character.name,
+              actorPublicId: listing.user?.publicId || null,
+              actorName: listing.user?.name || 'Jogador',
+            }
           ).catch(() => {});
         }
       }
@@ -461,14 +468,21 @@ export class MarketService {
       },
     });
 
-    const buyerUser = await this.prisma.user.findUnique({ where: { id: buyerId }, select: { name: true } });
+    const buyerUser = await this.prisma.user.findUnique({ where: { id: buyerId }, select: { name: true, publicId: true } });
     this.notificationService
       .notifyMarketEvent(
         listing.userId,
         'MARKET_OFFER_RECEIVED',
         `💰 Nova proposta para ${listing.character.name}!`,
         `${buyerUser?.name || 'Um jogador'} enviou uma proposta no seu anúncio nos classificados.`,
-        { listingId, characterId: listing.characterId, offerId: offer.id }
+        {
+          listingId,
+          characterId: listing.characterId,
+          characterName: listing.character.name,
+          offerId: offer.id,
+          actorPublicId: buyerUser?.publicId || null,
+          actorName: buyerUser?.name || 'Jogador',
+        }
       )
       .catch(() => {});
 
@@ -503,7 +517,7 @@ export class MarketService {
         buyerNotifiedStatus: 'REJECTED',
       },
       include: {
-        listing: { include: { character: true } },
+        listing: { include: { character: true, user: { select: { name: true, publicId: true } } } },
       },
     });
 
@@ -513,7 +527,14 @@ export class MarketService {
         'MARKET_OFFER_REJECTED',
         `❌ Proposta recusada para ${rejected.listing?.character?.name || 'personagem'}`,
         'O vendedor não aceitou a sua proposta e os itens/zinthos ofertados foram devolvidos.',
-        { listingId: offer.listingId, offerId: offer.id }
+        {
+          listingId: offer.listingId,
+          offerId: offer.id,
+          characterId: rejected.listing?.character?.id || null,
+          characterName: rejected.listing?.character?.name || null,
+          actorPublicId: rejected.listing?.user?.publicId || null,
+          actorName: rejected.listing?.user?.name || 'Vendedor',
+        }
       )
       .catch(() => {});
 
@@ -527,7 +548,7 @@ export class MarketService {
     const offer = await this.prisma.marketOffer.findUnique({
       where: { id: offerId },
       include: {
-        listing: { include: { character: true } },
+        listing: { include: { character: true, user: { select: { name: true, publicId: true } } } },
         buyer: true,
       },
     });
@@ -807,7 +828,14 @@ export class MarketService {
         'MARKET_OFFER_ACCEPTED',
         `🤝 Proposta aceita por ${listing.character.name}!`,
         'Parabéns! Sua proposta foi aceita pelo vendedor e a negociação foi concluída com sucesso.',
-        { listingId: listing.id, characterId: listing.characterId, offerId: offer.id }
+        {
+          listingId: listing.id,
+          characterId: listing.characterId,
+          characterName: listing.character.name,
+          offerId: offer.id,
+          actorPublicId: listing.user?.publicId || null,
+          actorName: listing.user?.name || 'Vendedor',
+        }
       )
       .catch(() => {});
 

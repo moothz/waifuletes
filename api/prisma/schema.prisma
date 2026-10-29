@@ -63,6 +63,7 @@ model User {
   marketNotifications MarketListingNotification[]
   investments   CharacterInvestment[]
   notifications UserNotification[]
+  collections   UserCollection[]
 
   @@index([kakera(sort: Desc)])
   @@map("users")
@@ -142,22 +143,41 @@ model Character {
 }
 
 model HaremEntry {
-  id             String    @id @default(cuid())
+  id             String          @id @default(cuid())
   userId         String
   characterId    String
-  claimedAt      DateTime  @default(now())
+  claimedAt      DateTime        @default(now())
   claimedInGroup String
-  keys           Int       @default(1)
-  isFavorite     Boolean   @default(false)
+  keys           Int             @default(1)
+  isFavorite     Boolean         @default(false)
   note           String?
+  collectionId   String?         @map("collection_id")
 
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character      Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  collection     UserCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
 
   @@unique([characterId])
   @@unique([userId, characterId])
   @@index([userId])
+  @@index([collectionId])
   @@map("harem_entries")
+}
+
+model UserCollection {
+  id          String       @id @default(cuid())
+  userId      String       @map("user_id")
+  name        String
+  description String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  haremEntries HaremEntry[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("user_collections")
 }
 
 model Soulmate {
