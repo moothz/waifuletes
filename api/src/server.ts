@@ -37,6 +37,9 @@ import { privateMarketRoutes } from './routes/private/market.js';
 import { privateCovetRoutes } from './routes/private/covet.js';
 import { privateCollectionRoutes } from './routes/private/collection.js';
 
+// Rotas do Acervo Externo / Storage Remoto (Hub)
+import { externalCatalogRoutes } from './routes/external/externalCatalogRoutes.js';
+
 const fastify = Fastify({
   trustProxy: true,
   logger: {
@@ -278,6 +281,9 @@ async function buildServer() {
   await fastify.register(privateMarketRoutes);
   await fastify.register(privateCovetRoutes);
   await fastify.register(privateCollectionRoutes);
+
+  // Registro de rotas de catálogo e mídias do Storage Remoto (Hub)
+  await fastify.register(externalCatalogRoutes, { prefix: '/api/v1/external' });
 
   return fastify;
 }

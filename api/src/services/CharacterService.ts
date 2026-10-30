@@ -1,5 +1,7 @@
 import { PrismaClient, Rarity, Gender } from '@prisma/client';
 import { Redis } from 'ioredis';
+import path from 'path';
+import fs from 'fs';
 import { ManifestCharacter } from '../utils/manifestLoader.js';
 import { RARITY_BASE_WEIGHTS } from '../utils/rarityCalculator.js';
 import { config } from '../config.js';
@@ -34,13 +36,33 @@ export class CharacterService {
   ) {}
 
   formatImageUrl(characterId: string, imagePath?: string): string {
-    if (!imagePath) {
-      return `${config.PUBLIC_BASE_URL}/media/characters/${characterId}/default.jpg`;
-    }
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    if (imagePath && (imagePath.startsWith('http://') || imagePath.startsWith('https://'))) {
       return imagePath;
     }
-    return `${config.PUBLIC_BASE_URL}/media/${imagePath}`;
+
+    const relPath = imagePath || `characters/${characterId}/default.jpg`;
+
+    // 1. Se a mídia existir fisicamente no disco local (MEDIA_DIR), serve via URL local
+    const localFile = path.resolve(config.MEDIA_DIR, relPath);
+    if (fs.existsSync(localFile)) {
+      return `${config.PUBLIC_BASE_URL}/media/${relPath}`;
+    }
+
+    // 2. Se houver REMOTE_MEDIA_BASE_URL configurada (ex: CDN ou proxy dedicado)
+    if (config.REMOTE_MEDIA_BASE_URL) {
+      const authQuery = config.UPSTREAM_API_KEY ? `?key=${encodeURIComponent(config.UPSTREAM_API_KEY)}` : '';
+      return `${config.REMOTE_MEDIA_BASE_URL.replace(/\/+$/, '')}/${relPath}${authQuery}`;
+    }
+
+    // 3. Se houver UPSTREAM_API_URL configurada (modo satélite Zero-Disk Media)
+    if (config.UPSTREAM_API_URL) {
+      const authQuery = config.UPSTREAM_API_KEY ? `?key=${encodeURIComponent(config.UPSTREAM_API_KEY)}` : '';
+      const base = config.UPSTREAM_API_URL.replace(/\/+$/, '');
+      return `${base}/api/v1/external/media/${relPath}${authQuery}`;
+    }
+
+    // 4. Fallback padrão local
+    return `${config.PUBLIC_BASE_URL}/media/${relPath}`;
   }
 
   getRandomImageUrl(characterId: string, imageUrls?: string[]): string {
@@ -55,13 +77,81 @@ export class CharacterService {
     const trimmed = identifier.trim();
     const slug = slugify(trimmed);
 
-    return this.prisma.character.findFirst({
+    let character = await this.prisma.character.findFirst({
       where: {
         OR: [
           { id: trimmed },
           { id: slug },
           { name: { equals: trimmed, mode: 'insensitive' } },
         ],
+      },
+    });
+
+    if (character) {
+      return character;
+    }
+
+    // Fallback JIT para Storage Remoto (Upstream)
+    if (config.UPSTREAM_API_URL) {
+      try {
+        const base = config.UPSTREAM_API_URL.replace(/\/+$/, '');
+        const targetId = slug || trimmed;
+        const authHeader: Record<string, string> = config.UPSTREAM_API_KEY ? { Authorization: `Bearer ${config.UPSTREAM_API_KEY}` } : {};
+
+        // Tenta buscar por ID direto
+        let res = await fetch(`${base}/api/v1/external/characters/${encodeURIComponent(targetId)}`, {
+          headers: authHeader,
+        });
+
+        if (!res.ok && res.status === 404) {
+          // Tenta buscar por nome na rota de listagem
+          const searchRes = await fetch(`${base}/api/v1/external/characters?search=${encodeURIComponent(trimmed)}&limit=1`, {
+            headers: authHeader,
+          });
+          if (searchRes.ok) {
+            const searchJson = (await searchRes.json()) as any;
+            if (searchJson.success && searchJson.data?.characters?.length > 0) {
+              const matched = searchJson.data.characters[0];
+              return await this.jitUpsertCharacter(matched);
+            }
+          }
+        } else if (res.ok) {
+          const json = (await res.json()) as any;
+          if (json.success && json.data) {
+            return await this.jitUpsertCharacter(json.data);
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[CharacterService] Falha ao consultar Hub remoto para '${identifier}':`, err.message);
+      }
+    }
+
+    return null;
+  }
+
+  async jitUpsertCharacter(char: any) {
+    return this.prisma.character.upsert({
+      where: { id: char.id },
+      create: {
+        id: char.id,
+        name: char.name,
+        series: char.series,
+        description: char.description ?? null,
+        baseRarity: char.baseRarity,
+        rank: char.rank ?? null,
+        gender: char.gender,
+        tags: Array.isArray(char.tags) ? char.tags : [],
+        imageUrls: Array.isArray(char.imageUrls) ? char.imageUrls : [],
+      },
+      update: {
+        name: char.name,
+        series: char.series,
+        description: char.description ?? null,
+        baseRarity: char.baseRarity,
+        rank: char.rank ?? null,
+        gender: char.gender,
+        tags: Array.isArray(char.tags) ? char.tags : [],
+        imageUrls: Array.isArray(char.imageUrls) ? char.imageUrls : [],
       },
     });
   }

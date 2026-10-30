@@ -67,7 +67,7 @@ export class RollService {
     if (this.isLoadingPool) return;
     this.isLoadingPool = true;
     try {
-      const items = await this.prisma.character.findMany({
+      let items = await this.prisma.character.findMany({
         where: { isActive: true },
         select: {
           id: true,
@@ -75,6 +75,26 @@ export class RollService {
           gender: true,
         },
       });
+
+      // Se o banco local estiver vazio e UPSTREAM_API_URL estiver setada, carrega o pool do Hub
+      if (items.length === 0 && config.UPSTREAM_API_URL) {
+        console.log('🌐 [RollService] Banco local vazio. Carregando pool de sorteio do Hub remoto...');
+        try {
+          const base = config.UPSTREAM_API_URL.replace(/\/+$/, '');
+          const authHeader: Record<string, string> = config.UPSTREAM_API_KEY ? { Authorization: `Bearer ${config.UPSTREAM_API_KEY}` } : {};
+          const res = await fetch(`${base}/api/v1/external/characters/pool`, { headers: authHeader });
+          if (res.ok) {
+            const data = (await res.json()) as any;
+            if (data.success && Array.isArray(data.pool)) {
+              items = data.pool;
+              console.log(`✅ [RollService] Pool remoto carregado com ${items.length} personagens em RAM!`);
+            }
+          }
+        } catch (poolErr: any) {
+          console.error('[RollService] Falha ao carregar pool remoto:', poolErr.message);
+        }
+      }
+
       this.inMemoryPool = items;
       this.poolLoaded = true;
     } finally {
@@ -262,7 +282,7 @@ export class RollService {
       }
 
       // 6. Buscar detalhes completos apenas do personagem sorteado
-      const chosen = await this.prisma.character.findUnique({
+      let chosen = await this.prisma.character.findUnique({
         where: { id: chosenId },
         include: {
           haremEntries: {
@@ -277,6 +297,28 @@ export class RollService {
           },
         },
       });
+
+      // Se não encontrou no banco local e há UPSTREAM_API_URL configurada, busca e persiste JIT
+      if (!chosen && config.UPSTREAM_API_URL) {
+        const fetched = await this.characterService.findCharacter(chosenId);
+        if (fetched) {
+          chosen = await this.prisma.character.findUnique({
+            where: { id: chosenId },
+            include: {
+              haremEntries: {
+                select: {
+                  id: true,
+                  userId: true,
+                  keys: true,
+                  user: {
+                    select: { id: true, name: true },
+                  },
+                },
+              },
+            },
+          });
+        }
+      }
 
       if (!chosen) {
         throw new Error('CHOSEN_CHARACTER_NOT_FOUND');

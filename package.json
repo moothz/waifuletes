@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "import:mudae": "node scripts/importFromMudae.js",
-    "download:images": "node scripts/downloadCharacterImages.js"
+    "download:images": "node scripts/downloadCharacterImages.js",
+    "sync:remote": "node scripts/syncRemoteCatalog.js"
   },
   "dependencies": {
     "google-translate-api-x": "^10.7.3"

@@ -55,12 +55,25 @@ const envSchema = z.object({
     (val) => val === 'true' || val === true || (process.env.NODE_ENV !== 'production' && val !== 'false'),
     z.boolean()
   ).default(process.env.NODE_ENV !== 'production'),
+
+  // Configurações de API Externa e Catálogo Remoto
+  EXTERNAL_USAGE_API: z.string().optional(),
+  EXTERNAL_USAGE_API_KEYS: z.string().optional(),
+  UPSTREAM_API_URL: z.string().optional(),
+  UPSTREAM_API_KEY: z.string().optional(),
+  REMOTE_MEDIA_BASE_URL: z.string().optional(),
 });
 
 export const config = envSchema.parse(process.env);
 
 const rawKeys = config.API_KEYS || config.API_KEY || '';
 export const apiKeys = rawKeys
+  .split(',')
+  .map((k) => k.trim())
+  .filter(Boolean);
+
+const rawExternalKeys = config.EXTERNAL_USAGE_API || config.EXTERNAL_USAGE_API_KEYS || '';
+export const externalApiKeys = rawExternalKeys
   .split(',')
   .map((k) => k.trim())
   .filter(Boolean);
