@@ -58,27 +58,7 @@ export class MarryService {
     }
     const targetCharId = resolvedChar.id;
 
-    // 3. Verificar lock no Redis para o grupo (qualquer um do grupo pode casar durante a janela ativa)
-    let lock = await this.cooldownService.getClaimLock(groupId, targetCharId);
-    if (!lock.locked && characterId !== targetCharId) {
-      lock = await this.cooldownService.getClaimLock(groupId, characterId);
-    }
-
-    if (!lock.locked) {
-      await rollbackClaimCooldown();
-      const windowStr = config.CLAIM_LOCK_SECONDS >= 60
-        ? `${Math.floor(config.CLAIM_LOCK_SECONDS / 60)} minuto(s)`
-        : `${config.CLAIM_LOCK_SECONDS} segundos`;
-      return {
-        success: false,
-        error: {
-          code: 'LOCK_EXPIRED',
-          message: `A janela de ${windowStr} para casar expirou ou o personagem não foi rolado neste grupo.`,
-        },
-      };
-    }
-
-    // 4. Verificar se já pertence a alguém
+    // 3. Verificar se já pertence a alguém
     const character = await this.prisma.character.findUnique({
       where: { id: targetCharId },
       include: {
@@ -108,6 +88,26 @@ export class MarryService {
           code: 'CHARACTER_ALREADY_CLAIMED',
           message: `Este personagem já pertence a ${owner.name}!`,
           owner,
+        },
+      };
+    }
+
+    // 4. Verificar lock no Redis para o grupo (qualquer um do grupo pode casar durante a janela ativa)
+    let lock = await this.cooldownService.getClaimLock(groupId, targetCharId);
+    if (!lock.locked && characterId !== targetCharId) {
+      lock = await this.cooldownService.getClaimLock(groupId, characterId);
+    }
+
+    if (!lock.locked) {
+      await rollbackClaimCooldown();
+      const windowStr = config.CLAIM_LOCK_SECONDS >= 60
+        ? `${Math.floor(config.CLAIM_LOCK_SECONDS / 60)} minuto(s)`
+        : `${config.CLAIM_LOCK_SECONDS} segundos`;
+      return {
+        success: false,
+        error: {
+          code: 'LOCK_EXPIRED',
+          message: `A janela de ${windowStr} para casar expirou ou o personagem não foi rolado neste grupo.`,
         },
       };
     }
