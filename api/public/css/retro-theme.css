@@ -529,6 +529,35 @@ body.dark-mode .btn-wish-active:hover {
   margin-bottom: 28px;
 }
 
+/* Grids de favoritas (em tamanho idêntico aos cards normais, máx 5) */
+#private-favorites-grid,
+#public-favorites-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+#private-favorites-grid .waifu-card,
+#public-favorites-grid .waifu-card {
+  width: 190px;
+  max-width: 190px;
+  flex: 0 0 190px;
+}
+
+@media (max-width: 640px) {
+  #private-favorites-grid .waifu-card,
+  #public-favorites-grid .waifu-card {
+    width: calc(50% - 10px);
+    max-width: calc(50% - 10px);
+    flex: 0 0 calc(50% - 10px);
+    min-width: 135px;
+  }
+}
+
 .waifu-card {
   background: var(--bg-card);
   border: var(--border-retro);
@@ -645,6 +674,80 @@ body.dark-mode .waifu-card.rarity-common {
 }
 .badge-wishes:hover {
   transform: scale(1.08);
+}
+.badge-wishes.is-in-wishlist {
+  background: #ec4899;
+  border-color: #f472b6;
+  color: #ffffff;
+}
+
+.badge-covets {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: #f59e0b;
+  color: #000000;
+  border: 1.5px solid #2d241e;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  line-height: 1;
+  z-index: 5;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s ease;
+}
+.badge-covets:hover {
+  transform: scale(1.08);
+}
+
+.badge-photos {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #facc15;
+  border: 1.5px solid #facc15;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1;
+  z-index: 5;
+  user-select: none;
+  transition: transform 0.15s ease;
+}
+.badge-photos:hover {
+  transform: scale(1.08);
+}
+
+.badge-collection-tag {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: #3b82f6;
+  color: #ffffff;
+  border: 1px solid #1d4ed8;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  line-height: 1;
+  z-index: 5;
 }
 
 .badge-likes {

@@ -169,6 +169,10 @@ async function buildServer() {
     return reply.sendFile('character.html');
   });
 
+  fastify.get('/user', async (req, reply) => {
+    return reply.sendFile('user.html');
+  });
+
   // Plugins de infraestrutura
   await fastify.register(prismaPlugin);
   await fastify.register(redisPlugin);

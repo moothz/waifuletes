@@ -625,7 +625,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token, characterId } = request.body as { token: string; characterId: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -667,7 +669,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token, characterId } = request.body as { token: string; characterId: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -710,7 +714,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token, name, description } = request.body as { token: string; name: string; description?: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -792,7 +798,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, collectionId } = request.params as { publicId: string; collectionId: string };
       const { token, characterId } = request.body as { token: string; characterId: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -1985,7 +1993,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId } = request.params as { publicId: string };
       const { token, characterId } = request.body as { token: string; characterId: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -2030,7 +2040,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, characterId } = request.params as { publicId: string; characterId: string };
       const { token } = request.query as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -2078,7 +2090,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, characterId } = request.params as { publicId: string; characterId: string };
       const { token, covetId } = request.body as { token: string; covetId: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,
@@ -2123,7 +2137,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { publicId, characterId } = request.params as { publicId: string; characterId: string };
       const { token } = request.body as { token: string };
 
-      const session = await webSessionService.validateUserSession(publicId, token);
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
       if (!session.valid || !session.userId) {
         return reply.status(401).send({
           success: false,

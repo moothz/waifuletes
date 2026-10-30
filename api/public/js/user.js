@@ -30,6 +30,34 @@ let activeSellCharacter = null;
 let activeOfferListing = null;
 let activeCovetsChar = null;
 let userCovetedSet = new Set();
+let visitorSessionData = null;
+let visitorWishlistSet = new Set();
+
+function getActiveAuthUser() {
+  const isOwner = Boolean(userSessionData?.isAdmin);
+  if (isOwner) {
+    const ownerWishlist = Array.isArray(userSessionData?.wishlist) ? userSessionData.wishlist : [];
+    return {
+      token: userSessionToken,
+      publicId: userPublicId,
+      isOwner: true,
+      data: userSessionData,
+      wishlistSet: new Set(ownerWishlist.map(w => w.character?.id || w.characterId)),
+    };
+  }
+
+  // Visitante em harém público de outro usuário
+  const savedToken = getCookie('waifu_session') || localStorage.getItem('waifu_session') || '';
+  const savedPublicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id') || '';
+
+  return {
+    token: savedToken,
+    publicId: savedPublicId,
+    isOwner: false,
+    data: visitorSessionData,
+    wishlistSet: visitorWishlistSet,
+  };
+}
 
 // Helpers de Cookies para Persistência de Sessão (3 dias)
 function setCookie(name, value, days = 3) {
@@ -120,13 +148,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Se não foi fornecido publicId na URL (ex: acessou /user diretamente), tenta redirecionar para a própria sessão salva
+  if (!userPublicId) {
+    const savedPublicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id');
+    if (savedPublicId) {
+      window.location.replace(`/user/${encodeURIComponent(savedPublicId)}${window.location.search}`);
+      return;
+    }
+  }
+
   // Extrai token da query string (?token=...)
   const params = new URLSearchParams(window.location.search);
   userSessionToken = params.get('token') || '';
 
-  // Se não houver token na URL, recupera token salvo no cookie da sessão persistente
+  // Se não houver token na URL, recupera token salvo no cookie apenas se a sessão pertencer a este perfil
   if (!userSessionToken && userPublicId) {
-    const savedToken = getCookie(`waifu_session_${userPublicId}`) || getCookie('waifu_session');
+    const savedUserPublicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id');
+    const savedToken = getCookie(`waifu_session_${userPublicId}`) || (savedUserPublicId === userPublicId ? (getCookie('waifu_session') || localStorage.getItem('waifu_session')) : null);
     if (savedToken) {
       userSessionToken = savedToken;
     }
@@ -671,20 +709,30 @@ async function loadUserData() {
       document.getElementById('private-panel').classList.add('hidden');
       document.getElementById('public-panel').classList.remove('hidden');
 
-      // Se o visitante tiver sessão salva em cookie, adiciona atalho para seu próprio harém no extremo direito
-      const savedPublicId = getCookie('waifu_user_public_id');
-      const savedToken = getCookie('waifu_session');
+      // Se o visitante tiver sessão salva em cookie, valida e ativa seus dados
+      const savedPublicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id');
+      const savedToken = getCookie('waifu_session') || localStorage.getItem('waifu_session');
       const headerActions = document.querySelector('.header-actions');
-      if (headerActions && savedPublicId && savedToken && savedPublicId !== userPublicId) {
-        if (!document.getElementById('btn-my-harem-nav')) {
-          const btnHarem = document.createElement('a');
-          btnHarem.id = 'btn-my-harem-nav';
-          btnHarem.href = `/user/${savedPublicId}`;
-          btnHarem.className = 'btn-retro btn-sm';
-          btnHarem.style.cssText = 'background: #22c55e; color: #ffffff; border-color: #16a34a; font-weight: 800;';
-          btnHarem.innerHTML = '<i class="fas fa-heart"></i> Meu Harém';
-          headerActions.appendChild(btnHarem);
-        }
+      if (savedPublicId && savedToken && savedPublicId !== userPublicId) {
+        try {
+          const vRes = await Api.get(`/api/web/user/${encodeURIComponent(savedPublicId)}?token=${encodeURIComponent(savedToken)}`);
+          if (vRes?.success && vRes.data?.isAdmin) {
+            visitorSessionData = vRes.data;
+            const vWishlist = visitorSessionData.wishlist || [];
+            visitorWishlistSet = new Set(vWishlist.map(w => w.character?.id || w.characterId));
+            userCovetedSet = new Set(visitorSessionData.covetedCharacterIds || []);
+
+            if (headerActions && !document.getElementById('btn-my-harem-nav')) {
+              const btnHarem = document.createElement('a');
+              btnHarem.id = 'btn-my-harem-nav';
+              btnHarem.href = `/user/${encodeURIComponent(savedPublicId)}`;
+              btnHarem.className = 'btn-retro btn-sm';
+              btnHarem.style.cssText = 'background: #22c55e; color: #ffffff; border-color: #16a34a; font-weight: 800;';
+              btnHarem.innerHTML = '<i class="fas fa-heart"></i> Meu Harém';
+              headerActions.appendChild(btnHarem);
+            }
+          }
+        } catch (_) {}
       }
 
       const marketUserNameEl = document.getElementById('public-market-user-name');
@@ -845,11 +893,11 @@ function createPrivateHaremCard(entry) {
 
   const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
   const photosBadgeHtml = photosCount > 1
-    ? `<div class="badge-married" style="background: rgba(0,0,0,0.8); color: #facc15; border: 1.5px solid #facc15; left: 8px; right: auto; top: ${unseenCovets > 0 ? '36px' : '8px'}; font-weight: 800; font-size: 11px; cursor: pointer; padding: 2px 6px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
+    ? `<div class="badge-photos" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
     : '';
 
   const colBadgeHtml = entry.collection
-    ? `<div class="badge-married" style="background: #3b82f6; color: #fff; left: 8px; right: auto; bottom: 8px; top: auto; font-size: 10px; font-weight: 800; padding: 2px 6px;" title="Coleção: ${escapeHtml(entry.collection.name)}">📁 ${escapeHtml(entry.collection.name)}</div>`
+    ? `<div class="badge-collection-tag" style="bottom: ${unseenCovets > 0 ? '34px' : '8px'};" title="Coleção: ${escapeHtml(entry.collection.name)}">📁 ${escapeHtml(entry.collection.name)}</div>`
     : '';
 
   card.innerHTML = `
@@ -859,8 +907,8 @@ function createPrivateHaremCard(entry) {
         ${rarity.emoji} ${rarity.label}
       </div>
       ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
-      ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
-      ${unseenCovets > 0 ? `<div class="badge-married" style="background: #f59e0b; color: #000; left: 8px; right: auto; font-weight: 800;">👀 ${unseenCovets}</div>` : ''}
+      ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white; top: 8px; right: ${entry.keys ? '56px' : '8px'};">💖</div>` : ''}
+      ${unseenCovets > 0 ? `<div class="badge-covets" onclick="event.stopPropagation(); openHaremCovetsModal('${char.id}', '${escapeAttr(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeAttr(char.series || '')}')" title="${unseenCovets} jogador(es) interessados">👀 ${unseenCovets}</div>` : ''}
       ${photosBadgeHtml}
       ${colBadgeHtml}
     </div>
@@ -1054,7 +1102,7 @@ function renderPrivateWishlist(wishlist) {
 
   const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
     const photosBadgeHtml = photosCount > 1
-      ? `<div class="badge-married" style="background: rgba(0,0,0,0.8); color: #facc15; border: 1.5px solid #facc15; left: 8px; right: auto; font-weight: 800; font-size: 11px; cursor: pointer; padding: 2px 6px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
+      ? `<div class="badge-photos" style="bottom: 38px; left: 8px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
       : '';
 
     card.innerHTML = `
@@ -1115,8 +1163,15 @@ function createPublicHaremCard(entry) {
   card.className = `waifu-card rarity-${(char.baseRarity || 'COMMON').toLowerCase()}`;
   card.style.borderColor = (char.baseRarity || 'COMMON') === 'COMMON' ? '#000000' : rarity.color;
 
-  const colBadgeHtml = entry.collection
-    ? `<div class="badge-married" style="background: #3b82f6; color: #fff; left: 8px; right: auto; bottom: 8px; top: auto; font-size: 10px; font-weight: 800; padding: 2px 6px;" title="Coleção: ${escapeHtml(entry.collection.name)}">📁 ${escapeHtml(entry.collection.name)}</div>`
+  const auth = getActiveAuthUser();
+  const isWish = auth.wishlistSet.has(char.id);
+  const wishTitle = auth.token
+    ? (isWish ? 'Na sua Wishlist! Clique para remover' : `Desejado por ${char.wishlistCount || 0} pessoa(s). Clique para adicionar à sua Wishlist`)
+    : `Desejado por ${char.wishlistCount || 0} pessoa(s). Faça login para adicionar!`;
+
+  const photosCount = (char.imageUrls && Array.isArray(char.imageUrls)) ? char.imageUrls.length : 1;
+  const photosBadgeHtml = photosCount > 1
+    ? `<div class="badge-photos" style="bottom: 38px; left: 8px;" onclick="event.stopPropagation(); openWaifuPreview('${char.id}')" title="${photosCount} fotos cadastradas">📷 ${photosCount}</div>`
     : '';
 
   card.innerHTML = `
@@ -1126,14 +1181,14 @@ function createPublicHaremCard(entry) {
         ${rarity.emoji} ${rarity.label}
       </div>
       ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
-      ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white;">💖</div>` : ''}
-      <div class="badge-wishes" data-char-id="${char.id}" title="Desejado por ${char.wishlistCount || 0} pessoa(s).">
-        <span>✨</span> <span>${char.wishlistCount || 0}</span>
+      ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white; top: 8px; right: ${entry.keys ? '56px' : '8px'};">💖</div>` : ''}
+      ${photosBadgeHtml}
+      <div class="badge-wishes ${isWish ? 'is-in-wishlist' : ''}" data-char-id="${char.id}" title="${wishTitle}" onclick="event.stopPropagation(); toggleWishlist('${char.id}', null, event)">
+        <span>${isWish ? '⭐' : '✨'}</span> <span class="wishes-count">${char.wishlistCount || 0}</span>
       </div>
       <div class="badge-likes" data-char-id="${char.id}" title="Curtido ${char.likeCount || 0} vez(es). Clique para curtir!" onclick="event.stopPropagation(); registerCardLike('${char.id}', event)">
         <span>❤️</span> <span class="likes-count">${char.likeCount || 0}</span>
       </div>
-      ${colBadgeHtml}
     </div>
     <div class="card-info">
       <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
@@ -1699,26 +1754,26 @@ async function toggleWishlist(charId, btn = null, event = null) {
     event.stopPropagation();
   }
 
-  if (!userSessionToken || !userPublicId) {
+  const auth = getActiveAuthUser();
+  if (!auth.token) {
     openModal('modal-public-offer-help');
     return;
   }
 
-  const isAlreadyWish = Array.isArray(userSessionData?.wishlist) &&
-    userSessionData.wishlist.some(w => (w.character?.id || w.characterId) === charId);
+  const isAlreadyWish = auth.wishlistSet.has(charId);
 
   if (btn) btn.disabled = true;
 
   try {
     if (isAlreadyWish) {
       // 1. Remover da Wishlist
-      const res = await Api.delete(`/api/web/user/${userPublicId}/wishlist/${encodeURIComponent(charId)}?token=${encodeURIComponent(userSessionToken)}`);
+      const res = await Api.delete(`/api/web/user/${encodeURIComponent(auth.publicId || 'token-session')}/wishlist/${encodeURIComponent(charId)}?token=${encodeURIComponent(auth.token)}`);
       if (!res.success) {
         Api.showToast(res.error?.message || 'Falha ao remover da wishlist.', '❌');
         return;
       }
 
-      if (userSessionData) {
+      if (auth.isOwner && userSessionData) {
         userSessionData.wishlist = (userSessionData.wishlist || []).filter(w => (w.character?.id || w.characterId) !== charId);
         const countEl = document.getElementById('wishlist-count');
         if (countEl) countEl.textContent = userSessionData.wishlist.length;
@@ -1727,6 +1782,11 @@ async function toggleWishlist(charId, btn = null, event = null) {
         const bonusFormatted = Number.isInteger(bonusPct) ? bonusPct : bonusPct.toFixed(1);
         const bonusEl = document.getElementById('wishlist-bonus-val');
         if (bonusEl) bonusEl.textContent = `+${bonusFormatted}%`;
+      } else {
+        visitorWishlistSet.delete(charId);
+        if (visitorSessionData && Array.isArray(visitorSessionData.wishlist)) {
+          visitorSessionData.wishlist = visitorSessionData.wishlist.filter(w => (w.character?.id || w.characterId) !== charId);
+        }
       }
 
       const wishTabCard = document.getElementById(`wish-card-${charId}`);
@@ -1735,8 +1795,8 @@ async function toggleWishlist(charId, btn = null, event = null) {
       Api.showToast('Personagem removido da sua Wishlist.', '🗑️');
     } else {
       // 2. Adicionar à Wishlist
-      const res = await Api.post(`/api/web/user/${userPublicId}/wishlist`, {
-        token: userSessionToken,
+      const res = await Api.post(`/api/web/user/${encodeURIComponent(auth.publicId || 'token-session')}/wishlist`, {
+        token: auth.token,
         characterId: charId,
         isStarWish: false,
       });
@@ -1746,7 +1806,7 @@ async function toggleWishlist(charId, btn = null, event = null) {
         return;
       }
 
-      if (userSessionData) {
+      if (auth.isOwner && userSessionData) {
         if (!Array.isArray(userSessionData.wishlist)) {
           userSessionData.wishlist = [];
         }
@@ -1763,6 +1823,17 @@ async function toggleWishlist(charId, btn = null, event = null) {
         const bonusFormatted = Number.isInteger(bonusPct) ? bonusPct : bonusPct.toFixed(1);
         const bonusEl = document.getElementById('wishlist-bonus-val');
         if (bonusEl) bonusEl.textContent = `+${bonusFormatted}%`;
+      } else {
+        visitorWishlistSet.add(charId);
+        if (visitorSessionData) {
+          if (!Array.isArray(visitorSessionData.wishlist)) visitorSessionData.wishlist = [];
+          visitorSessionData.wishlist.push({
+            id: res.data?.entry?.id || charId,
+            characterId: charId,
+            isStarWish: false,
+            character: { id: charId },
+          });
+        }
       }
 
       Api.showToast('Adicionado à sua Wishlist com sucesso!', '✨');
@@ -1782,9 +1853,23 @@ async function toggleWishlist(charId, btn = null, event = null) {
     });
 
     // Sincroniza todos os badges .badge-wishes deste personagem
-    document.querySelectorAll(`.badge-wishes[data-char-id="${charId}"] span:last-child`).forEach(span => {
-      const cur = parseInt(span.textContent.trim(), 10) || 0;
-      span.textContent = isAlreadyWish ? Math.max(0, cur - 1) : cur + 1;
+    document.querySelectorAll(`.badge-wishes[data-char-id="${charId}"]`).forEach(badge => {
+      const countSpan = badge.querySelector('.wishes-count') || badge.querySelector('span:last-child');
+      if (countSpan) {
+        const cur = parseInt(countSpan.textContent.trim(), 10) || 0;
+        countSpan.textContent = isAlreadyWish ? Math.max(0, cur - 1) : cur + 1;
+      }
+      const iconSpan = badge.querySelector('span:first-child');
+      if (iconSpan) {
+        iconSpan.textContent = isAlreadyWish ? '✨' : '⭐';
+      }
+      if (isAlreadyWish) {
+        badge.classList.remove('is-in-wishlist');
+        badge.title = 'Clique para adicionar à sua Wishlist';
+      } else {
+        badge.classList.add('is-in-wishlist');
+        badge.title = 'Na sua Wishlist! Clique para remover';
+      }
     });
 
     // Sincroniza modal de preview se aberto
@@ -1819,14 +1904,15 @@ async function registerCardLike(characterId, event = null) {
     event.stopPropagation();
   }
 
-  if (!userSessionToken) {
+  const auth = getActiveAuthUser();
+  if (!auth.token) {
     Api.showToast('Você precisa estar logado para curtir! Envie !mu-adm no WhatsApp.', '⚠️');
     return;
   }
 
   try {
-    const res = await Api.post(`/api/web/user/${userPublicId}/characters/${characterId}/like`, {
-      token: userSessionToken
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(auth.publicId || 'token-session')}/characters/${encodeURIComponent(characterId)}/like`, {
+      token: auth.token
     });
 
     if (res.success) {
@@ -1835,7 +1921,12 @@ async function registerCardLike(characterId, event = null) {
 
       // Atualiza todos os badges de likes deste personagem na tela
       document.querySelectorAll(`.badge-likes[data-char-id="${characterId}"]`).forEach(badge => {
-        badge.innerHTML = `<span>❤️</span> <span class="likes-count">${newLikes}</span>`;
+        const countSpan = badge.querySelector('.likes-count') || badge.querySelector('span:last-child');
+        if (countSpan && newLikes !== undefined) {
+          countSpan.textContent = newLikes;
+        } else {
+          badge.innerHTML = `<span>❤️</span> <span class="likes-count">${newLikes}</span>`;
+        }
       });
 
       // Atualiza no modal de preview se estiver aberto com esta waifu
@@ -1850,7 +1941,7 @@ async function registerCardLike(characterId, event = null) {
       Api.showToast(res.error?.message || 'Falha ao registrar curtida.', '❌');
     }
   } catch (err) {
-    Api.showToast('Erro ao registrar curtida.', '❌');
+    Api.showToast('Erro de conexão ao curtir personagem.', '❌');
   }
 }
 
@@ -2772,8 +2863,8 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
   if (wishesCountEl) wishesCountEl.textContent = cWishes;
   const btnWish = document.getElementById('btn-preview-wish');
   if (btnWish) {
-    const isAlreadyWish = Array.isArray(userSessionData?.wishlist) &&
-      userSessionData.wishlist.some(w => (w.character?.id || w.characterId) === charId);
+    const auth = getActiveAuthUser();
+    const isAlreadyWish = auth.wishlistSet.has(charId);
     if (isAlreadyWish) {
       btnWish.className = 'btn-retro btn-sm btn-wish-active';
       btnWish.innerHTML = `<i class="fas fa-check"></i> <span id="waifu-preview-wishes-count">${cWishes}</span> Na Wishlist`;
@@ -2874,6 +2965,20 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
           invBtn.onclick = () => { closeModal('modal-waifu-preview'); openInvestModal(charId); };
           actionsEl.appendChild(invBtn);
         }
+      }
+    } else {
+      // Visitante visualizando perfil público de outro jogador
+      if (isClaimed) {
+        const isCoveted = userCovetedSet.has(charId);
+        const covBtn = document.createElement('button');
+        covBtn.className = 'btn-retro btn-sm';
+        covBtn.style.cssText = 'width: 100%; border-color: #ec4899; color: #ec4899; font-weight: 800;';
+        covBtn.disabled = isCoveted;
+        covBtn.innerHTML = isCoveted ? '<i class="fas fa-check"></i> 👀 Cobiçado' : '<i class="fas fa-eye"></i> 👀 Cobiçar Personagem';
+        if (!isCoveted) {
+          covBtn.onclick = (e) => { covetCharacter(charId, covBtn, e); };
+        }
+        actionsEl.appendChild(covBtn);
       }
     }
   }
@@ -3340,16 +3445,19 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
   toggleFreeOffer(false);
   document.getElementById('offer-message-input').value = '';
 
+  const auth = getActiveAuthUser();
+  const buyerData = auth.isOwner ? userSessionData : (visitorSessionData || userSessionData);
+
   const zInput = document.getElementById('offer-zinthos-input');
   if (zInput) zInput.value = '0';
   const balanceEl = document.getElementById('offer-user-zinthos-balance');
   if (balanceEl) {
-    balanceEl.textContent = Number(userSessionData?.kakera || 0).toLocaleString('pt-BR');
+    balanceEl.textContent = Number(buyerData?.kakera || 0).toLocaleString('pt-BR');
   }
 
   // 1. Popula Waifus disponíveis do harém do comprador
   const waifusList = document.getElementById('offer-waifus-list');
-  const harem = userSessionData?.harem || [];
+  const harem = buyerData?.harem || [];
   if (harem.length === 0) {
     waifusList.innerHTML = '<div style="grid-column: 1 / -1; font-size: 12px; color: var(--text-muted); padding: 8px;">Você não possui waifus no harém para oferecer.</div>';
   } else {
@@ -3571,12 +3679,18 @@ async function submitMarketOffer() {
     return;
   }
 
+  const auth = getActiveAuthUser();
+  if (!auth.token) {
+    openModal('modal-public-offer-help');
+    return;
+  }
+
   const btn = document.getElementById('btn-submit-offer');
   btn.disabled = true;
 
   try {
-    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/market/offers`, {
-      token: userSessionToken,
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(auth.publicId || 'token-session')}/market/offers`, {
+      token: auth.token,
       listingId: activeOfferListing.id,
       message,
       offeredItems: {
@@ -3682,20 +3796,34 @@ async function covetCharacter(characterId, btn, event) {
   if (event) event.stopPropagation();
   if (btn) btn.disabled = true;
 
+  const auth = getActiveAuthUser();
+  if (!auth.token) {
+    openModal('modal-public-offer-help');
+    if (btn) btn.disabled = false;
+    return;
+  }
+
   try {
-    const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/covet`, {
-      token: userSessionToken,
+    const res = await Api.post(`/api/web/user/${encodeURIComponent(auth.publicId || 'token-session')}/covet`, {
+      token: auth.token,
       characterId,
     });
 
     if (res.success) {
       userCovetedSet.add(characterId);
+      visitorWishlistSet.add(characterId);
       if (btn) {
         btn.innerHTML = '<i class="fas fa-check"></i> 👀 Cobiçado';
         btn.disabled = true;
       }
       Api.showToast('Você cobiçou o personagem! Ele também foi adicionado à sua Wishlist.', '👀');
-      loadUserData();
+
+      // Atualiza badge de wishes se presente na tela
+      document.querySelectorAll(`.badge-wishes[data-char-id="${characterId}"]`).forEach(badge => {
+        badge.classList.add('is-in-wishlist');
+        const icon = badge.querySelector('span:first-child');
+        if (icon) icon.textContent = '⭐';
+      });
     } else {
       if (btn) btn.disabled = false;
       Api.showToast(res.error?.message || 'Falha ao cobiçar personagem.', '❌');
