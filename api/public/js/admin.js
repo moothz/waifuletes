@@ -346,10 +346,13 @@ async function loadAdminCatalog() {
   if (catalogState.sort) params.append('sort', catalogState.sort);
 
   try {
-    const res = await Api.get(`/api/admin/characters?${params.toString()}`, {
+    let res = await Api.get(`/api/admin/characters?${params.toString()}`, {
       'Authorization': `Bearer ${adminToken}`,
       'Cache-Control': 'no-cache'
     });
+    if (!res?.success && (res?.statusCode === 404 || res?.error === 'Not Found')) {
+      res = await Api.get(`/characters?${params.toString()}`);
+    }
     const resultData = res?.data;
     const characters = resultData?.data || [];
 
@@ -538,10 +541,13 @@ function adminSetPrimaryPhoto(index) {
 
 async function openEditCharacterModal(charId) {
   try {
-    const res = await Api.get(`/api/admin/characters/${encodeURIComponent(charId)}`, {
+    let res = await Api.get(`/api/admin/characters/${encodeURIComponent(charId)}`, {
       'Authorization': `Bearer ${adminToken}`,
       'Cache-Control': 'no-cache'
     });
+    if (!res?.success && (res?.statusCode === 404 || res?.error === 'Not Found')) {
+      res = await Api.get(`/characters/${encodeURIComponent(charId)}`);
+    }
     const char = res?.data;
     if (!char) {
       Api.showToast('Personagem não encontrado.', '❌');
