@@ -834,4 +834,68 @@ describe('🌐 Workstream Web & Admin — Waifuletes Web Features', () => {
     const listAfterJson = await listAfterRes.json();
     expect(listAfterJson.data.isBlocked).toBe(false);
   });
+
+  it('GET /api/admin/characters deve suportar filtro por status (all, active, inactive) e sem cache de navegador', async () => {
+    if (!adminToken || !testCharacterId) return;
+
+    // 1. GET /api/admin/characters sem token deve falhar (401)
+    const unauthRes = await fetch(`${BASE_URL}/api/admin/characters`);
+    expect(unauthRes.status).toBe(401);
+
+    // 2. Desabilita o personagem de teste
+    const disableRes = await fetch(`${BASE_URL}/api/admin/characters/${encodeURIComponent(testCharacterId)}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        isActive: false,
+      }),
+    });
+    expect(disableRes.status).toBe(200);
+
+    // 3. Consulta com status=inactive -> deve encontrar o personagem desabilitado
+    const inactiveRes = await fetch(`${BASE_URL}/api/admin/characters?status=inactive&search=${encodeURIComponent(testCharacterId)}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(inactiveRes.status).toBe(200);
+    const inactiveJson = await inactiveRes.json();
+    expect(inactiveJson.success).toBe(true);
+    const foundInactive = inactiveJson.data.data.find((c: any) => c.id === testCharacterId);
+    expect(foundInactive).toBeDefined();
+    expect(foundInactive.isActive).toBe(false);
+
+    // 4. Consulta pública /characters -> NÃO deve retornar o personagem inativo
+    const publicRes = await fetch(`${BASE_URL}/characters?search=${encodeURIComponent(testCharacterId)}`);
+    const publicJson = await publicRes.json();
+    const foundPublic = publicJson.data?.data?.find((c: any) => c.id === testCharacterId);
+    expect(foundPublic).toBeUndefined();
+
+    // 5. Reativa o personagem e testa atualização de raridade
+    const restoreRes = await fetch(`${BASE_URL}/api/admin/characters/${encodeURIComponent(testCharacterId)}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        isActive: true,
+        baseRarity: 'EPIC',
+      }),
+    });
+    expect(restoreRes.status).toBe(200);
+    const restoreJson = await restoreRes.json();
+    expect(restoreJson.data.character.isActive).toBe(true);
+    expect(restoreJson.data.character.baseRarity).toBe('EPIC');
+
+    // 6. GET /api/admin/characters/:id retorna os dados atualizados sem cache
+    const getAdminCharRes = await fetch(`${BASE_URL}/api/admin/characters/${encodeURIComponent(testCharacterId)}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(getAdminCharRes.status).toBe(200);
+    const getAdminCharJson = await getAdminCharRes.json();
+    expect(getAdminCharJson.data.baseRarity).toBe('EPIC');
+    expect(getAdminCharJson.data.isActive).toBe(true);
+  });
 });

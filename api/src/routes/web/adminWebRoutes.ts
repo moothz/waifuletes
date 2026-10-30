@@ -118,6 +118,93 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
+   * Listagem de personagens para o catálogo do Admin (com suporte a filtros de status, sem cache de navegador)
+   */
+  fastify.get('/api/admin/characters', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Consulta administrativa de personagens com filtro por status ativo/inativo e sem cache',
+      tags: ['Admin (Web)'],
+      querystring: {
+        type: 'object',
+        properties: {
+          series: { type: 'string' },
+          rarity: { type: 'string', enum: ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'] },
+          gender: { type: 'string', enum: ['FEMALE', 'MALE', 'OTHER'] },
+          tag: { type: 'string' },
+          search: { type: 'string' },
+          maritalStatus: { type: 'string', enum: ['all', 'single', 'married'] },
+          status: { type: 'string', enum: ['all', 'active', 'inactive'], default: 'all' },
+          sort: { type: 'string' },
+          page: { type: 'integer', minimum: 1, default: 1 },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 18 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+      const query = request.query as any;
+
+      const result = await characterService.listCharacters(
+        {
+          series: query.series,
+          rarity: query.rarity as Rarity,
+          gender: query.gender as Gender,
+          tag: query.tag,
+          search: query.search,
+          maritalStatus: query.maritalStatus,
+          status: query.status || 'all',
+          sort: query.sort || 'ranking',
+          page: query.page ? Math.max(1, Number(query.page)) : 1,
+          limit: query.limit ? Math.min(100, Math.max(1, Number(query.limit))) : 18,
+        },
+        true
+      );
+
+      return reply.send({
+        success: true,
+        data: result,
+      });
+    },
+  });
+
+  /**
+   * Obter detalhes de personagem para o modal de edição do Admin (sem cache)
+   */
+  fastify.get('/api/admin/characters/:id', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Obtém dados completos de um personagem para edição administrativa (inclui ativos e desabilitados)',
+      tags: ['Admin (Web)'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+      const { id } = request.params as { id: string };
+
+      const character = await characterService.getCharacterById(id, true);
+
+      if (!character) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'CHARACTER_NOT_FOUND', message: 'Personagem não encontrado.' },
+        });
+      }
+
+      return reply.send({
+        success: true,
+        data: character,
+      });
+    },
+  });
+
+  /**
    * Edição completa de personagem pelo Admin (nome, descrição, raridade, foto)
    */
   fastify.put('/api/admin/characters/:id', {
@@ -127,6 +214,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['Admin (Web)'],
     },
     handler: async (request, reply) => {
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
       const { id } = request.params as { id: string };
 
       const character = await fastify.prisma.character.findUnique({
@@ -153,6 +241,8 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       let targetPhoto: string | null = null;
       let newImageBuffer: Buffer | null = null;
 
+      const validRarities = ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'];
+
       if (request.isMultipart()) {
         const parts = request.parts();
         for await (const part of parts) {
@@ -160,7 +250,9 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
             if (part.fieldname === 'name' && part.value) name = String(part.value).trim();
             if (part.fieldname === 'series' && part.value) series = String(part.value).trim();
             if (part.fieldname === 'description') description = String(part.value).trim();
-            if (part.fieldname === 'baseRarity' && part.value) baseRarity = String(part.value) as Rarity;
+            if (part.fieldname === 'baseRarity' && part.value && validRarities.includes(String(part.value).trim().toUpperCase())) {
+              baseRarity = String(part.value).trim().toUpperCase() as Rarity;
+            }
             if (part.fieldname === 'gender' && ['FEMALE', 'MALE', 'OTHER'].includes(String(part.value))) {
               gender = String(part.value) as Gender;
             }
@@ -196,7 +288,9 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         if (body.name) name = String(body.name).trim();
         if (body.series) series = String(body.series).trim();
         if (body.description !== undefined) description = String(body.description).trim();
-        if (body.baseRarity) baseRarity = body.baseRarity as Rarity;
+        if (body.baseRarity && validRarities.includes(String(body.baseRarity).trim().toUpperCase())) {
+          baseRarity = String(body.baseRarity).trim().toUpperCase() as Rarity;
+        }
         if (body.gender && ['FEMALE', 'MALE', 'OTHER'].includes(body.gender)) {
           gender = body.gender as Gender;
         }
@@ -232,8 +326,8 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       let updatedImageUrls = customImageUrls !== null
         ? customImageUrls.map((img) => {
             if (typeof img !== 'string') return '';
-            // Remove prefixo http/https de media se houver
-            return img.replace(/^https?:\/\/[^\/]+\/media\//, '');
+            // Remove prefixo http/https de media ou api upstream se houver
+            return img.replace(/^https?:\/\/[^\/]+(?:\/api\/v1\/external)?\/media\//, '').replace(/\?.*$/, '');
           }).filter(Boolean)
         : [...character.imageUrls];
 
@@ -247,7 +341,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
 
         const relPath = `uploads/characters/${character.id}/${fileName}`;
         if (photoAction === 'REPLACE' && targetPhoto) {
-          const cleanTarget = targetPhoto.replace(/^https?:\/\/[^\/]+\/media\//, '');
+          const cleanTarget = targetPhoto.replace(/^https?:\/\/[^\/]+(?:\/api\/v1\/external)?\/media\//, '').replace(/\?.*$/, '');
           const idx = updatedImageUrls.findIndex((img) =>
             img === cleanTarget || img.endsWith(cleanTarget) || cleanTarget.endsWith(img)
           );
@@ -282,6 +376,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         if (keys.length > 0) {
           await fastify.redis.del(...keys);
         }
+        await fastify.redis.del('cache:character_stats');
       } catch (_) {}
 
       return reply.send({

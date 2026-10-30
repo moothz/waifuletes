@@ -1,13 +1,16 @@
 // js/api.js - Utilitários de API, Tema e Notificações Toast para o Waifuletes
 
 const Api = {
-  async get(url, headers = {}) {
+  async get(url, headers = {}, options = {}) {
+    const isAuthOrNoCache = Boolean(headers['Authorization'] || headers['authorization'] || headers['Cache-Control']);
     const res = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
         ...headers
-      }
+      },
+      cache: options.cache || (isAuthOrNoCache ? 'no-store' : 'default'),
+      ...options
     });
     return res.json();
   },

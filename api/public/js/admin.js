@@ -20,6 +20,7 @@ const catalogState = {
   rarity: '',
   gender: '',
   maritalStatus: '',
+  status: 'all',
   sort: 'ranking',
   page: 1,
   limit: 18,
@@ -135,6 +136,17 @@ function setupAdminEvents() {
       adminMaritalPills.forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       catalogState.maritalStatus = pill.dataset.status;
+      catalogState.page = 1;
+      loadAdminCatalog();
+    });
+  });
+
+  const adminStatusPills = document.querySelectorAll('#admin-status-pills .retro-pill');
+  adminStatusPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      adminStatusPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      catalogState.status = pill.dataset.activeStatus || 'all';
       catalogState.page = 1;
       loadAdminCatalog();
     });
@@ -330,10 +342,14 @@ async function loadAdminCatalog() {
   if (catalogState.rarity) params.append('rarity', catalogState.rarity);
   if (catalogState.gender) params.append('gender', catalogState.gender);
   if (catalogState.maritalStatus) params.append('maritalStatus', catalogState.maritalStatus);
+  if (catalogState.status) params.append('status', catalogState.status);
   if (catalogState.sort) params.append('sort', catalogState.sort);
 
   try {
-    const res = await Api.get(`/characters?${params.toString()}`);
+    const res = await Api.get(`/api/admin/characters?${params.toString()}`, {
+      'Authorization': `Bearer ${adminToken}`,
+      'Cache-Control': 'no-cache'
+    });
     const resultData = res?.data;
     const characters = resultData?.data || [];
 
@@ -354,25 +370,40 @@ async function loadAdminCatalog() {
     characters.forEach(char => {
       const rarityKey = char.baseRarity || 'COMMON';
       const rarity = RARITY_CONFIG[rarityKey] || RARITY_CONFIG.COMMON;
+      const isInactive = char.isActive === false;
       const card = document.createElement('div');
       card.className = `waifu-card rarity-${rarityKey.toLowerCase()}`;
       card.id = `admin-card-${char.id}`;
-      card.style.borderColor = rarityKey === 'COMMON' ? '#000000' : rarity.color;
+      card.style.borderColor = isInactive ? '#94a3b8' : (rarityKey === 'COMMON' ? '#000000' : rarity.color);
+      if (isInactive) {
+        card.style.opacity = '0.85';
+        card.style.filter = 'grayscale(25%)';
+      }
 
       card.innerHTML = `
-        <div class="card-img-wrapper">
-          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${char.name}">
+        <div class="card-img-wrapper" style="position: relative;">
+          <img src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}">
           <div class="badge-rarity" style="border-color: ${rarity.color}; color: ${rarity.color};">
             ${rarity.emoji} ${rarity.label}
           </div>
+          ${isInactive ? `
+            <div style="position: absolute; top: 6px; left: 6px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #000; z-index: 2; box-shadow: 1px 1px 0 #000;">
+              🚫 Desabilitada
+            </div>
+          ` : ''}
         </div>
         <div class="card-info">
-          <div class="card-name">${char.name}</div>
-          <div class="card-series">${char.series || 'Sem série'}</div>
-          <div class="card-actions">
-            <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="openEditCharacterModal('${char.id}')">
+          <div class="card-name">${escapeHtml(char.name)}</div>
+          <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+          <div class="card-actions" style="display: flex; gap: 4px; margin-top: 8px;">
+            <button class="btn-retro btn-sm btn-gold" style="flex: 1;" onclick="openEditCharacterModal('${char.id}')">
               <i class="fas fa-edit"></i> Editar
             </button>
+            ${isInactive ? `
+              <button class="btn-retro btn-sm" style="background: #22c55e; color: #fff; font-weight: 700; padding: 4px 8px;" title="Reativar waifu" onclick="quickToggleActive('${char.id}', true)">
+                <i class="fas fa-undo"></i>
+              </button>
+            ` : ''}
           </div>
         </div>
       `;
@@ -380,6 +411,26 @@ async function loadAdminCatalog() {
     });
   } catch (err) {
     console.error('Erro ao carregar catálogo admin:', err);
+  }
+}
+
+async function quickToggleActive(charId, newStatus) {
+  try {
+    const res = await Api.put(`/api/admin/characters/${encodeURIComponent(charId)}`, {
+      isActive: newStatus
+    }, {
+      'Authorization': `Bearer ${adminToken}`
+    });
+
+    if (!res.success) {
+      Api.showToast(res.error?.message || 'Falha ao alterar status.', '❌');
+      return;
+    }
+
+    Api.showToast(newStatus ? 'Personagem reativada com sucesso! ✨' : 'Personagem desabilitada.', '✅');
+    loadAdminCatalog();
+  } catch (err) {
+    Api.showToast('Erro de comunicação com o servidor.', '❌');
   }
 }
 
@@ -487,7 +538,10 @@ function adminSetPrimaryPhoto(index) {
 
 async function openEditCharacterModal(charId) {
   try {
-    const res = await Api.get(`/characters/${encodeURIComponent(charId)}`);
+    const res = await Api.get(`/api/admin/characters/${encodeURIComponent(charId)}`, {
+      'Authorization': `Bearer ${adminToken}`,
+      'Cache-Control': 'no-cache'
+    });
     const char = res?.data;
     if (!char) {
       Api.showToast('Personagem não encontrado.', '❌');

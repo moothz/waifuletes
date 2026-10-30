@@ -17,6 +17,8 @@ export interface CharacterFilter {
   limit?: number;
   maritalStatus?: 'all' | 'single' | 'married' | string;
   sort?: string;
+  status?: 'all' | 'active' | 'inactive';
+  isActive?: boolean;
 }
 
 export function slugify(text: string): string {
@@ -161,9 +163,15 @@ export class CharacterService {
     const limit = Math.min(100, Math.max(1, filter.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    const where: any = {
-      isActive: true,
-    };
+    const where: any = {};
+
+    if (filter.status === 'inactive' || filter.isActive === false) {
+      where.isActive = false;
+    } else if (filter.status === 'all') {
+      // Nenhum filtro de isActive (traz tanto ativos quanto inativos)
+    } else {
+      where.isActive = true;
+    }
 
     if (filter.series) {
       where.series = { contains: filter.series, mode: 'insensitive' };
@@ -212,7 +220,14 @@ export class CharacterService {
 
       const countPerRarity = Math.ceil(limit / rarities.length);
 
-      const conditions: string[] = ['"isActive" = true'];
+      const conditions: string[] = [];
+
+      if (filter.status === 'inactive' || filter.isActive === false) {
+        conditions.push('"isActive" = false');
+      } else if (filter.status !== 'all') {
+        conditions.push('"isActive" = true');
+      }
+
       const values: any[] = [];
       let paramIdx = 1;
 
@@ -249,7 +264,7 @@ export class CharacterService {
         }
       }
 
-      const baseWhereSql = conditions.join(' AND ');
+      const baseWhereSql = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
 
       const idsPerRarity = await Promise.all(
         rarities.map((r) => {

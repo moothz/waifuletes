@@ -105,6 +105,16 @@
               </select>
             </div>
 
+            <!-- Status de Ativação -->
+            <div class="filter-group">
+              <span><i class="fas fa-eye"></i> Exibição:</span>
+              <div class="pill-group" id="admin-status-pills">
+                <button class="retro-pill active" data-active-status="all">Todos</button>
+                <button class="retro-pill" data-active-status="active">Ativos</button>
+                <button class="retro-pill" data-active-status="inactive">🚫 Desabilitados</button>
+              </div>
+            </div>
+
             <!-- Ordem -->
             <div class="filter-group">
               <span><i class="fas fa-sort"></i> Ordem:</span>
@@ -381,7 +391,7 @@
   <div id="retro-toast" class="retro-toast hidden"></div>
 
   <script src="/vendor/cropper.min.js"></script>
-  <script src="/js/api.js?v=20261029-col2"></script>
-  <script src="/js/admin.js?v=20261029-col2"></script>
+  <script src="/js/api.js?v=20261030-adminfix"></script>
+  <script src="/js/admin.js?v=20261030-adminfix"></script>
 </body>
 </html>
