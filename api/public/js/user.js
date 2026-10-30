@@ -2320,6 +2320,23 @@ async function submitEditInfoSuggestion() {
     return;
   }
 
+  // Validação: Garante que pelo menos um campo foi de fato alterado em relação aos dados atuais
+  const nameChanged = suggestedName && suggestedName !== (activeSuggestCharacter.name || '').trim();
+  const seriesChanged = suggestedSeries && suggestedSeries !== (activeSuggestCharacter.series || '').trim();
+  const genderChanged = suggestedGender && suggestedGender !== (activeSuggestCharacter.gender || '');
+  const rarityChanged = suggestedRarity && suggestedRarity !== (activeSuggestCharacter.baseRarity || '');
+  const curTagsNorm = [...(activeSuggestCharacter.tags || [])].sort().join(',');
+  const sugTagsNorm = [...suggestedTags].sort().join(',');
+  const tagsChanged = sugTagsNorm !== curTagsNorm;
+  const curDesc = (activeSuggestCharacter.description || '').trim();
+  const sugDesc = (suggestedDescription || '').trim();
+  const descChanged = sugDesc !== curDesc;
+
+  if (!nameChanged && !seriesChanged && !genderChanged && !rarityChanged && !tagsChanged && !descChanged) {
+    Api.showToast('Nenhum campo do personagem foi modificado! Altere a descrição, nome, série ou tags diretamente nos campos acima em vez de colocar apenas na justificativa.', '⚠️');
+    return;
+  }
+
   const btnEdit = document.getElementById('btn-submit-edit-info');
   if (btnEdit) btnEdit.disabled = true;
   isSubmittingSuggestion = true;

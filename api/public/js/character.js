@@ -42,9 +42,14 @@ const CharacterPage = {
   isAuthenticated: false,
 
   async init() {
-    // 1. Extrai ID do personagem da URL
+    // 1. Extrai ID do personagem da URL ou da query string
     const parts = window.location.pathname.split('/').filter(Boolean);
-    this.charId = decodeURIComponent(parts[parts.length - 1] || '');
+    let extractedId = decodeURIComponent(parts[parts.length - 1] || '');
+    if (!extractedId || extractedId === 'character' || extractedId === 'character.html') {
+      const sp = new URLSearchParams(window.location.search);
+      extractedId = sp.get('id') || '';
+    }
+    this.charId = extractedId;
 
     if (!this.charId) {
       document.getElementById('char-name').textContent = 'Personagem não informado.';

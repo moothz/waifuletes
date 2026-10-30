@@ -436,15 +436,57 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['Admin (Web)'],
       params: {
         type: 'object',
+        additionalProperties: false,
         required: ['id'],
         properties: { id: { type: 'string' } },
+      },
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          overrideRarity: { type: 'string' },
+          overridePhotoAction: { type: 'string', enum: ['ADD', 'REPLACE'] },
+        },
       },
     },
     handler: async (request, reply) => {
       const { id } = request.params as { id: string };
-      const body = (request.body || {}) as { overrideRarity?: string };
-      const result = await suggestionService.approveSuggestion(id, 'admin', body.overrideRarity);
+      const body = (request.body || {}) as { overrideRarity?: string; overridePhotoAction?: 'ADD' | 'REPLACE' };
+      const result = await suggestionService.approveSuggestion(id, 'admin', body.overrideRarity, body.overridePhotoAction);
       return reply.send(result);
+    },
+  });
+
+  /**
+   * Consulta parecer da IA e exibe o prompt completo de avaliação
+   */
+  fastify.get('/api/admin/suggestions/:id/ai-advisor', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Obtém ou gera o parecer da IA e o prompt completo utilizado para a sugestão',
+      tags: ['Admin (Web)'],
+      params: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id'],
+        properties: { id: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          refresh: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const query = request.query as { refresh?: string };
+      const advisor = await suggestionService.getOrEvaluateAiAdvisor(id, query.refresh === 'true');
+      return reply.send({
+        success: true,
+        data: advisor,
+      });
     },
   });
 

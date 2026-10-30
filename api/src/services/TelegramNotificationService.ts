@@ -33,12 +33,15 @@ export interface SuggestionNotifyData {
     description?: string | null;
     tags?: string[] | null;
     imageUrl?: string | null;
+    rank?: number | null;
+    waifuRank?: number | null;
   } | null;
   marriedUser?: {
     id: string;
     name: string;
   } | null;
   isMarriedToSuggester?: boolean;
+  forceNotificationForTest?: boolean;
 }
 
 export interface MultiRollReportData {
@@ -98,12 +101,13 @@ export class TelegramNotificationService {
 
     // Não envia notificações de testes automatizados para o grupo oficial
     if (
-      process.env.VITEST ||
-      process.env.NODE_ENV === 'test' ||
-      data.userName?.toLowerCase().includes('teste') ||
-      data.userName?.toLowerCase().includes('tester') ||
-      data.userId?.startsWith('test_') ||
-      data.reason?.toLowerCase().includes('teste automatizado')
+      !data.forceNotificationForTest &&
+      (process.env.VITEST ||
+        process.env.NODE_ENV === 'test' ||
+        data.userName === 'teste' ||
+        data.userName === 'tester' ||
+        data.userId?.startsWith('test_') ||
+        data.reason?.toLowerCase().includes('teste automatizado'))
     ) {
       return;
     }
@@ -188,16 +192,23 @@ export class TelegramNotificationService {
 
           if (changes.length > 0) {
             text += `\n📋 <b>Campos alterados:</b>\n${changes.join('\n')}\n`;
+          } else {
+            text += `\n⚠️ <b>Atenção (Sem alterações nos campos):</b>\n`;
+            text += `<i>Nenhum campo principal (nome, série, gênero, raridade, tags, descrição) difere do catálogo atual. O usuário pode ter colocado o conteúdo da sugestão no campo de motivo/justificativa abaixo.</i>\n`;
+            const currentDesc = data.suggestedDescription || data.character.description;
+            if (currentDesc) {
+              text += `📖 <b>Descrição Atual no Catálogo:</b> <i>${this.escapeHtml(currentDesc)}</i>\n`;
+            }
           }
         } else if (data.type === 'IMAGE') {
           if (data.photoAction === 'DELETE') {
-            text += `⚠️ <b>Ação:</b> Excluir foto apontada como errada/ruim\n`;
+            text += `🗑️ <b>Ação Proposta pelo Usuário:</b> Excluir foto apontada como errada/ruim\n`;
             if (data.targetPhoto) text += `🖼️ <b>Foto Alvo:</b> <code>${this.escapeHtml(data.targetPhoto)}</code>\n`;
           } else if (data.photoAction === 'REPLACE') {
-            text += `🔄 <b>Ação:</b> Substituir foto errada pela nova foto enviada\n`;
-            if (data.targetPhoto) text += `🖼️ <b>Foto Antiga:</b> <code>${this.escapeHtml(data.targetPhoto)}</code>\n`;
+            text += `🔄 <b>Ação Proposta pelo Usuário:</b> Substituir foto atual pela nova foto enviada\n`;
+            if (data.targetPhoto) text += `🖼️ <b>Foto Atual (a substituir):</b> <code>${this.escapeHtml(data.targetPhoto)}</code>\n`;
           } else {
-            text += `✨ <b>Ação:</b> Adicionar nova foto ao personagem\n`;
+            text += `➕ <b>Ação Proposta pelo Usuário:</b> Adicionar nova foto à galeria (mantém foto atual)\n`;
           }
         } else if (data.type === 'DELETE_CHARACTER') {
           text += `🔞 <b>Ação Solicitada:</b> Remoção definitiva do personagem do catálogo\n`;
@@ -211,11 +222,29 @@ export class TelegramNotificationService {
       text += `🙋 <b>Sugerido por:</b> ${this.escapeHtml(data.userName || 'Anônimo na Web')}\n`;
       text += `📅 <b>Data:</b> ${this.formatBrazilDateTime()}`;
 
+      const targetCharId = data.characterId || data.character?.id;
+      if (targetCharId) {
+        const charUrl = `${config.PUBLIC_BASE_URL}/character/${encodeURIComponent(targetCharId)}`;
+        text += `\n🔗 <b>Ver Personagem no Site:</b> <a href="${charUrl}">${charUrl}</a>`;
+      }
+
       const isRarityChange =
         data.type === 'RARITY' ||
         (data.type === 'EDIT' && Boolean(data.suggestedRarity && data.suggestedRarity !== data.character?.baseRarity));
 
       const inlineKeyboard: any[][] = [];
+
+      const navButtons: any[] = [];
+      if (targetCharId) {
+        navButtons.push({
+          text: '👤 Ver Personagem',
+          url: `${config.PUBLIC_BASE_URL}/character/${encodeURIComponent(targetCharId)}`,
+        });
+      }
+      navButtons.push({
+        text: '🌐 Abrir Painel Admin',
+        url: `${config.PUBLIC_BASE_URL}/admin`,
+      });
 
       if (isRarityChange) {
         inlineKeyboard.push([
@@ -236,47 +265,89 @@ export class TelegramNotificationService {
             { text: '🟡 Aceitar - Legendary', callback_data: `sug_app_rar:${data.id}:LEGENDARY` },
           ]);
         }
+        inlineKeyboard.push(navButtons);
+      } else if (data.type === 'IMAGE' && data.photoAction !== 'DELETE') {
+        const proposedAction = data.photoAction === 'REPLACE' ? 'Trocar' : 'Adicionar';
         inlineKeyboard.push([
-          { text: '🌐 Abrir Painel Admin', url: `${config.PUBLIC_BASE_URL}/admin` },
+          { text: `✅ Aceitar Proposto (${proposedAction})`, callback_data: `sug_app:${data.id}` },
         ]);
+        inlineKeyboard.push([
+          { text: '➕ Aceitar (Nova Foto)', callback_data: `sug_app_img:${data.id}:ADD` },
+          { text: '🔄 Aceitar (Trocar Atual)', callback_data: `sug_app_img:${data.id}:REPLACE` },
+        ]);
+        inlineKeyboard.push([
+          { text: '❌ Rejeitar', callback_data: `sug_rej:${data.id}` },
+        ]);
+        inlineKeyboard.push(navButtons);
       } else {
         inlineKeyboard.push([
           { text: '✅ Aceitar e Aplicar', callback_data: `sug_app:${data.id}` },
           { text: '❌ Rejeitar', callback_data: `sug_rej:${data.id}` },
         ]);
-        inlineKeyboard.push([
-          { text: '🌐 Abrir Painel Admin', url: `${config.PUBLIC_BASE_URL}/admin` },
-        ]);
+        inlineKeyboard.push(navButtons);
       }
 
       const replyMarkup = {
         inline_keyboard: inlineKeyboard,
       };
 
-      // Tenta enviar com imagem se houver
-      let imageBuffer: Buffer | null = null;
-      if (data.imageUrl) {
-        try {
-          const fullPath = path.isAbsolute(data.imageUrl)
-            ? data.imageUrl
-            : path.resolve(config.MEDIA_DIR, data.imageUrl);
-          imageBuffer = await fs.readFile(fullPath);
-        } catch (_) {}
+      let sentInfo: { messageId: number; chatId: string } | null = null;
+      let albumMessageIds: number[] | null = null;
+
+      // Se for substituição de foto, tenta enviar comparação lado a lado (Foto Atual vs Nova Foto)
+      if (data.type === 'IMAGE' && data.photoAction === 'REPLACE') {
+        const currBuffer = await this.resolveImageBuffer(
+          data.targetPhoto || data.character?.imageUrl,
+          data.characterId || data.character?.id
+        );
+        const newBuffer = await this.resolveImageBuffer(data.imageUrl);
+
+        if (currBuffer && newBuffer) {
+          const mediaGroupResult = await this.sendComparisonMediaGroup(
+            currBuffer,
+            newBuffer,
+            '🖼️ <b>Foto 1: Foto Atual no Catálogo</b>',
+            '✨ <b>Foto 2: Nova Foto Sugerida (Substituta)</b>'
+          );
+          if (mediaGroupResult) {
+            albumMessageIds = mediaGroupResult.messageIds;
+            sentInfo = await this.sendMessage(text, replyMarkup);
+          }
+        }
       }
 
-      let sentInfo: { messageId: number; chatId: string } | null = null;
-      if (imageBuffer) {
-        sentInfo = await this.sendPhotoWithBuffer(imageBuffer, text, replyMarkup);
-      } else if (data.character?.imageUrl && data.character.imageUrl.startsWith('http')) {
-        sentInfo = await this.sendPhotoWithUrl(data.character.imageUrl, text, replyMarkup);
-      } else {
-        sentInfo = await this.sendMessage(text, replyMarkup);
+      // Se não enviou álbum (não é REPLACE ou imagens indisponíveis), envia foto única ou texto
+      if (!sentInfo) {
+        let imageBuffer: Buffer | null = null;
+        if (data.imageUrl) {
+          imageBuffer = await this.resolveImageBuffer(data.imageUrl);
+        } else if (data.photoAction === 'DELETE' && data.targetPhoto) {
+          imageBuffer = await this.resolveImageBuffer(
+            data.targetPhoto,
+            data.characterId || data.character?.id
+          );
+        }
+
+        if (imageBuffer) {
+          sentInfo = await this.sendPhotoWithBuffer(imageBuffer, text, replyMarkup);
+        } else if (data.character?.imageUrl && data.character.imageUrl.startsWith('http')) {
+          sentInfo = await this.sendPhotoWithUrl(data.character.imageUrl, text, replyMarkup);
+        }
+
+        // Se o envio da foto falhou ou não há foto, faz fallback garantido para sendMessage
+        if (!sentInfo) {
+          sentInfo = await this.sendMessage(text, replyMarkup);
+        }
       }
 
       if (sentInfo && this.redis) {
         await this.redis.set(
           `telegram:suggestion:${data.id}:msg`,
-          JSON.stringify(sentInfo),
+          JSON.stringify({
+            messageId: sentInfo.messageId,
+            chatId: sentInfo.chatId,
+            ...(albumMessageIds ? { albumMessageIds } : {}),
+          }),
           'EX',
           7 * 86400
         );
@@ -286,10 +357,10 @@ export class TelegramNotificationService {
       if (isRarityChange && sentInfo) {
         const targetMessageId = sentInfo.messageId;
         this.rarityAdvisorService
-          .evaluateRaritySuggestion(data)
-          .then(async (advisorText) => {
-            if (advisorText) {
-              const replyInfo = await this.sendMessage(advisorText, undefined, targetMessageId);
+          .evaluateRaritySuggestion(data, this.redis)
+          .then(async (advisorEval) => {
+            if (advisorEval?.response) {
+              const replyInfo = await this.sendMessage(advisorEval.response, undefined, targetMessageId);
               if (replyInfo && this.redis) {
                 await this.redis.set(
                   `telegram:suggestion:${data.id}:advisor_msg`,
@@ -462,7 +533,21 @@ export class TelegramNotificationService {
     }
 
     try {
-      if (data.startsWith('sug_app_rar:')) {
+      if (data.startsWith('sug_app_img:')) {
+        const parts = data.replace('sug_app_img:', '').split(':');
+        const suggestionId = parts[0];
+        const photoAction = parts[1] as 'ADD' | 'REPLACE';
+
+        await suggestionService.approveSuggestion(suggestionId, `telegram:${moderatorName}`, undefined, photoAction);
+
+        const actionText = photoAction === 'ADD' ? 'Nova foto adicionada à galeria' : 'Foto atual substituída';
+        await this.answerCallback(queryId, `✅ Foto aprovada: ${actionText}!`);
+
+        // Atualiza mensagem no Telegram
+        const actionLabel = photoAction === 'ADD' ? 'ADICIONADA COMO NOVA FOTO' : 'FOTO ATUAL SUBSTITUÍDA';
+        const appendText = `\n\n✅ <b>APROVADA (${actionLabel})</b> por ${this.escapeHtml(moderatorName)} em ${this.formatBrazilDateTime()}`;
+        await this.updateTelegramMessage(chatId, messageId, message, appendText);
+      } else if (data.startsWith('sug_app_rar:')) {
         const parts = data.replace('sug_app_rar:', '').split(':');
         const suggestionId = parts[0];
         const overrideRarity = parts[1];
@@ -595,11 +680,137 @@ export class TelegramNotificationService {
     }
   }
 
+  /**
+   * Resolve buffer de imagem a partir de caminho relativo, URL ou fallback por characterId
+   */
+  async resolveImageBuffer(
+    imageRef?: string | null,
+    characterId?: string | null
+  ): Promise<Buffer | null> {
+    if (!imageRef && !characterId) return null;
+
+    // 1. Se for URL http / https
+    if (imageRef && (imageRef.startsWith('http://') || imageRef.startsWith('https://'))) {
+      const mediaIdx = imageRef.indexOf('/media/');
+      if (mediaIdx !== -1) {
+        const relPath = imageRef.substring(mediaIdx + 7).split('?')[0];
+        try {
+          const localPath = path.resolve(config.MEDIA_DIR, relPath);
+          return await fs.readFile(localPath);
+        } catch (_) {}
+      }
+      try {
+        const res = await fetch(imageRef);
+        if (res.ok) {
+          const ab = await res.arrayBuffer();
+          return Buffer.from(ab);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Se for caminho em disco
+    if (imageRef) {
+      const cleanRef = imageRef.replace(/^\/+/, '');
+      const candidates = [
+        path.isAbsolute(imageRef) ? imageRef : path.resolve(config.MEDIA_DIR, cleanRef),
+        path.resolve(config.MEDIA_DIR, cleanRef),
+        path.resolve(config.MEDIA_DIR, 'characters', cleanRef),
+        path.resolve(config.MEDIA_DIR, 'uploads', 'characters', cleanRef),
+        path.resolve(config.MEDIA_DIR, 'suggestions', cleanRef),
+      ];
+      for (const p of candidates) {
+        try {
+          return await fs.readFile(p);
+        } catch (_) {}
+      }
+    }
+
+    // 3. Fallback usando characterId
+    if (characterId) {
+      const charCandidates = [
+        path.resolve(config.MEDIA_DIR, 'characters', characterId, 'default.jpg'),
+        path.resolve(config.MEDIA_DIR, 'uploads', 'characters', characterId, 'default.jpg'),
+        path.resolve(config.MEDIA_DIR, 'characters', characterId, '0.jpg'),
+      ];
+      for (const p of charCandidates) {
+        try {
+          return await fs.readFile(p);
+        } catch (_) {}
+      }
+
+      try {
+        const dir = path.resolve(config.MEDIA_DIR, 'characters', characterId);
+        const files = await fs.readdir(dir);
+        for (const file of files) {
+          if (/\.(jpe?g|png|webp|gif)$/i.test(file)) {
+            return await fs.readFile(path.join(dir, file));
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  /**
+   * Envia 2 fotos lado a lado no Telegram como grupo de mídia (álbum)
+   */
+  async sendComparisonMediaGroup(
+    currPhotoBuffer: Buffer,
+    newPhotoBuffer: Buffer,
+    currCaption = '🖼️ <b>Foto 1: Foto Atual no Catálogo</b>',
+    newCaption = '✨ <b>Foto 2: Nova Foto Sugerida (Substituta)</b>'
+  ): Promise<{ messageIds: number[]; chatId: string } | null> {
+    if (!this.botToken || !this.chatId) return null;
+    try {
+      const url = `https://api.telegram.org/bot${this.botToken}/sendMediaGroup`;
+      const form = new FormData();
+      form.append('chat_id', this.chatId);
+      form.append(
+        'media',
+        JSON.stringify([
+          {
+            type: 'photo',
+            media: 'attach://photo_current',
+            caption: currCaption,
+            parse_mode: 'HTML',
+          },
+          {
+            type: 'photo',
+            media: 'attach://photo_new',
+            caption: newCaption,
+            parse_mode: 'HTML',
+          },
+        ])
+      );
+      form.append('photo_current', new Blob([new Uint8Array(currPhotoBuffer)]), 'current.png');
+      form.append('photo_new', new Blob([new Uint8Array(newPhotoBuffer)]), 'suggested.png');
+
+      const res = await fetch(url, {
+        method: 'POST',
+        body: form,
+      });
+      const data = (await res.json()) as any;
+      if (data?.ok && Array.isArray(data.result) && data.result.length > 0) {
+        return {
+          messageIds: data.result.map((m: any) => m.message_id),
+          chatId: String(data.result[0].chat?.id || this.chatId),
+        };
+      } else {
+        console.error('[TelegramNotificationService] sendMediaGroup error:', data?.description || data);
+      }
+    } catch (err: any) {
+      console.error('[TelegramNotificationService] sendMediaGroup exception:', err?.message || err);
+    }
+    return null;
+  }
+
   private async sendMessage(
     text: string,
     replyMarkup?: any,
     replyToMessageId?: number
   ): Promise<{ messageId: number; chatId: string } | null> {
+    if (!this.botToken || !this.chatId) return null;
     try {
       const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
       const payload: any = {
@@ -624,14 +835,57 @@ export class TelegramNotificationService {
           messageId: data.result.message_id,
           chatId: String(data.result.chat?.id || this.chatId),
         };
+      } else {
+        console.error('[TelegramNotificationService] sendMessage error:', data?.description || data);
+        if (data?.description?.includes("can't parse entities")) {
+          payload.parse_mode = undefined;
+          const retryRes = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const retryData = (await retryRes.json()) as any;
+          if (retryData?.ok && retryData.result?.message_id) {
+            return {
+              messageId: retryData.result.message_id,
+              chatId: String(retryData.result.chat?.id || this.chatId),
+            };
+          }
+        }
       }
-    } catch (_) {}
+    } catch (err: any) {
+      console.error('[TelegramNotificationService] sendMessage exception:', err?.message || err);
+    }
     return null;
   }
 
   private async sendPhotoWithUrl(photoUrl: string, caption: string, replyMarkup: any): Promise<{ messageId: number; chatId: string } | null> {
+    if (!this.botToken || !this.chatId) return null;
     try {
       const url = `https://api.telegram.org/bot${this.botToken}/sendPhoto`;
+
+      // Se a legenda for maior que o limite de 1024 caracteres do Telegram, envia a foto com cabeçalho limpo e o texto completo logo após
+      if (caption.length > 1000) {
+        const cleanText = caption.replace(/<[^>]*>/g, '');
+        const shortCaption = `💡 <b>Sugestão de Alteração</b>\n\n${this.escapeHtml(cleanText.slice(0, 600))}...\n\n<i>(Detalhes completos na mensagem a seguir)</i>`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: this.chatId,
+            photo: photoUrl,
+            caption: shortCaption,
+            parse_mode: 'HTML',
+          }),
+        });
+        const data = (await res.json()) as any;
+        if (!data?.ok) {
+          console.error('[TelegramNotificationService] sendPhotoWithUrl truncated error:', data?.description || data);
+          return null;
+        }
+        return await this.sendMessage(caption, replyMarkup);
+      }
+
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -649,16 +903,41 @@ export class TelegramNotificationService {
           messageId: data.result.message_id,
           chatId: String(data.result.chat?.id || this.chatId),
         };
+      } else {
+        console.error('[TelegramNotificationService] sendPhotoWithUrl error:', data?.description || data);
       }
-    } catch (_) {}
+    } catch (err: any) {
+      console.error('[TelegramNotificationService] sendPhotoWithUrl exception:', err?.message || err);
+    }
     return null;
   }
 
   private async sendPhotoWithBuffer(buffer: Buffer, caption: string, replyMarkup: any): Promise<{ messageId: number; chatId: string } | null> {
+    if (!this.botToken || !this.chatId) return null;
     try {
       const url = `https://api.telegram.org/bot${this.botToken}/sendPhoto`;
+
+      // Se a legenda for maior que o limite de 1024 caracteres do Telegram, envia a foto com cabeçalho limpo e o texto completo logo após
+      if (caption.length > 1000) {
+        const cleanText = caption.replace(/<[^>]*>/g, '');
+        const shortCaption = `💡 <b>Sugestão de Alteração</b>\n\n${this.escapeHtml(cleanText.slice(0, 600))}...\n\n<i>(Detalhes completos na mensagem a seguir)</i>`;
+        const form = new FormData();
+        form.append('chat_id', this.chatId);
+        form.append('caption', shortCaption);
+        form.append('parse_mode', 'HTML');
+        form.append('photo', new Blob([new Uint8Array(buffer)]), 'suggestion.png');
+
+        const res = await fetch(url, { method: 'POST', body: form });
+        const data = (await res.json()) as any;
+        if (!data?.ok) {
+          console.error('[TelegramNotificationService] sendPhoto with truncated caption failed:', data?.description || data);
+          return null;
+        }
+        return await this.sendMessage(caption, replyMarkup);
+      }
+
       const form = new FormData();
-      form.append('chat_id', this.chatId!);
+      form.append('chat_id', this.chatId);
       form.append('caption', caption);
       form.append('parse_mode', 'HTML');
       form.append('reply_markup', JSON.stringify(replyMarkup));
@@ -674,8 +953,12 @@ export class TelegramNotificationService {
           messageId: data.result.message_id,
           chatId: String(data.result.chat?.id || this.chatId),
         };
+      } else {
+        console.error('[TelegramNotificationService] sendPhoto error:', data?.description || data);
       }
-    } catch (_) {}
+    } catch (err: any) {
+      console.error('[TelegramNotificationService] sendPhoto exception:', err?.message || err);
+    }
     return null;
   }
 
@@ -718,7 +1001,18 @@ export class TelegramNotificationService {
       }
       if (!raw) return false;
 
-      const { chatId, messageId } = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const { chatId, messageId, albumMessageIds } = parsed;
+
+      // Deleta fotos do álbum se existirem
+      if (albumMessageIds && Array.isArray(albumMessageIds)) {
+        for (const mid of albumMessageIds) {
+          try {
+            await this.deleteMessage(chatId, mid);
+          } catch (_) {}
+        }
+      }
+
       if (chatId && messageId) {
         const deleted = await this.deleteMessage(chatId, messageId);
         await r.del(key);
@@ -761,7 +1055,18 @@ export class TelegramNotificationService {
       }
       if (!raw) return false;
 
-      const { chatId, messageId } = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const { chatId, messageId, albumMessageIds } = parsed;
+
+      // Deleta fotos do álbum se existirem
+      if (albumMessageIds && Array.isArray(albumMessageIds)) {
+        for (const mid of albumMessageIds) {
+          try {
+            await this.deleteMessage(chatId, mid);
+          } catch (_) {}
+        }
+      }
+
       if (chatId && messageId) {
         const deleted = await this.deleteMessage(chatId, messageId);
         await r.del(key);

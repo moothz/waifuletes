@@ -13,7 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx src/jobs/importManifest.ts",
     "test": "vitest run",
-    "bench": "tsx scripts/bench.ts"
+    "bench": "tsx scripts/bench.ts",
+    "forward:suggestions": "tsx scripts/forwardPendingSuggestionsToTelegram.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

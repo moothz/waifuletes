@@ -8,6 +8,7 @@ import { DomainError } from '../errors/DomainError.js';
 import { CharacterService, slugify } from './CharacterService.js';
 import { TelegramNotificationService } from './TelegramNotificationService.js';
 import { NotificationService } from './NotificationService.js';
+import { RarityAdvisorService } from './RarityAdvisorService.js';
 
 export type SuggestionBlockDuration = '24h' | '7d' | '30d' | 'forever';
 
@@ -22,6 +23,7 @@ export interface UserSuggestionBlockInfo {
 export class SuggestionService {
   private telegramService: TelegramNotificationService;
   private notificationService: NotificationService;
+  private rarityAdvisorService: RarityAdvisorService;
 
   constructor(
     private prisma: PrismaClient,
@@ -30,6 +32,7 @@ export class SuggestionService {
   ) {
     this.telegramService = new TelegramNotificationService(this.redis);
     this.notificationService = new NotificationService(this.prisma);
+    this.rarityAdvisorService = new RarityAdvisorService();
   }
 
   /**
@@ -277,6 +280,8 @@ export class SuggestionService {
           description: character.description,
           tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
+          rank: character.rank,
+          waifuRank: character.waifuRank,
         },
         marriedUser: marriageInfo.marriedUser,
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
@@ -348,9 +353,7 @@ export class SuggestionService {
         relPath = `suggestions/${fileName}`;
       }
 
-      const actionMetadata = (action === 'DELETE' || action === 'REPLACE')
-        ? JSON.stringify({ action, targetPhoto })
-        : null;
+      const actionMetadata = JSON.stringify({ action, targetPhoto: targetPhoto || null });
 
       const suggestion = await this.prisma.characterSuggestion.create({
         data: {
@@ -392,6 +395,8 @@ export class SuggestionService {
           description: character.description,
           tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
+          rank: character.rank,
+          waifuRank: character.waifuRank,
         },
         marriedUser: marriageInfo.marriedUser,
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
@@ -426,17 +431,21 @@ export class SuggestionService {
       throw new DomainError('REASON_REQUIRED', 'É obrigatório informar uma justificativa clara (mínimo de 5 caracteres) para as alterações.', 400);
     }
 
+    const curTagsNorm = [...(character.tags || [])].sort().join(',');
+    const sugTagsNorm = [...(data.suggestedTags || [])].sort().join(',');
+    const tagsChanged = data.suggestedTags !== undefined && sugTagsNorm !== curTagsNorm;
+
     const hasChanges = Boolean(
-      (data.suggestedName && data.suggestedName.trim() !== character.name) ||
-      (data.suggestedSeries && data.suggestedSeries.trim() !== character.series) ||
+      (data.suggestedName && data.suggestedName.trim() !== character.name.trim()) ||
+      (data.suggestedSeries && data.suggestedSeries.trim() !== character.series.trim()) ||
       (data.suggestedGender && data.suggestedGender !== character.gender) ||
-      (data.suggestedDescription !== undefined && data.suggestedDescription.trim() !== (character.description || '')) ||
+      (data.suggestedDescription !== undefined && data.suggestedDescription.trim() !== (character.description || '').trim()) ||
       (data.suggestedRarity && data.suggestedRarity !== character.baseRarity) ||
-      (data.suggestedTags && data.suggestedTags.length > 0)
+      tagsChanged
     );
 
     if (!hasChanges) {
-      throw new DomainError('NO_CHANGES', 'Nenhuma alteração foi sugerida em relação aos dados atuais do personagem.', 400);
+      throw new DomainError('NO_CHANGES', 'Nenhuma alteração foi sugerida em relação aos dados atuais do personagem. Altere ao menos um campo (nome, série, gênero, raridade, tags ou descrição) antes de enviar.', 400);
     }
 
     if (data.suggestedRarity === 'LEGENDARY') {
@@ -517,6 +526,8 @@ export class SuggestionService {
           description: character.description,
           tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
+          rank: character.rank,
+          waifuRank: character.waifuRank,
         },
         marriedUser: marriageInfo.marriedUser,
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
@@ -708,6 +719,8 @@ export class SuggestionService {
           description: character.description,
           tags: character.tags,
           imageUrl: this.characterService.getRandomImageUrl(character.id, character.imageUrls),
+          rank: character.rank,
+          waifuRank: character.waifuRank,
         },
         marriedUser: marriageInfo.marriedUser,
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
@@ -789,6 +802,17 @@ export class SuggestionService {
       });
     }
 
+    const advisorKeys = suggestions.map((s) => `suggestion:ai:${s.id}`);
+    const rawAdvisors = advisorKeys.length > 0 ? await this.redis.mget(advisorKeys) : [];
+    const advisorMap: Record<string, any> = {};
+    rawAdvisors.forEach((raw, idx) => {
+      if (raw) {
+        try {
+          advisorMap[suggestions[idx].id] = JSON.parse(raw);
+        } catch (_) {}
+      }
+    });
+
     return {
       total,
       page,
@@ -816,6 +840,7 @@ export class SuggestionService {
           series: s.series,
           description: s.description,
           actionData,
+          aiAdvisor: advisorMap[s.id] || null,
           currentRarity: s.currentRarity,
           suggestedRarity: s.suggestedRarity,
           suggestedName: s.suggestedName,
@@ -919,7 +944,12 @@ export class SuggestionService {
   /**
    * Aceita uma sugestão e aplica a alteração automaticamente
    */
-  async approveSuggestion(suggestionId: string, reviewedBy = 'admin', overrideRarity?: string) {
+  async approveSuggestion(
+    suggestionId: string,
+    reviewedBy = 'admin',
+    overrideRarity?: string,
+    overridePhotoAction?: 'ADD' | 'REPLACE'
+  ) {
     const suggestion = await this.prisma.characterSuggestion.findUnique({
       where: { id: suggestionId },
       include: { character: true },
@@ -1018,7 +1048,10 @@ export class SuggestionService {
         } catch (_) {}
       }
 
-      if (actionData?.action === 'DELETE' && actionData.targetPhoto) {
+      // Moderador pode forçar ação explícita (ADD ou REPLACE); senão respeita a proposta original
+      const effectiveAction = overridePhotoAction || actionData?.action || 'ADD';
+
+      if (effectiveAction === 'DELETE' && actionData?.targetPhoto) {
         const target = actionData.targetPhoto;
         const filtered = (suggestion.character.imageUrls || []).filter((img) =>
           img !== target && !img.endsWith(target) && !target.endsWith(img)
@@ -1029,7 +1062,7 @@ export class SuggestionService {
         });
         changesSummary.push('Foto removida da galeria');
         successMessage = `Foto de ${suggestion.character.name} removida com sucesso!`;
-      } else if (actionData?.action === 'REPLACE' && actionData.targetPhoto && suggestion.imageUrl) {
+      } else if (effectiveAction === 'REPLACE' && suggestion.imageUrl) {
         const sourcePath = path.resolve(config.MEDIA_DIR, suggestion.imageUrl);
         const uploadsDir = path.resolve(config.MEDIA_DIR, 'uploads', 'characters', suggestion.character.id);
         await fs.mkdir(uploadsDir, { recursive: true });
@@ -1040,11 +1073,17 @@ export class SuggestionService {
         try {
           await fs.copyFile(sourcePath, targetFilePath);
           const newRelPath = `uploads/characters/${suggestion.character.id}/${targetFileName}`;
-          const target = actionData.targetPhoto;
+          const target = actionData?.targetPhoto || suggestion.character.imageUrls[0];
           const currentList = [...(suggestion.character.imageUrls || [])];
-          const idx = currentList.findIndex((img) =>
-            img === target || img.endsWith(target) || target.endsWith(img)
-          );
+          let idx = -1;
+          if (target) {
+            idx = currentList.findIndex((img) =>
+              img === target || img.endsWith(target) || target.endsWith(img)
+            );
+          }
+          if (idx === -1 && currentList.length > 0) {
+            idx = 0; // Substitui a primeira foto se alvo não foi localizado ou não especificado
+          }
 
           if (idx !== -1) {
             currentList[idx] = newRelPath;
@@ -1062,7 +1101,7 @@ export class SuggestionService {
           throw new DomainError('IMAGE_APPLY_FAILED', `Falha ao processar substituição de imagem: ${err.message}`, 500);
         }
       } else if (suggestion.imageUrl) {
-        // ADD normal
+        // ADD normal: adiciona à galeria sem apagar nenhuma foto existente
         const sourcePath = path.resolve(config.MEDIA_DIR, suggestion.imageUrl);
         const uploadsDir = path.resolve(config.MEDIA_DIR, 'uploads', 'characters', suggestion.character.id);
         await fs.mkdir(uploadsDir, { recursive: true });
@@ -1073,7 +1112,7 @@ export class SuggestionService {
         try {
           await fs.copyFile(sourcePath, targetFilePath);
           const newRelPath = `uploads/characters/${suggestion.character.id}/${targetFileName}`;
-          const updatedImageUrls = [newRelPath, ...suggestion.character.imageUrls];
+          const updatedImageUrls = [newRelPath, ...(suggestion.character.imageUrls || [])];
 
           await this.prisma.character.update({
             where: { id: suggestion.character.id },
@@ -1459,5 +1498,80 @@ export class SuggestionService {
         } catch (_) {}
       }
     }
+  }
+
+  /**
+   * Obtém o parecer da IA salvo para uma sugestão ou avalia sob demanda
+   */
+  async getOrEvaluateAiAdvisor(suggestionId: string, refresh = false) {
+    if (!refresh && this.redis) {
+      try {
+        const cached = await this.redis.get(`suggestion:ai:${suggestionId}`);
+        if (cached) {
+          return JSON.parse(cached);
+        }
+      } catch (_) {}
+    }
+
+    const suggestion = await this.prisma.characterSuggestion.findUnique({
+      where: { id: suggestionId },
+      include: {
+        character: true,
+        user: true,
+      },
+    });
+
+    if (!suggestion) {
+      throw new DomainError('SUGGESTION_NOT_FOUND', 'Sugestão não encontrada.', 404);
+    }
+
+    const marriageInfo = suggestion.characterId && suggestion.userId
+      ? await this.getCharacterMarriage(suggestion.characterId, suggestion.userId)
+      : { marriedUser: null, isMarriedToSuggester: false };
+
+    let actionData: { action?: string; targetPhoto?: string } | null = null;
+    if (suggestion.type === 'IMAGE' && suggestion.description) {
+      try {
+        actionData = JSON.parse(suggestion.description);
+      } catch (_) {}
+    }
+
+    const notifyData = {
+      id: suggestion.id,
+      type: suggestion.type,
+      characterId: suggestion.characterId,
+      characterName: suggestion.character?.name || suggestion.characterName,
+      series: suggestion.character?.series || suggestion.series,
+      currentRarity: suggestion.currentRarity || suggestion.character?.baseRarity,
+      suggestedRarity: suggestion.suggestedRarity,
+      suggestedName: suggestion.suggestedName,
+      suggestedSeries: suggestion.suggestedSeries,
+      suggestedGender: suggestion.suggestedGender,
+      suggestedDescription: suggestion.suggestedDescription,
+      suggestedTags: suggestion.suggestedTags,
+      photoAction: (actionData?.action as any) || (suggestion.type === 'IMAGE' ? 'ADD' : null),
+      targetPhoto: actionData?.targetPhoto || null,
+      reason: suggestion.reason,
+      imageUrl: suggestion.imageUrl,
+      userName: suggestion.user?.name || 'Usuário',
+      userId: suggestion.userId,
+      character: suggestion.character ? {
+        id: suggestion.character.id,
+        name: suggestion.character.name,
+        series: suggestion.character.series,
+        baseRarity: suggestion.character.baseRarity,
+        gender: suggestion.character.gender,
+        description: suggestion.character.description,
+        tags: suggestion.character.tags,
+        imageUrl: this.characterService.getRandomImageUrl(suggestion.character.id, suggestion.character.imageUrls),
+        rank: suggestion.character.rank,
+        waifuRank: suggestion.character.waifuRank,
+      } : null,
+      marriedUser: marriageInfo.marriedUser,
+      isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
+    };
+
+    const evaluation = await this.rarityAdvisorService.evaluateRaritySuggestion(notifyData, this.redis);
+    return evaluation;
   }
 }

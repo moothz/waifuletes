@@ -1,5 +1,15 @@
 import { config } from '../config.js';
 import type { SuggestionNotifyData } from './TelegramNotificationService.js';
+import type { Redis } from 'ioredis';
+
+export interface RarityAdvisorEvaluation {
+  response: string;
+  systemPrompt: string;
+  userPrompt: string;
+  searchedQueries: string[];
+  evaluatedAt: string;
+  mudaeRank?: number | null;
+}
 
 export class RarityAdvisorService {
   private url: string;
@@ -79,8 +89,9 @@ export class RarityAdvisorService {
 
   /**
    * Avalia a sugestão de raridade usando o modelo Hyperion Gemma 4 12B com ferramenta de busca web
+   * e regras oficiais de Rank do Mudae (Top 1000 = Lendário, 1001-3000 = Épico, 3001-10000 = Raro)
    */
-  async evaluateRaritySuggestion(data: SuggestionNotifyData): Promise<string | null> {
+  async evaluateRaritySuggestion(data: SuggestionNotifyData, redis?: Redis): Promise<RarityAdvisorEvaluation | null> {
     if (!this.url || !this.model) {
       return null;
     }
@@ -92,31 +103,59 @@ export class RarityAdvisorService {
     const reason = (data.reason || '').trim();
     const suggesterName = data.userName || 'Usuário Anônimo';
     const isMarried = Boolean(data.isMarriedToSuggester);
+    const mudaeRank = data.character?.rank;
+
+    let rankInfo = 'Não informado no banco de dados local (pesquise na web se necessário)';
+    if (mudaeRank && mudaeRank > 0) {
+      if (mudaeRank <= 1000) {
+        rankInfo = `#${mudaeRank} (Top 1000 ➔ Regra Oficial: LENDÁRIO)`;
+      } else if (mudaeRank <= 3000) {
+        rankInfo = `#${mudaeRank} (1001 a 3000 ➔ Regra Oficial: ÉPICO)`;
+      } else if (mudaeRank <= 10000) {
+        rankInfo = `#${mudaeRank} (3001 a 10000 ➔ Regra Oficial: RARO)`;
+      } else {
+        rankInfo = `#${mudaeRank} (Acima de 10000 ➔ Regra Oficial: Incomum ou Comum)`;
+      }
+    }
 
     const systemPrompt = `Você é um analista perito em cultura pop, animes, games e moderação de raridade para o jogo de coleção Waifuletes.
-Critérios oficiais de raridade do jogo:
-- COMMON (⚪ Comum): Figurantes, personagens de fundo, NPCs irrelevantes ou obras ultra-obscuras.
-- UNCOMMON (🟢 Incomum): Personagens secundários/coadjuvantes conhecidos em suas obras.
-- RARE (🔵 Raro): Protagonistas de obras menores/médias ou personagens principais de suporte em obras populares.
-- EPIC (🟣 Épico): Protagonistas muito famosos, ícones consagrados, líderes de grandes obras.
-- LEGENDARY (🟡 Lendário): O topo absoluto da cultura pop/anime/jogos mundiais, figuras lendárias históricas com fandom global massivo.
 
-Sua missão:
-1. Use a ferramenta web_search para pesquisar a verdadeira relevância do personagem, protagonismo, popularidade e biografia.
-2. Descubra se o motivo alegado pelo usuário é FATO ou se o usuário está MENTINDO / EXAGERANDO (ex: inventando feitos, fingindo que um coadjuvante é protagonista supremo, ou minimizando um ícone mundial).
-${isMarried ? '⚠️ ATENÇÃO CRÍTICA: O usuário que fez o pedido é CASADO com esse personagem no jogo! Verifique com rigor redobrado se há viés de interesse próprio para valorizar sua própria waifu.' : ''}
-3. Emita seu parecer técnico objetivo em formato HTML para o Telegram, seguindo RIGOROSAMENTE esta estrutura:
+TABELA OFICIAL DE RARIDADES E DIRETRIZES DE RANK MUDAE:
+- LEGENDARY (🟡 Lendário): O topo absoluto da cultura pop/anime/jogos mundiais, figuras lendárias históricas com fandom global massivo.
+  👉 REGRA DE OURO MUDAE: Personagens no TOP 1000 do Mudae (Rank 1 a 1000) SÃO OBRIGATORIAMENTE LENDÁRIOS.
+- EPIC (🟣 Épico): Protagonistas muito famosos, ícones consagrados, líderes de grandes obras populares.
+  👉 REGRA DE OURO MUDAE: Personagens com Rank Mudae entre 1001 e 3000 SÃO OBRIGATORIAMENTE ÉPICOS.
+- RARE (🔵 Raro): Protagonistas de obras menores/médias ou personagens principais de suporte em obras populares.
+  👉 REGRA DE OURO MUDAE: Personagens com Rank Mudae entre 3001 e 10000 SÃO OBRIGATORIAMENTE RAROS.
+- UNCOMMON (🟢 Incomum): Personagens secundários/coadjuvantes conhecidos em suas obras (Rank Mudae > 10000 ou sem rank de destaque).
+- COMMON (⚪ Comum): Figurantes, personagens de fundo, NPCs irrelevantes ou obras ultra-obscuras.
+
+SUA MISSÃO:
+1. CONSIDERE O RANK DO MUDAE DO PERSONAGEM:
+   - Se o Rank Mudae estiver informado no chamado, aplique com rigor as faixas oficiais:
+     • Top 1000 (1 a 1000): Recomende LEGENDARY.
+     • 1001 a 3000: Recomende EPIC.
+     • 3001 a 10000: Recomende RARE.
+     • Acima de 10000: Recomende UNCOMMON ou COMMON de acordo com a relevância.
+   - Se o rank não estiver informado no banco de dados local, você PODE e DEVE usar a ferramenta web_search pesquisando pelo personagem e seu rank/popularidade no bot Mudae (ex: "[Nome] mudae rank" ou "[Nome] [série] mudae") ou sua fama geral.
+2. CHECAGEM FACTUAL DE ALEGAÇÕES (FATO VS EXAGERO/MENTIRA):
+   - Pesquise a verdadeira relevância do personagem, protagonismo, popularidade e biografia.
+   - Descubra se o motivo alegado pelo usuário é FATO comprovado ou se o usuário está MENTINDO / EXAGERANDO (ex: inventando feitos, fingindo que um coadjuvante é protagonista supremo, ou minimizando um ícone mundial).
+${isMarried ? '3. ⚠️ ATENÇÃO CRÍTICA: O usuário que fez o pedido é CASADO com esse personagem no jogo! Verifique com rigor redobrado se há viés de interesse próprio para valorizar sua própria waifu.' : ''}
+4. Emita seu parecer técnico objetivo em formato HTML para o Telegram e Painel Admin, seguindo RIGOROSAMENTE esta estrutura:
 🤖 <b>Parecer da IA (Gemma 4 12B)</b>:
 
 🎯 <b>Veredito:</b> [PROCEDENTE | EXAGERO | FALSO/MENTIRA]
+🏆 <b>Rank Mudae:</b> [Ex: #842 (Top 1000 -> Lendário) | #1850 (1001-3000 -> Épico) | #6200 (3001-10000 -> Raro) | Acima de 10000 / Não encontrado (Incomum/Comum)]
 🔍 <b>Fatos Apurados:</b> (1 a 2 frases factuais sobre quem realmente é o personagem e seu papel na obra)
 ⚖️ <b>Checagem da Alegação:</b> (Análise se o motivo do usuário confere ou se está distorcido/falso)
-💡 <b>Raridade Recomendada:</b> [COMMON | UNCOMMON | RARE | EPIC | LEGENDARY] (breve explicação)`;
+💡 <b>Raridade Recomendada:</b> [COMMON | UNCOMMON | RARE | EPIC | LEGENDARY] (breve explicação alinhada ao rank do Mudae e à relevância)`;
 
     const userPrompt = `Personagem: ${charName}
 Série/Origem: ${series}
 Raridade Atual: ${currentRarity}
 Raridade Sugerida pelo Usuário: ${suggestedRarity}
+Rank Mudae (Waifuletes/Mudae): ${rankInfo}
 Motivo alegado pelo usuário: "${reason || '(Nenhum motivo fornecido)'}"
 Sugerido por: ${suggesterName}
 Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de interesse)' : 'NÃO'}`;
@@ -132,13 +171,13 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
         function: {
           name: 'web_search',
           description:
-            'Pesquisa na web por informações biográficas, relevância, popularidade e papel na trama de um personagem ou franquia.',
+            'Pesquisa na web por informações biográficas, relevância, popularidade, papel na trama e rank no bot Mudae (ex: "[Nome] mudae rank" ou "[Nome] [série]").',
           parameters: {
             type: 'object',
             properties: {
               query: {
                 type: 'string',
-                description: 'Termo de pesquisa (ex: "Eulerex How NOT to Summon a Demon Lord" ou "Kurt Cobain Nirvana")',
+                description: 'Termo de pesquisa (ex: "Rem Re:Zero mudae rank" ou "Goku Dragon Ball mudae kakera")',
               },
             },
             required: ['query'],
@@ -146,6 +185,8 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
         },
       },
     ];
+
+    const searchedQueries: string[] = [];
 
     try {
       const headers: Record<string, string> = {
@@ -200,6 +241,7 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
             if (args.query) query = args.query;
           } catch (_) {}
 
+          searchedQueries.push(query);
           const searchResult = await this.searchWeb(query);
           messages.push({
             role: 'tool',
@@ -231,12 +273,48 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
 
         const data2 = (await res2.json()) as any;
         const rawContent = data2.choices?.[0]?.message?.content?.trim() || null;
-        return rawContent ? this.cleanModelResponse(rawContent) : null;
+        const cleaned = rawContent ? this.cleanModelResponse(rawContent) : null;
+        if (!cleaned) return null;
+
+        const evaluation: RarityAdvisorEvaluation = {
+          response: cleaned,
+          systemPrompt,
+          userPrompt,
+          searchedQueries,
+          evaluatedAt: new Date().toISOString(),
+          mudaeRank: mudaeRank || null,
+        };
+
+        if (redis && data.id) {
+          try {
+            await redis.set(`suggestion:ai:${data.id}`, JSON.stringify(evaluation), 'EX', 30 * 86400);
+          } catch (_) {}
+        }
+
+        return evaluation;
       }
 
       // Se o modelo já respondeu diretamente
       const rawContent = choice1.message.content?.trim() || null;
-      return rawContent ? this.cleanModelResponse(rawContent) : null;
+      const cleaned = rawContent ? this.cleanModelResponse(rawContent) : null;
+      if (!cleaned) return null;
+
+      const evaluation: RarityAdvisorEvaluation = {
+        response: cleaned,
+        systemPrompt,
+        userPrompt,
+        searchedQueries,
+        evaluatedAt: new Date().toISOString(),
+        mudaeRank: mudaeRank || null,
+      };
+
+      if (redis && data.id) {
+        try {
+          await redis.set(`suggestion:ai:${data.id}`, JSON.stringify(evaluation), 'EX', 30 * 86400);
+        } catch (_) {}
+      }
+
+      return evaluation;
     } catch (err: any) {
       console.error('[RarityAdvisor] Erro na análise de raridade por LLM:', err?.message || err);
       return null;

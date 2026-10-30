@@ -734,23 +734,37 @@ function createSuggestionItem(s) {
     const sugDesc = (s.suggestedDescription || '').trim();
     const descChanged = s.suggestedDescription !== undefined && s.suggestedDescription !== null && sugDesc !== curDesc;
 
+    const hasAnyChange = nameChanged || seriesChanged || genderChanged || rarityChanged || tagsChanged || descChanged;
+
     bodyContent = `
       <div style="margin: 10px 0; background: #eff6ff; border: 1.5px solid #3b82f6; border-radius: 6px; padding: 12px;">
         <div style="font-weight: 800; font-size: 14px; margin-bottom: 8px; color: #1e40af;">
           📝 Sugestão de Edição de Dados do Personagem
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 13px;">
-          ${nameChanged ? `<div><strong>Nome:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.name || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedName)}</strong></div>` : ''}
-          ${seriesChanged ? `<div><strong>Série:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.series || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedSeries)}</strong></div>` : ''}
-          ${genderChanged ? `<div><strong>Gênero:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.gender || '(não definido)'}</span> ➔ <strong style="color: #2563eb;">${s.suggestedGender}</strong></div>` : ''}
-          ${rarityChanged ? `<div><strong>Raridade:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.baseRarity || ''}</span> ➔ <strong style="color: #2563eb;">${char.baseRarity} -> ${s.suggestedRarity}</strong></div>` : ''}
-          ${tagsChanged ? `<div><strong>Tags:</strong> <strong style="color: #2563eb;">${(char.tags || []).join(', ') || '(nenhuma)'} ➔ ${s.suggestedTags.join(', ')}</strong></div>` : ''}
-        </div>
-        ${descChanged ? `
-          <div style="margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #bfdbfe;">
-            <strong>Nova Descrição Sugerida:</strong><br>${escapeHtml(s.suggestedDescription)}
+        ${!hasAnyChange ? `
+          <div style="margin-bottom: 10px; background: #fef3c7; border: 1.5px solid #f59e0b; color: #92400e; padding: 10px; border-radius: 6px; font-size: 13px;">
+            <strong>⚠️ Nenhum campo com alteração direta detectada!</strong><br>
+            Os valores enviados para nome, série, gênero, raridade, tags e biografia são idênticos aos já cadastrados no catálogo.<br>
+            <span style="font-size: 12px; color: #78350f;">O usuário colocou a proposta/informação apenas na <strong>Justificativa</strong> abaixo.</span>
           </div>
-        ` : ''}
+          <div style="margin-bottom: 10px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #cbd5e1;">
+            <strong>Descrição / Biografia Atual no Catálogo:</strong><br>
+            <em style="color: #475569;">"${escapeHtml(char.description || s.suggestedDescription || 'Sem biografia cadastrada')}"</em>
+          </div>
+        ` : `
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 13px;">
+            ${nameChanged ? `<div><strong>Nome:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.name || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedName)}</strong></div>` : ''}
+            ${seriesChanged ? `<div><strong>Série:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.series || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedSeries)}</strong></div>` : ''}
+            ${genderChanged ? `<div><strong>Gênero:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.gender || '(não definido)'}</span> ➔ <strong style="color: #2563eb;">${s.suggestedGender}</strong></div>` : ''}
+            ${rarityChanged ? `<div><strong>Raridade:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.baseRarity || ''}</span> ➔ <strong style="color: #2563eb;">${char.baseRarity} -> ${s.suggestedRarity}</strong></div>` : ''}
+            ${tagsChanged ? `<div><strong>Tags:</strong> <strong style="color: #2563eb;">${(char.tags || []).join(', ') || '(nenhuma)'} ➔ ${s.suggestedTags.join(', ')}</strong></div>` : ''}
+          </div>
+          ${descChanged ? `
+            <div style="margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #bfdbfe;">
+              <strong>Nova Descrição Sugerida:</strong><br>${escapeHtml(s.suggestedDescription)}
+            </div>
+          ` : ''}
+        `}
         <div style="margin-top: 8px; font-size: 13px; font-weight: 600; color: #334155;">
           <strong>Justificativa do Usuário:</strong> <em>"${escapeHtml(s.reason || 'Sem justificativa')}"</em>
         </div>
@@ -771,8 +785,9 @@ function createSuggestionItem(s) {
               </div>
             </div>
             <div style="flex: 1; min-width: 200px;">
-              <span style="background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">🗑️ SUGESTÃO DE EXCLUSÃO DE FOTO</span>
-              <p style="font-size: 13px; color: #475569; margin-top: 8px;"><strong>Motivo informado:</strong> <em>"${escapeHtml(s.reason || 'Foto incorreta ou com problema.')}"</em></p>
+              <span style="background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">🗑️ SUGESTÃO: EXCLUSÃO DE FOTO</span>
+              <p style="font-size: 13px; color: #1e293b; margin-top: 6px;">O usuário sugeriu <strong>excluir</strong> uma foto da galeria do personagem.</p>
+              <p style="font-size: 13px; color: #475569; margin-top: 6px;"><strong>Motivo informado:</strong> <em>"${escapeHtml(s.reason || 'Foto incorreta ou com problema.')}"</em></p>
               <div style="margin-top: 8px; font-size: 12px; color: #b91c1c; font-weight: bold; background: #fee2e2; padding: 6px 10px; border-radius: 4px; border: 1px solid #fca5a5;">
                 Ao aceitar, esta foto específica será desvinculada do personagem.
               </div>
@@ -783,46 +798,54 @@ function createSuggestionItem(s) {
     } else if (act === 'REPLACE') {
       const targetSrc = target ? (target.startsWith('http') ? target : `/media/${target}`) : (char.imageUrl || '/media/characters/default.jpg');
       bodyContent = `
-        <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
+        <div style="margin: 10px 0; background: #eff6ff; border: 1.5px solid #3b82f6; border-radius: 6px; padding: 12px;">
           <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
             <div>
-              <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Antiga (a substituir):</span>
-              <div style="width: 100px; aspect-ratio: 9/14; border: 1.5px solid #2d241e; border-radius: 4px; overflow: hidden; opacity: 0.7;">
+              <span style="font-size: 12px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Foto Atual (a ser substituída):</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 1.5px solid #2d241e; border-radius: 4px; overflow: hidden; opacity: 0.75;">
                 <img src="${targetSrc}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
             </div>
             <div>
-              <span style="font-size: 12px; font-weight: 800; color: #22c55e; display: block; margin-bottom: 4px;">✨ Nova Foto Sugerida:</span>
-              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #22c55e; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
+              <span style="font-size: 12px; font-weight: 800; color: #2563eb; display: block; margin-bottom: 4px;">🔄 Nova Foto Sugerida (Troca):</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #2563eb; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
                 <img src="${s.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
             </div>
             <div style="flex: 1; min-width: 200px;">
-              <span style="background: #3b82f6; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">🔄 SUGESTÃO DE SUBSTITUIÇÃO</span>
-              <p style="font-size: 13px; color: #475569; margin-top: 8px;"><strong>Motivo informado:</strong> <em>"${escapeHtml(s.reason || 'Substituição de foto.')}"</em></p>
+              <span style="background: #2563eb; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">🔄 SUGESTÃO: TROCAR FOTO ATUAL</span>
+              <p style="font-size: 13px; color: #1e293b; margin-top: 6px;">O usuário sugeriu <strong>SUBSTITUIR</strong> a foto atual do personagem por esta nova foto enviada.</p>
+              <p style="font-size: 13px; color: #475569; margin-top: 6px;"><strong>Motivo informado:</strong> <em>"${escapeHtml(s.reason || 'Substituição de foto.')}"</em></p>
+              <div style="margin-top: 8px; font-size: 12px; color: #1d4ed8; font-weight: 600; background: #dbeafe; padding: 6px 10px; border-radius: 4px; border: 1px solid #bfdbfe;">
+                💡 Você pode aceitar substituindo a foto atual OU forçar adicioná-la como foto nova na galeria pelos botões abaixo.
+              </div>
             </div>
           </div>
         </div>
       `;
     } else {
       bodyContent = `
-        <div style="margin: 10px 0; background: #fffdf5; border: 1.5px solid #2d241e; border-radius: 6px; padding: 12px;">
+        <div style="margin: 10px 0; background: #f0fdf4; border: 1.5px solid #22c55e; border-radius: 6px; padding: 12px;">
           <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
             <div>
-              <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Atual:</span>
+              <span style="font-size: 12px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Foto Atual:</span>
               <div style="width: 100px; aspect-ratio: 9/14; border: 1.5px solid #2d241e; border-radius: 4px; overflow: hidden;">
                 <img src="${char.imageUrl || '/media/characters/default.jpg'}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
             </div>
             <div>
-              <span style="font-size: 12px; font-weight: 700; display: block; margin-bottom: 4px;">Foto Sugerida (Recortada):</span>
-              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #e11d48; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
+              <span style="font-size: 12px; font-weight: 800; color: #16a34a; display: block; margin-bottom: 4px;">➕ Nova Foto Sugerida (Adição):</span>
+              <div style="width: 100px; aspect-ratio: 9/14; border: 2px solid #16a34a; border-radius: 4px; overflow: hidden; box-shadow: 2px 2px 0px #2d241e;">
                 <img src="${s.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;">
               </div>
             </div>
             <div style="flex: 1; min-width: 200px;">
-              <span style="font-size: 13px; font-weight: 700;">Comentário:</span>
-              <p style="font-size: 13px; color: #475569; margin-top: 4px;"><em>"${escapeHtml(s.reason || 'Sem comentário')}"</em></p>
+              <span style="background: #16a34a; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 4px;">➕ SUGESTÃO: ADICIONAR NOVA FOTO</span>
+              <p style="font-size: 13px; color: #1e293b; margin-top: 6px;">O usuário sugeriu <strong>ADICIONAR</strong> esta foto à galeria do personagem (mantendo a foto atual).</p>
+              <p style="font-size: 13px; color: #475569; margin-top: 6px;"><strong>Comentário / Motivo:</strong> <em>"${escapeHtml(s.reason || 'Sem comentário')}"</em></p>
+              <div style="margin-top: 8px; font-size: 12px; color: #15803d; font-weight: 600; background: #dcfce7; padding: 6px 10px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                💡 Você pode aceitar adicionando como nova foto OU forçar a troca da foto atual pelos botões abaixo.
+              </div>
             </div>
           </div>
         </div>
@@ -932,11 +955,105 @@ function createSuggestionItem(s) {
     }
   }
 
+  let aiAdvisorHtml = '';
+  if (s.aiAdvisor) {
+    aiAdvisorHtml = `
+      <div style="margin: 10px 0; background: #fdf4ff; border: 1.5px solid #d946ef; border-radius: 6px; padding: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleAiAdvisor('${s.id}')">
+          <div style="font-weight: 800; font-size: 13px; color: #86198f; display: flex; align-items: center; gap: 6px;">
+            <i class="fas fa-robot"></i> 🤖 Parecer da IA (Gemma 4 12B)
+            <span style="font-size: 11px; background: #fae8ff; color: #a21caf; border: 1px solid #e879f9; padding: 1px 6px; border-radius: 4px; font-weight: 700;">Rank Mudae integrado</span>
+          </div>
+          <button class="btn-retro btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="event.stopPropagation(); toggleAiAdvisor('${s.id}')">
+            <i class="fas fa-chevron-down" id="ai-arrow-${s.id}"></i> Ver Parecer & Prompt
+          </button>
+        </div>
+        <div id="ai-advisor-content-${s.id}" class="hidden" style="margin-top: 10px; border-top: 1px dashed #e879f9; padding-top: 8px;">
+          <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 4px; padding: 10px; font-size: 13px; line-height: 1.5;">
+            ${s.aiAdvisor.response}
+          </div>
+          <details style="margin-top: 8px; font-size: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 6px 8px;">
+            <summary style="font-weight: 700; color: #7e22ce; cursor: pointer;">
+              📜 Ver Prompt de IA Enviado ao Modelo
+            </summary>
+            <div style="margin-top: 6px; font-family: monospace; font-size: 11px; white-space: pre-wrap; background: #f3e8ff; padding: 8px; border-radius: 4px; color: #3b0764; max-height: 250px; overflow-y: auto;">
+<strong>--- SYSTEM PROMPT ---</strong>
+${escapeHtml(s.aiAdvisor.systemPrompt || '')}
+
+<strong>--- USER PROMPT ---</strong>
+${escapeHtml(s.aiAdvisor.userPrompt || '')}
+${s.aiAdvisor.searchedQueries?.length ? `\n<strong>--- BUSCAS WEB REALIZADAS ---</strong>\n${escapeHtml(s.aiAdvisor.searchedQueries.join('\n'))}` : ''}
+            </div>
+          </details>
+        </div>
+      </div>
+    `;
+  } else if (s.type === 'RARITY' || s.suggestedRarity || s.type === 'EDIT' || s.type === 'NEW_CHARACTER') {
+    aiAdvisorHtml = `
+      <div style="margin: 8px 0;" id="ai-advisor-container-${s.id}">
+        <button class="btn-retro btn-sm" style="font-size: 11px; background: #fdf4ff; border-color: #d946ef; color: #86198f; font-weight: 700;" onclick="fetchAiAdvisor('${s.id}')" id="btn-ai-${s.id}">
+          <i class="fas fa-robot"></i> 🤖 Consultar Parecer da IA (Rank Mudae)
+        </button>
+      </div>
+    `;
+  }
+
+  let actionButtonsHtml = '';
+  if (isPending) {
+    if (s.type === 'IMAGE' && s.imageUrl) {
+      const isReplaceProposal = s.actionData?.action === 'REPLACE';
+      const proposedLabel = isReplaceProposal ? 'Trocar' : 'Adicionar';
+      actionButtonsHtml = `
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+          <button class="btn-retro btn-sm btn-danger" onclick="rejectSuggestion('${s.id}')">
+            <i class="fas fa-times"></i> Recusar
+          </button>
+          <button class="btn-retro btn-sm" style="background: #2563eb; color: #fff; font-weight: 700;" onclick="approveSuggestion('${s.id}', { overridePhotoAction: 'ADD' })" title="Adiciona como foto nova na galeria do personagem sem remover a foto atual">
+            <i class="fas fa-plus"></i> Aceitar (Nova Foto)
+          </button>
+          <button class="btn-retro btn-sm" style="background: #d97706; color: #fff; font-weight: 700;" onclick="approveSuggestion('${s.id}', { overridePhotoAction: 'REPLACE' })" title="Substitui a foto atual do personagem pela nova foto enviada">
+            <i class="fas fa-sync-alt"></i> Aceitar (Trocar Foto Atual)
+          </button>
+          <button class="btn-retro btn-sm btn-gold" onclick="approveSuggestion('${s.id}')" title="Aceita conforme a solicitação original (${proposedLabel})">
+            <i class="fas fa-check"></i> Aceitar Proposto (${proposedLabel})
+          </button>
+        </div>
+      `;
+    } else {
+      actionButtonsHtml = `
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
+          <button class="btn-retro btn-sm btn-danger" onclick="rejectSuggestion('${s.id}')">
+            <i class="fas fa-times"></i> Recusar
+          </button>
+          <button class="btn-retro btn-sm btn-gold" onclick="approveSuggestion('${s.id}')">
+            <i class="fas fa-check"></i> Aceitar e Aplicar
+          </button>
+        </div>
+      `;
+    }
+  } else {
+    actionButtonsHtml = `
+      <div style="display: flex; justify-content: flex-end; font-size: 12px; font-weight: 800; color: ${s.status === 'APPROVED' ? '#16a34a' : '#dc2626'};">
+        Status: ${s.status === 'APPROVED' ? 'APROVADA E APLICADA ✅' : 'RECUSADA ❌'}
+      </div>
+    `;
+  }
+
   card.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-      <div>
-        <strong style="font-size: 15px;">${escapeHtml(charTitle)}</strong>
-        <span style="font-size: 12px; color: #64748b; margin-left: 6px;">(${escapeHtml(charSeries)})</span>
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        ${(char.id || s.characterId) ? `
+          <a href="/character/${encodeURIComponent(char.id || s.characterId)}" target="_blank" rel="noopener noreferrer" style="color: #1d4ed8; text-decoration: none; font-size: 15px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px;" title="Abrir página do personagem em nova aba">
+            <span>${escapeHtml(charTitle)}</span>
+            <i class="fas fa-external-link-alt" style="font-size: 11px; opacity: 0.7;"></i>
+          </a>
+          <a href="/character/${encodeURIComponent(char.id || s.characterId)}" target="_blank" rel="noopener noreferrer" class="btn-retro btn-sm" style="font-size: 11px; padding: 2px 8px; text-decoration: none; background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; font-weight: 700;" title="Abrir página do personagem em nova aba">
+            <i class="fas fa-eye"></i> Ver Waifu
+          </a>
+        ` : `
+          <strong style="font-size: 15px;">${escapeHtml(charTitle)}</strong>
+        `}
+        <span style="font-size: 12px; color: #64748b;">(${escapeHtml(charSeries)})</span>
       </div>
       <div style="font-size: 12px; font-weight: 700; display: flex; align-items: center; flex-wrap: wrap;">
         <span>Sugerido por: <strong>${escapeHtml(userName)}</strong> em ${new Date(s.createdAt).toLocaleDateString('pt-BR')}</span>
@@ -948,20 +1065,9 @@ function createSuggestionItem(s) {
 
     ${bodyContent}
 
-    ${isPending ? `
-      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
-        <button class="btn-retro btn-sm btn-danger" onclick="rejectSuggestion('${s.id}')">
-          <i class="fas fa-times"></i> Recusar
-        </button>
-        <button class="btn-retro btn-sm btn-gold" onclick="approveSuggestion('${s.id}')">
-          <i class="fas fa-check"></i> Aceitar e Aplicar
-        </button>
-      </div>
-    ` : `
-      <div style="display: flex; justify-content: flex-end; font-size: 12px; font-weight: 800; color: ${s.status === 'APPROVED' ? '#16a34a' : '#dc2626'};">
-        Status: ${s.status === 'APPROVED' ? 'APROVADA E APLICADA ✅' : 'RECUSADA ❌'}
-      </div>
-    `}
+    ${aiAdvisorHtml}
+
+    ${actionButtonsHtml}
   `;
 
   return card;
@@ -1050,11 +1156,17 @@ async function approveAllSuggestions() {
   }
 }
 
-async function approveSuggestion(suggestionId) {
-  if (!confirm('Deseja aceitar esta sugestão e aplicar as alterações ao personagem imediatamente?')) return;
+async function approveSuggestion(suggestionId, options = {}) {
+  let confirmMsg = 'Deseja aceitar esta sugestão e aplicar as alterações ao personagem imediatamente?';
+  if (options.overridePhotoAction === 'ADD') {
+    confirmMsg = 'Confirmar aprovação ADICIONANDO como nova foto na galeria?';
+  } else if (options.overridePhotoAction === 'REPLACE') {
+    confirmMsg = 'Confirmar aprovação SUBSTITUINDO a foto atual pela nova foto enviada?';
+  }
+  if (!confirm(confirmMsg)) return;
 
   try {
-    const res = await Api.post(`/api/admin/suggestions/${suggestionId}/approve`, {}, {
+    const res = await Api.post(`/api/admin/suggestions/${suggestionId}/approve`, options, {
       'Authorization': `Bearer ${adminToken}`
     });
 
@@ -1067,6 +1179,96 @@ async function approveSuggestion(suggestionId) {
     loadSuggestions();
   } catch (err) {
     Api.showToast('Erro de comunicação ao aprovar.', '❌');
+  }
+}
+
+function toggleAiAdvisor(id) {
+  const content = document.getElementById(`ai-advisor-content-${id}`);
+  const arrow = document.getElementById(`ai-arrow-${id}`);
+  if (!content) return;
+  const isHidden = content.classList.contains('hidden');
+  if (isHidden) {
+    content.classList.remove('hidden');
+    if (arrow) {
+      arrow.classList.remove('fa-chevron-down');
+      arrow.classList.add('fa-chevron-up');
+    }
+  } else {
+    content.classList.add('hidden');
+    if (arrow) {
+      arrow.classList.remove('fa-chevron-up');
+      arrow.classList.add('fa-chevron-down');
+    }
+  }
+}
+
+async function fetchAiAdvisor(id, refresh = false) {
+  const container = document.getElementById(`ai-advisor-container-${id}`);
+  const btn = document.getElementById(`btn-ai-${id}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Consultando IA (Gemma 4 & Web)...';
+  }
+
+  try {
+    const res = await Api.get(`/api/admin/suggestions/${id}/ai-advisor${refresh ? '?refresh=true' : ''}`, {
+      'Authorization': `Bearer ${adminToken}`,
+    });
+
+    if (res.success && res.data) {
+      const adv = res.data;
+      if (container) {
+        container.innerHTML = `
+          <div style="background: #fdf4ff; border: 1.5px solid #d946ef; border-radius: 6px; padding: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleAiAdvisor('${id}')">
+              <div style="font-weight: 800; font-size: 13px; color: #86198f; display: flex; align-items: center; gap: 6px;">
+                <i class="fas fa-robot"></i> 🤖 Parecer da IA (Gemma 4 12B)
+                <span style="font-size: 11px; background: #fae8ff; color: #a21caf; border: 1px solid #e879f9; padding: 1px 6px; border-radius: 4px; font-weight: 700;">Rank Mudae integrado</span>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn-retro btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="event.stopPropagation(); fetchAiAdvisor('${id}', true)" title="Reconsultar IA">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="btn-retro btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="event.stopPropagation(); toggleAiAdvisor('${id}')">
+                  <i class="fas fa-chevron-up" id="ai-arrow-${id}"></i> Ocultar
+                </button>
+              </div>
+            </div>
+            <div id="ai-advisor-content-${id}" style="margin-top: 10px; border-top: 1px dashed #e879f9; padding-top: 8px;">
+              <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 4px; padding: 10px; font-size: 13px; line-height: 1.5;">
+                ${adv.response}
+              </div>
+              <details style="margin-top: 8px; font-size: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 6px 8px;">
+                <summary style="font-weight: 700; color: #7e22ce; cursor: pointer;">
+                  📜 Ver Prompt de IA Enviado ao Modelo
+                </summary>
+                <div style="margin-top: 6px; font-family: monospace; font-size: 11px; white-space: pre-wrap; background: #f3e8ff; padding: 8px; border-radius: 4px; color: #3b0764; max-height: 250px; overflow-y: auto;">
+<strong>--- SYSTEM PROMPT ---</strong>
+${escapeHtml(adv.systemPrompt || '')}
+
+<strong>--- USER PROMPT ---</strong>
+${escapeHtml(adv.userPrompt || '')}
+${adv.searchedQueries?.length ? `\n<strong>--- BUSCAS WEB REALIZADAS ---</strong>\n${escapeHtml(adv.searchedQueries.join('\n'))}` : ''}
+                </div>
+              </details>
+            </div>
+          </div>
+        `;
+      }
+      Api.showToast('Parecer da IA obtido com sucesso!', '🤖');
+    } else {
+      Api.showToast(res.error?.message || 'Falha ao obter parecer da IA.', '❌');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-robot"></i> 🤖 Consultar Parecer da IA (Rank Mudae)';
+      }
+    }
+  } catch (err) {
+    Api.showToast('Erro de comunicação ao consultar IA.', '❌');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-robot"></i> 🤖 Consultar Parecer da IA (Rank Mudae)';
+    }
   }
 }
 
