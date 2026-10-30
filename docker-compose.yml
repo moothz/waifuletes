@@ -64,20 +64,6 @@ services:
     networks:
       - waifuletes-net
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: waifuletes-tunnel
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - api
-    networks:
-      - waifuletes-net
-    profiles:
-      - tunnel
-
 volumes:
   postgres_data:
   redis_data:
