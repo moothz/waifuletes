@@ -3502,10 +3502,11 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
             <span style="color: var(--text-muted); font-size: 11px; margin-left: 4px;">(~${avgWeight}kg | Em estoque: ${count})</span>
             ${rareTag ? `<span style="color:#eab308;font-weight:bold;margin-left:4px;">${rareTag}</span>` : ''}
           </div>
-          <div class="retro-qty-control">
+          <div class="retro-qty-control" style="display: flex; gap: 4px; align-items: center;">
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFishGroupQty(${idx}, -1, ${count})">-</button>
-            <input type="text" inputmode="numeric" id="fish-group-qty-${idx}" value="0" readonly>
+            <input type="number" min="0" max="${count}" id="fish-group-qty-${idx}" value="0" style="width: 55px; text-align: center;" oninput="onInputOfferFishGroupQty(${idx}, ${count})">
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFishGroupQty(${idx}, 1, ${count})">+</button>
+            <button type="button" class="btn-retro btn-sm btn-gold" onclick="setOfferFishGroupAll(${idx}, ${count})" title="Oferecer tudo">Tudo</button>
           </div>
         </div>
       `;
@@ -3543,10 +3544,11 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
             ⚡ <strong>${escapeHtml(bg.name)}</strong>
             <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(bg.description)} <span style="font-weight:700;">(Estoque: ${count})</span></div>
           </div>
-          <div class="retro-qty-control">
+          <div class="retro-qty-control" style="display: flex; gap: 4px; align-items: center;">
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, -1, ${count})">-</button>
-            <input type="text" inputmode="numeric" id="buff-group-qty-${idx}" value="0" readonly>
+            <input type="number" min="0" max="${count}" id="buff-group-qty-${idx}" value="0" style="width: 55px; text-align: center;" oninput="onInputOfferBuffGroupQty(${idx}, ${count})">
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, 1, ${count})">+</button>
+            <button type="button" class="btn-retro btn-sm btn-gold" onclick="setOfferBuffGroupAll(${idx}, ${count})" title="Oferecer tudo">Tudo</button>
           </div>
         </div>
       `;
@@ -3567,10 +3569,11 @@ function openOfferModal(listingId, characterName, imageUrl, interest) {
             🌱 <strong>${escapeHtml(it.name || it.itemId)}</strong>
             <span style="color: var(--text-muted); margin-left: 6px;">(Em estoque: ${maxQty})</span>
           </div>
-          <div class="retro-qty-control">
+          <div class="retro-qty-control" style="display: flex; gap: 4px; align-items: center;">
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', -1, ${maxQty})">-</button>
-            <input type="text" inputmode="numeric" id="farm-qty-${it.itemId}" value="0" readonly>
+            <input type="number" min="0" max="${maxQty}" id="farm-qty-${it.itemId}" value="0" style="width: 55px; text-align: center;" oninput="onInputOfferFarmQty('${it.itemId}', ${maxQty})">
             <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', 1, ${maxQty})">+</button>
+            <button type="button" class="btn-retro btn-sm btn-gold" onclick="setOfferFarmAll('${it.itemId}', ${maxQty})" title="Oferecer tudo">Tudo</button>
           </div>
         </div>
       `;
@@ -3588,6 +3591,20 @@ function adjustOfferFishGroupQty(idx, delta, max) {
   input.value = val;
 }
 
+function setOfferFishGroupAll(idx, max) {
+  const input = document.getElementById(`fish-group-qty-${idx}`);
+  if (input) input.value = Math.max(0, max);
+}
+
+function onInputOfferFishGroupQty(idx, max) {
+  const input = document.getElementById(`fish-group-qty-${idx}`);
+  if (!input) return;
+  let val = parseInt(input.value, 10);
+  if (isNaN(val)) return;
+  if (val < 0) input.value = 0;
+  else if (val > max) input.value = max;
+}
+
 function adjustOfferBuffGroupQty(idx, delta, max) {
   const input = document.getElementById(`buff-group-qty-${idx}`);
   if (!input) return;
@@ -3596,12 +3613,40 @@ function adjustOfferBuffGroupQty(idx, delta, max) {
   input.value = val;
 }
 
+function setOfferBuffGroupAll(idx, max) {
+  const input = document.getElementById(`buff-group-qty-${idx}`);
+  if (input) input.value = Math.max(0, max);
+}
+
+function onInputOfferBuffGroupQty(idx, max) {
+  const input = document.getElementById(`buff-group-qty-${idx}`);
+  if (!input) return;
+  let val = parseInt(input.value, 10);
+  if (isNaN(val)) return;
+  if (val < 0) input.value = 0;
+  else if (val > max) input.value = max;
+}
+
 function adjustOfferFarmQty(itemId, delta, max) {
   const input = document.getElementById(`farm-qty-${itemId}`);
   if (!input) return;
   let val = parseInt(input.value, 10) || 0;
   val = Math.max(0, Math.min(max, val + delta));
   input.value = val;
+}
+
+function setOfferFarmAll(itemId, max) {
+  const input = document.getElementById(`farm-qty-${itemId}`);
+  if (input) input.value = Math.max(0, max);
+}
+
+function onInputOfferFarmQty(itemId, max) {
+  const input = document.getElementById(`farm-qty-${itemId}`);
+  if (!input) return;
+  let val = parseInt(input.value, 10);
+  if (isNaN(val)) return;
+  if (val < 0) input.value = 0;
+  else if (val > max) input.value = max;
 }
 
 function toggleFreeOffer(isFree) {
@@ -3743,7 +3788,10 @@ async function loadMySentOffers() {
         if (Array.isArray(offered.waifuIds) && offered.waifuIds.length > 0) parts.push(`${offered.waifuIds.length} waifu(s)`);
         if (Array.isArray(offered.fishes) && offered.fishes.length > 0) parts.push(`${offered.fishes.length} peixe(s)`);
         if (Array.isArray(offered.fishingBuffs) && offered.fishingBuffs.length > 0) parts.push(`${offered.fishingBuffs.length} buff(s)`);
-        if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) parts.push(`${offered.farmItems.length} item(ns) da fazenda`);
+        if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) {
+          const farmCount = offered.farmItems.reduce((acc, it) => acc + (Number(it.amount) || 1), 0);
+          parts.push(`${farmCount} item(ns) da fazenda`);
+        }
         if (offered.zinthos && Number(offered.zinthos) > 0) parts.push(`🪙 ${Number(offered.zinthos).toLocaleString('pt-BR')} zinthos`);
         summary = parts.join(', ') || 'Nenhum item';
       }
