@@ -45,13 +45,17 @@ const envSchema = z.object({
   INTERNAL_BASE_URL: z.string().default('http://localhost:3000'),
   PUBLIC_BASE_URL: z.string().default('http://localhost:3000'),
   RAVENA_API_URL: z.string().default(process.env.RAVENA_API_URL || 'http://172.22.0.1:5001'),
+  // Segredo compartilhado com a Ravena para as rotas internas /api/market/* (header X-Market-Secret).
+  // Deve ter o MESMO valor de MARKET_API_SECRET no .env da Ravena; sem ele a Ravena recusa (503).
+  MARKET_API_SECRET: z.string().optional(),
   JARDIM_API_URL: z.string().default(process.env.JARDIM_API_URL || 'http://172.22.0.1:3040'),
 
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
 
   HYPERION_LLM_URL: z.string().default(process.env.HYPERION_LLM_URL || 'http://192.168.195.212:16001/v1'),
-  HYPERION_LLM_KEY: z.string().default(process.env.HYPERION_LLM_KEY || '2orQzPoPJ1WDr6Ffv0gaBwcC'),
+  // Sem valor padrão: segredos nunca ficam no código. Configure HYPERION_LLM_KEY no .env.
+  HYPERION_LLM_KEY: z.string().default(process.env.HYPERION_LLM_KEY || ''),
   HYPERION_LLM_MODEL: z.string().default(process.env.HYPERION_LLM_MODEL || 'gemma4:12b-uncensored'),
 
   MEDIA_DIR: z.string().default(
@@ -79,6 +83,16 @@ const envSchema = z.object({
 });
 
 export const config = envSchema.parse(process.env);
+
+/**
+ * Headers para chamadas às rotas internas de mercado da Ravena (/api/market/*).
+ */
+export function ravenaMarketHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    ...extra,
+    ...(config.MARKET_API_SECRET ? { 'X-Market-Secret': config.MARKET_API_SECRET } : {}),
+  };
+}
 
 const rawKeys = config.API_KEYS || config.API_KEY || '';
 export const apiKeys = rawKeys

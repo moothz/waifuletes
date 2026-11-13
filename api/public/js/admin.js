@@ -530,7 +530,7 @@ function renderAdminPhotosGrid() {
 
     item.innerHTML = `
       <div style="aspect-ratio: 9/14; width: 100%; position: relative;">
-        <img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg'">
+        <img src="${escapeHtml(imgUrl)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg'">
         ${isPrimary ? '<span style="position: absolute; top: 4px; left: 4px; background: #eab308; color: #000; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 3px; border: 1px solid #000;">⭐ Principal</span>' : ''}
       </div>
       <div style="padding: 4px; background: #fff; border-top: 1px solid #2d241e; display: flex; flex-direction: column; gap: 3px;">
@@ -539,7 +539,7 @@ function renderAdminPhotosGrid() {
             ⭐ Tornar Principal
           </button>
         ` : ''}
-        <button type="button" class="btn-retro btn-sm" style="padding: 2px 4px; font-size: 10px; width: 100%;" onclick="triggerAdminReplacePhoto('${escapeAttr(imgUrl)}', ${idx})">
+        <button type="button" class="btn-retro btn-sm" style="padding: 2px 4px; font-size: 10px; width: 100%;" data-action="replace-photo">
           🔄 Substituir
         </button>
         <button type="button" class="btn-retro btn-sm btn-danger" style="padding: 2px 4px; font-size: 10px; width: 100%;" onclick="adminDeletePhoto(${idx})">
@@ -547,6 +547,7 @@ function renderAdminPhotosGrid() {
         </button>
       </div>
     `;
+    item.querySelector('[data-action="replace-photo"]').addEventListener('click', () => triggerAdminReplacePhoto(imgUrl, idx));
     container.appendChild(item);
   });
 }
@@ -837,9 +838,9 @@ function createSuggestionItem(s) {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 13px;">
             ${nameChanged ? `<div><strong>Nome:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.name || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedName)}</strong></div>` : ''}
             ${seriesChanged ? `<div><strong>Série:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.series || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedSeries)}</strong></div>` : ''}
-            ${genderChanged ? `<div><strong>Gênero:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.gender || '(não definido)'}</span> ➔ <strong style="color: #2563eb;">${s.suggestedGender}</strong></div>` : ''}
-            ${rarityChanged ? `<div><strong>Raridade:</strong> <span style="text-decoration: line-through; color: #64748b;">${char.baseRarity || ''}</span> ➔ <strong style="color: #2563eb;">${char.baseRarity} -> ${s.suggestedRarity}</strong></div>` : ''}
-            ${tagsChanged ? `<div><strong>Tags:</strong> <strong style="color: #2563eb;">${(char.tags || []).join(', ') || '(nenhuma)'} ➔ ${s.suggestedTags.join(', ')}</strong></div>` : ''}
+            ${genderChanged ? `<div><strong>Gênero:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.gender || '(não definido)')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(s.suggestedGender)}</strong></div>` : ''}
+            ${rarityChanged ? `<div><strong>Raridade:</strong> <span style="text-decoration: line-through; color: #64748b;">${escapeHtml(char.baseRarity || '')}</span> ➔ <strong style="color: #2563eb;">${escapeHtml(char.baseRarity)} -> ${escapeHtml(s.suggestedRarity)}</strong></div>` : ''}
+            ${tagsChanged ? `<div><strong>Tags:</strong> <strong style="color: #2563eb;">${escapeHtml((char.tags || []).join(', ') || '(nenhuma)')} ➔ ${escapeHtml(s.suggestedTags.join(', '))}</strong></div>` : ''}
           </div>
           ${descChanged ? `
             <div style="margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #bfdbfe;">
@@ -1027,13 +1028,13 @@ function createSuggestionItem(s) {
         <span style="background: #fee2e2; border: 1.5px solid #dc2626; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 800; margin-left: 6px;" title="Bloqueado de enviar sugestões">
           🚫 Bloqueado (${dur})
         </span>
-        <button class="btn-retro btn-sm" style="margin-left: 4px; font-size: 11px; padding: 2px 6px;" onclick="unblockUserSuggestions('${targetUserId}')" title="Desbloquear envio de sugestões deste usuário">
+        <button class="btn-retro btn-sm" style="margin-left: 4px; font-size: 11px; padding: 2px 6px;" data-action="unblock-user-suggestions" title="Desbloquear envio de sugestões deste usuário">
           <i class="fas fa-unlock"></i> Desbloquear
         </button>
       `;
     } else {
       userBlockHtml = `
-        <button class="btn-retro btn-sm btn-danger" style="margin-left: 6px; font-size: 11px; padding: 2px 6px;" onclick="openBlockSuggestionsModal('${targetUserId}', '${escapeHtml(userName)}')" title="Bloquear este usuário de enviar sugestões por suspeita de spam">
+        <button class="btn-retro btn-sm btn-danger" style="margin-left: 6px; font-size: 11px; padding: 2px 6px;" data-action="block-user-suggestions" title="Bloquear este usuário de enviar sugestões por suspeita de spam">
           <i class="fas fa-ban"></i> Bloquear
         </button>
       `;
@@ -1055,7 +1056,7 @@ function createSuggestionItem(s) {
         </div>
         <div id="ai-advisor-content-${s.id}" class="hidden" style="margin-top: 10px; border-top: 1px dashed #e879f9; padding-top: 8px;">
           <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 4px; padding: 10px; font-size: 13px; line-height: 1.5;">
-            ${s.aiAdvisor.response}
+            ${Api.sanitizeBasicHtml(s.aiAdvisor.response)}
           </div>
           <details style="margin-top: 8px; font-size: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 6px 8px;">
             <summary style="font-weight: 700; color: #7e22ce; cursor: pointer;">
@@ -1192,6 +1193,13 @@ ${s.aiAdvisor.searchedQueries?.length ? `\n<strong>--- BUSCAS WEB REALIZADAS ---
 
     ${actionButtonsHtml}
   `;
+
+  if (targetUserId) {
+    card.querySelector('[data-action="unblock-user-suggestions"]')
+      ?.addEventListener('click', () => unblockUserSuggestions(targetUserId));
+    card.querySelector('[data-action="block-user-suggestions"]')
+      ?.addEventListener('click', () => openBlockSuggestionsModal(targetUserId, userName));
+  }
 
   return card;
 }
@@ -1445,7 +1453,7 @@ async function fetchAiAdvisor(id, refresh = false) {
             </div>
             <div id="ai-advisor-content-${id}" style="margin-top: 10px; border-top: 1px dashed #e879f9; padding-top: 8px;">
               <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 4px; padding: 10px; font-size: 13px; line-height: 1.5;">
-                ${adv.response}
+                ${Api.sanitizeBasicHtml(adv.response)}
               </div>
               <details style="margin-top: 8px; font-size: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 6px 8px;">
                 <summary style="font-weight: 700; color: #7e22ce; cursor: pointer;">
@@ -1541,7 +1549,7 @@ async function loadAdminUsers() {
     });
 
     if (!res.success) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: red;">${res.error?.message || 'Erro ao carregar usuários.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: red;">${escapeHtml(res.error?.message || 'Erro ao carregar usuários.')}</td></tr>`;
       return;
     }
 
@@ -1566,7 +1574,7 @@ async function loadAdminUsers() {
       const domKey = (u.publicId || u.id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
       const platformBadge = u.platform === 'WHATSAPP'
         ? '<span style="color: #16a34a; font-weight: 700;"><i class="fab fa-whatsapp"></i> WhatsApp</span>'
-        : `<span style="font-weight: 700;">${u.platform}</span>`;
+        : `<span style="font-weight: 700;">${escapeHtml(u.platform)}</span>`;
 
       tr.innerHTML = `
         <td style="font-weight: 800;">
@@ -1579,46 +1587,61 @@ async function loadAdminUsers() {
         </td>
         <td style="text-align: center; font-weight: 800;">
           <span class="badge-rarity" style="position: static; border-color: #2563eb; color: #2563eb; display: inline-block;">
-            💍 ${u.totalHarem}
+            💍 ${Number(u.totalHarem || 0)}
           </span>
         </td>
         <td style="text-align: center; font-weight: 800;">
           <span class="badge-rarity" style="position: static; border-color: #f59e0b; color: #f59e0b; display: inline-block;">
-            ⭐ ${u.totalWishlist}
+            ⭐ ${Number(u.totalWishlist || 0)}
           </span>
         </td>
-        <td style="text-align: center;" id="zinthos-cell-${domKey}">
-          ${renderZinthosCell(u.id, domKey, u.kakera || 0)}
-        </td>
+        <td style="text-align: center;" id="zinthos-cell-${domKey}"></td>
         <td style="text-align: center;">
           <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; min-width: 250px; max-width: 320px; margin: 0 auto;">
-            <button class="btn-retro btn-sm" onclick="impersonateUser('${escapeHtml(u.id)}')" title="Acessar painel web deste usuário">
+            <button class="btn-retro btn-sm" data-action="impersonate" title="Acessar painel web deste usuário">
               <i class="fas fa-external-link-alt"></i> Painel
             </button>
-            <button class="btn-retro btn-sm btn-gold" onclick="openAdminMarryModal('${escapeHtml(u.id)}', '${escapeHtml(u.name)}')" title="Casar personagem com este usuário">
+            <button class="btn-retro btn-sm btn-gold" data-action="marry" title="Casar personagem com este usuário">
               <i class="fas fa-ring"></i> Casar
             </button>
-            <button class="btn-retro btn-sm btn-blue" onclick="adminResetRolls('${escapeHtml(u.id)}', '${escapeHtml(u.name)}')" title="Reseta o usuário para o máximo de rolls que ele pode ter">
+            <button class="btn-retro btn-sm btn-blue" data-action="reset-rolls" title="Reseta o usuário para o máximo de rolls que ele pode ter">
               <i class="fas fa-dice"></i> Rolls
             </button>
-            <button class="btn-retro btn-sm btn-emerald" onclick="adminResetClaimCooldowns('${escapeHtml(u.id)}', '${escapeHtml(u.name)}')" title="Reseta todos os cooldowns de casamento do usuário (liberando ele pra casar)">
+            <button class="btn-retro btn-sm btn-emerald" data-action="reset-claim-cooldowns" title="Reseta todos os cooldowns de casamento do usuário (liberando ele pra casar)">
               <i class="fas fa-clock"></i> Cds
             </button>
-            <button class="btn-retro btn-sm" style="background: #8b5cf6; color: #fff; font-weight: 800; border-color: #7c3aed;" onclick="openAdminMythicSlotsModal('${escapeHtml(u.id)}', '${escapeHtml(u.name)}', ${Number(u.mythicSlots || 0)})" title="Conceder slots de personagens míticos para este usuário (Atual: ${Number(u.mythicSlots || 0)} slots)">
+            <button class="btn-retro btn-sm" style="background: #8b5cf6; color: #fff; font-weight: 800; border-color: #7c3aed;" data-action="mythic-slots" title="Conceder slots de personagens míticos para este usuário (Atual: ${Number(u.mythicSlots || 0)} slots)">
               🔮 +Myt
             </button>
             ${u.isBlockedFromSuggestions ? `
-              <button class="btn-retro btn-sm" style="background: #16a34a; color: #fff; font-weight: 700;" onclick="unblockUserSuggestions('${escapeHtml(u.id)}')" title="Usuário bloqueado de enviar sugestões. Clique para desbloquear.">
+              <button class="btn-retro btn-sm" style="background: #16a34a; color: #fff; font-weight: 700;" data-action="unblock-suggestions" title="Usuário bloqueado de enviar sugestões. Clique para desbloquear.">
                 <i class="fas fa-unlock"></i> Desbloq.
               </button>
             ` : `
-              <button class="btn-retro btn-sm" style="background: #fee2e2; border-color: #ef4444; color: #dc2626; font-weight: 700;" onclick="openBlockSuggestionsModal('${escapeHtml(u.id)}', '${escapeHtml(u.name)}')" title="Bloquear envio de sugestões">
+              <button class="btn-retro btn-sm" style="background: #fee2e2; border-color: #ef4444; color: #dc2626; font-weight: 700;" data-action="block-suggestions" title="Bloquear envio de sugestões">
                 <i class="fas fa-ban"></i> Bloquear
               </button>
             `}
           </div>
         </td>
       `;
+
+      // Dados de jogadores (nome, id) chegam aos handlers via closure, nunca por JS inline
+      const userActions = {
+        'impersonate': () => impersonateUser(u.id),
+        'marry': () => openAdminMarryModal(u.id, u.name),
+        'reset-rolls': () => adminResetRolls(u.id, u.name),
+        'reset-claim-cooldowns': () => adminResetClaimCooldowns(u.id, u.name),
+        'mythic-slots': () => openAdminMythicSlotsModal(u.id, u.name, Number(u.mythicSlots || 0)),
+        'unblock-suggestions': () => unblockUserSuggestions(u.id),
+        'block-suggestions': () => openBlockSuggestionsModal(u.id, u.name),
+      };
+      tr.querySelectorAll('[data-action]').forEach((btn) => {
+        const handler = userActions[btn.dataset.action];
+        if (handler) btn.addEventListener('click', handler);
+      });
+
+      setZinthosCell(tr.querySelector('td[id^="zinthos-cell-"]'), u.id, domKey, u.kakera || 0);
       tbody.appendChild(tr);
     });
   } catch (err) {
@@ -1627,45 +1650,52 @@ async function loadAdminUsers() {
   }
 }
 
-function renderZinthosCell(userId, domKey, amount) {
-  const safeId = escapeHtml(String(userId));
-  const safeDomKey = escapeHtml(String(domKey));
+function setZinthosCell(cell, userId, domKey, amount) {
+  if (!cell) return;
   const numAmount = Number(amount || 0);
   const formatted = numAmount.toLocaleString('pt-BR');
-  return `
+  cell.innerHTML = `
     <div style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-      <span class="badge-rarity" style="position: static; border-color: #f59e0b; color: #b45309; background: #fef3c7; font-weight: 800; display: inline-block; cursor: pointer;" onclick="editUserZinthos('${safeId}', '${safeDomKey}', ${numAmount})" title="Clique para editar Zinthos">
-        🪙 ${formatted}
+      <span class="badge-rarity" data-action="edit-zinthos" style="position: static; border-color: #f59e0b; color: #b45309; background: #fef3c7; font-weight: 800; display: inline-block; cursor: pointer;" title="Clique para editar Zinthos">
+        🪙 ${escapeHtml(formatted)}
       </span>
-      <button class="btn-retro btn-sm" onclick="editUserZinthos('${safeId}', '${safeDomKey}', ${numAmount})" title="Editar Zinthos" style="padding: 2px 6px; font-size: 11px;">
+      <button class="btn-retro btn-sm" data-action="edit-zinthos" title="Editar Zinthos" style="padding: 2px 6px; font-size: 11px;">
         <i class="fas fa-edit"></i>
       </button>
     </div>
   `;
+  cell.querySelectorAll('[data-action="edit-zinthos"]').forEach((el) => {
+    el.addEventListener('click', () => editUserZinthos(userId, domKey, numAmount));
+  });
 }
 
 function editUserZinthos(userId, domKey, currentAmount) {
   const cell = document.getElementById(`zinthos-cell-${domKey}`);
   if (!cell) return;
 
-  const safeId = escapeHtml(String(userId));
   const safeDomKey = escapeHtml(String(domKey));
   const numAmount = Number(currentAmount || 0);
 
   cell.innerHTML = `
     <div style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
-      <input type="number" id="zinthos-input-${safeDomKey}" class="retro-input" value="${numAmount}" min="0" step="1" style="width: 105px; padding: 2px 6px; font-size: 12px; height: 28px; text-align: right;" onkeydown="handleZinthosKey(event, '${safeId}', '${safeDomKey}', ${numAmount})">
-      <button class="btn-retro btn-sm btn-gold" id="btn-save-zinthos-${safeDomKey}" onclick="saveUserZinthos('${safeId}', '${safeDomKey}')" title="Salvar Zinthos" style="padding: 2px 7px; font-size: 11px; height: 28px;">
+      <input type="number" id="zinthos-input-${safeDomKey}" class="retro-input" value="${numAmount}" min="0" step="1" style="width: 105px; padding: 2px 6px; font-size: 12px; height: 28px; text-align: right;">
+      <button class="btn-retro btn-sm btn-gold" id="btn-save-zinthos-${safeDomKey}" data-action="save-zinthos" title="Salvar Zinthos" style="padding: 2px 7px; font-size: 11px; height: 28px;">
         <i class="fas fa-check"></i>
       </button>
-      <button class="btn-retro btn-sm" onclick="cancelEditUserZinthos('${safeId}', '${safeDomKey}', ${numAmount})" title="Cancelar" style="padding: 2px 7px; font-size: 11px; height: 28px;">
+      <button class="btn-retro btn-sm" data-action="cancel-zinthos" title="Cancelar" style="padding: 2px 7px; font-size: 11px; height: 28px;">
         <i class="fas fa-times"></i>
       </button>
     </div>
   `;
 
+  cell.querySelector('[data-action="save-zinthos"]')
+    .addEventListener('click', () => saveUserZinthos(userId, domKey));
+  cell.querySelector('[data-action="cancel-zinthos"]')
+    .addEventListener('click', () => cancelEditUserZinthos(userId, domKey, numAmount));
+
   const input = document.getElementById(`zinthos-input-${domKey}`);
   if (input) {
+    input.addEventListener('keydown', (event) => handleZinthosKey(event, userId, domKey, numAmount));
     input.focus();
     input.select();
   }
@@ -1682,9 +1712,7 @@ function handleZinthosKey(event, userId, domKey, currentAmount) {
 }
 
 function cancelEditUserZinthos(userId, domKey, currentAmount) {
-  const cell = document.getElementById(`zinthos-cell-${domKey}`);
-  if (!cell) return;
-  cell.innerHTML = renderZinthosCell(userId, domKey, currentAmount);
+  setZinthosCell(document.getElementById(`zinthos-cell-${domKey}`), userId, domKey, currentAmount);
 }
 
 async function saveUserZinthos(userId, domKey) {
@@ -1725,10 +1753,7 @@ async function saveUserZinthos(userId, domKey) {
     }
 
     const updatedZinthos = res.data?.zinthos ?? newAmount;
-    const cell = document.getElementById(`zinthos-cell-${domKey}`);
-    if (cell) {
-      cell.innerHTML = renderZinthosCell(userId, domKey, updatedZinthos);
-    }
+    setZinthosCell(document.getElementById(`zinthos-cell-${domKey}`), userId, domKey, updatedZinthos);
     Api.showToast(`Saldo de Zinthos atualizado: ${Number(updatedZinthos).toLocaleString('pt-BR')} 🪙`, '✅');
   } catch (err) {
     console.error('Erro ao salvar Zinthos:', err);
@@ -1956,7 +1981,7 @@ async function loadAdminTrades() {
     });
 
     if (!res.success) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: red;">${res.error?.message || 'Erro ao carregar negociações.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: red;">${escapeHtml(res.error?.message || 'Erro ao carregar negociações.')}</td></tr>`;
       return;
     }
 
@@ -1983,12 +2008,12 @@ async function loadAdminTrades() {
       const cleanSellerNumber = (trade.seller?.id || '').replace('@s.whatsapp.net', '').replace('@c.us', '');
       const sellerPlatformBadge = trade.seller?.platform === 'WHATSAPP'
         ? '<span style="color: #16a34a; font-size: 11px;"><i class="fab fa-whatsapp"></i> WhatsApp</span>'
-        : `<small style="font-size: 11px;">${trade.seller?.platform || ''}</small>`;
+        : `<small style="font-size: 11px;">${escapeHtml(trade.seller?.platform || '')}</small>`;
 
       const cleanBuyerNumber = (trade.buyer?.id || '').replace('@s.whatsapp.net', '').replace('@c.us', '');
       const buyerPlatformBadge = trade.buyer?.platform === 'WHATSAPP'
         ? '<span style="color: #16a34a; font-size: 11px;"><i class="fab fa-whatsapp"></i> WhatsApp</span>'
-        : `<small style="font-size: 11px;">${trade.buyer?.platform || ''}</small>`;
+        : `<small style="font-size: 11px;">${escapeHtml(trade.buyer?.platform || '')}</small>`;
 
       // Character info
       const char = trade.character || {};
@@ -2023,7 +2048,7 @@ async function loadAdminTrades() {
           parts.push(`<div style="margin-top: 2px;"><strong>Buffs:</strong> ${offered.fishingBuffs.map(b => escapeHtml(b.originalName || b.type || 'Buff')).join(', ')}</div>`);
         }
         if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) {
-          parts.push(`<div style="margin-top: 2px;"><strong>Fazenda:</strong> ${offered.farmItems.map(it => `${it.amount}x ${escapeHtml(it.name || it.itemId)}`).join(', ')}</div>`);
+          parts.push(`<div style="margin-top: 2px;"><strong>Fazenda:</strong> ${offered.farmItems.map(it => `${Number(it.amount) || 0}x ${escapeHtml(it.name || it.itemId)}`).join(', ')}</div>`);
         }
         itemsHtml = parts.join('') || '<span style="color: var(--text-muted);">Sem itens</span>';
       }
@@ -2033,7 +2058,7 @@ async function loadAdminTrades() {
       if (trade.status === 'ACCEPTED') {
         statusHtml = '<span class="badge-rarity" style="position: static; border-color: #16a34a; color: #16a34a; font-weight: 800; display: inline-block;">Concluída</span>';
       } else if (trade.isReverted) {
-        statusHtml = `<span class="badge-rarity" style="position: static; border-color: #dc2626; color: #dc2626; font-weight: 800; display: inline-block;" title="${escapeAttr(trade.cancelReason || 'Revertida')}">Revertida</span>`;
+        statusHtml = `<span class="badge-rarity" style="position: static; border-color: #dc2626; color: #dc2626; font-weight: 800; display: inline-block;" title="${escapeHtml(trade.cancelReason || 'Revertida')}">Revertida</span>`;
       } else {
         statusHtml = `<span class="badge-rarity" style="position: static; border-color: #64748b; color: #64748b; font-weight: 700; display: inline-block;">${escapeHtml(trade.status)}</span>`;
       }
@@ -2042,7 +2067,7 @@ async function loadAdminTrades() {
       let actionHtml = '';
       if (trade.status === 'ACCEPTED') {
         actionHtml = `
-          <button class="btn-retro btn-sm btn-danger" onclick="adminRevertTrade('${escapeAttr(trade.id)}', '${escapeAttr(char.name || '')}', '${escapeAttr(trade.seller?.name || '')}', '${escapeAttr(trade.buyer?.name || '')}')" title="Reverter esta negociação e devolver os personagens e itens aos donos originais">
+          <button class="btn-retro btn-sm btn-danger" data-action="revert-trade" title="Reverter esta negociação e devolver os personagens e itens aos donos originais">
             <i class="fas fa-undo"></i> Reverter
           </button>
         `;
@@ -2059,7 +2084,7 @@ async function loadAdminTrades() {
         </td>
         <td>
           <div style="display: flex; align-items: center; gap: 10px;">
-            <img src="${escapeAttr(charImg)}" style="width: 44px; height: 56px; object-fit: cover; border-radius: 4px; border: 1.5px solid ${rarity.color};" onerror="this.src='/media/characters/default.jpg'">
+            <img src="${escapeHtml(charImg)}" style="width: 44px; height: 56px; object-fit: cover; border-radius: 4px; border: 1.5px solid ${rarity.color};" onerror="this.src='/media/characters/default.jpg'">
             <div>
               <div style="font-weight: 800; font-size: 14px; color: ${rarity.color};">${escapeHtml(char.name || char.id)}</div>
               <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(char.series || '')}</div>
@@ -2087,6 +2112,9 @@ async function loadAdminTrades() {
           ${actionHtml}
         </td>
       `;
+      tr.querySelector('[data-action="revert-trade"]')?.addEventListener('click', () => {
+        adminRevertTrade(trade.id, char.name || '', trade.seller?.name || '', trade.buyer?.name || '');
+      });
       tbody.appendChild(tr);
     });
   } catch (err) {
@@ -2149,13 +2177,8 @@ function closeModal(id) {
   if (el) el.classList.add('hidden');
 }
 
+// Escape HTML completo (texto e valores de atributo entre aspas). Para dados que
+// precisam chegar a handlers, use data-* + addEventListener em vez de JS inline.
 function escapeHtml(str) {
-  return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
-
-function escapeAttr(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '&quot;');
+  return Api.escapeHtml(str);
 }

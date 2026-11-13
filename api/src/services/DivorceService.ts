@@ -120,7 +120,7 @@ export class DivorceService {
    * canceladas com notificação para os compradores no próximo roll (buyerNotifiedStatus).
    * Deve rodar dentro da mesma transação do divórcio para garantir consistência.
    */
-  private async cancelCharacterListings(
+  async cancelCharacterListings(
     tx: Prisma.TransactionClient,
     userId: string,
     characterId: string,
@@ -155,7 +155,7 @@ export class DivorceService {
     return listingIds.length;
   }
 
-  private async getInflationMultiplier(): Promise<number> {
+  async getInflationMultiplier(): Promise<number> {
     if (this.marketInvestmentService) {
       try {
         const stats = await this.marketInvestmentService.getMacroStats();

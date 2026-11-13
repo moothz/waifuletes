@@ -85,6 +85,28 @@ export const ALL_RARITIES: Rarity[] = [
 // Mapeamento de bônus de rolls por ID ou número do usuário (ex: doadores / VIPs).
 const USER_ROLL_BUFFS: Record<string, number> = {};
 
+/**
+ * Incremento atômico de contador diário com TTL e piso em zero.
+ * KEYS[1] = chave; ARGV[1] = delta; ARGV[2] = TTL (s); ARGV[3] = "1" para float.
+ */
+const INCR_WITH_TTL_LUA = `
+local key = KEYS[1]
+local delta = tonumber(ARGV[1])
+local ttl = tonumber(ARGV[2])
+local current = tonumber(redis.call('GET', key) or '0') or 0
+local nextValue = current + delta
+if nextValue < 0 then nextValue = 0 end
+if ARGV[3] == '1' then
+  redis.call('SET', key, tostring(nextValue), 'KEEPTTL')
+else
+  redis.call('SET', key, tostring(math.floor(nextValue)), 'KEEPTTL')
+end
+if redis.call('TTL', key) < 0 then
+  redis.call('EXPIRE', key, ttl)
+end
+return tostring(nextValue)
+`;
+
 const CONSUME_ROLL_LUA = `
 local key = KEYS[1]
 local now = tonumber(ARGV[1])
@@ -380,6 +402,15 @@ export class CooldownService {
     };
   }
 
+  /**
+   * Libera apenas a trava/cooldown de claim de uma raridade (estorno de um casamento que falhou).
+   * Diferente de resetCooldown('claim'), NÃO zera os contadores diários de casamento/troca.
+   */
+  async releaseClaimCooldown(userId: string, rarity?: Rarity | string): Promise<void> {
+    const normRarity = rarity ? (String(rarity).toUpperCase() as Rarity) : undefined;
+    await this.redis.del(this.claimKey(userId, normRarity));
+  }
+
   async acquireClaimLock(userId: string, rarity?: Rarity | string, seconds?: number): Promise<boolean> {
     const normRarity = rarity ? (String(rarity).toUpperCase() as Rarity) : undefined;
     const cooldownSecs = seconds ?? this.getClaimCooldownSecondsForRarity(normRarity);
@@ -613,34 +644,30 @@ export class CooldownService {
     return { allowed: true, used, limit };
   }
 
+  /**
+   * Incrementa um contador diário e garante o TTL até o próximo reset no mesmo script atômico.
+   * Antes eram três comandos (INCR + TTL + EXPIRE): uma falha entre eles deixava a chave sem expiração
+   * e o jogador bloqueado no limite para sempre.
+   */
+  private async incrementDailyCounter(key: string, amount: number, isFloat: boolean): Promise<void> {
+    const ttl = Math.max(1, this.getDailyCycleInfo().secondsUntilReset);
+    await this.redis.eval(INCR_WITH_TTL_LUA, 1, key, String(amount), String(ttl), isFloat ? '1' : '0');
+  }
+
   async incrementDailyMarry(userId: string, rarity: Rarity, amount: number): Promise<void> {
-    const key = this.dailyMarryKey(userId, rarity);
-    const ttl = this.getDailyCycleInfo().secondsUntilReset;
-    await this.redis.incrbyfloat(key, amount);
-    const curTtl = await this.redis.ttl(key);
-    if (curTtl < 0) {
-      await this.redis.expire(key, ttl);
-    }
+    await this.incrementDailyCounter(this.dailyMarryKey(userId, rarity), amount, true);
   }
 
   async decrementDailyMarry(userId: string, rarity: Rarity, amount: number): Promise<void> {
-    const key = this.dailyMarryKey(userId, rarity);
-    await this.redis.incrbyfloat(key, -amount);
+    await this.incrementDailyCounter(this.dailyMarryKey(userId, rarity), -amount, true);
   }
 
   async incrementDailyTrade(userId: string, rarity: Rarity, count: number): Promise<void> {
-    const key = this.dailyTradeKey(userId, rarity);
-    const ttl = this.getDailyCycleInfo().secondsUntilReset;
-    await this.redis.incrby(key, count);
-    const curTtl = await this.redis.ttl(key);
-    if (curTtl < 0) {
-      await this.redis.expire(key, ttl);
-    }
+    await this.incrementDailyCounter(this.dailyTradeKey(userId, rarity), count, false);
   }
 
   async decrementDailyTrade(userId: string, rarity: Rarity, count: number): Promise<void> {
-    const key = this.dailyTradeKey(userId, rarity);
-    await this.redis.incrby(key, -count);
+    await this.incrementDailyCounter(this.dailyTradeKey(userId, rarity), -count, false);
   }
 
   async getDailyMarryStatus(userId: string): Promise<UserDailyMarryState> {

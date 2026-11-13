@@ -77,8 +77,13 @@ function matchesHaremCard(entry, searchText, rarityFilter) {
   if (rarityFilter) {
     const normFilter = rarityFilter.toUpperCase();
     if (normFilter === 'COVETED') {
-      const hasCovets = Number(entry.unseenCovetsCount || 0) > 0;
-      if (!hasCovets) return false;
+      // Cobiças ativas = PENDING + SEEN (IGNORED não conta). O backend ainda não envia
+      // essa contagem (totalCovetsCount inclui IGNORED); enquanto activeCovetsCount não
+      // existir, só é possível usar as não vistas (PENDING).
+      const activeCovets = entry.activeCovetsCount !== undefined && entry.activeCovetsCount !== null
+        ? Number(entry.activeCovetsCount)
+        : Number(entry.unseenCovetsCount || 0);
+      if (!(activeCovets > 0)) return false;
     } else {
       const r = (char.baseRarity || char.rarity || 'COMMON').toUpperCase();
       if (r !== normFilter) return false;
@@ -524,13 +529,9 @@ function setupEventListeners() {
   window.addEventListener('resize', () => {
     clearTimeout(marketResizeTimer);
     marketResizeTimer = setTimeout(() => {
-      if (typeof getMarketPageLimit === 'function') {
-        const newLimit = getMarketPageLimit();
-        if (newLimit !== marketState.limit) {
-          marketState.limit = newLimit;
-          if (marketState.page > 1) marketState.page = 1;
-          loadGlobalMarket();
-        }
+      if (typeof getMarketPageLimit === 'function' && getMarketPageLimit() !== marketState.limit) {
+        // loadGlobalMarket aplica o novo limite e volta para a página 1
+        loadGlobalMarket();
       }
     }, 250);
   });
@@ -1648,7 +1649,7 @@ function createPrivateHaremCard(entry, options = {}) {
 
   const isInCollection = Boolean(entry.collectionId);
   const colBtnHtml = isInCollection
-    ? `<button class="btn-retro btn-sm" style="width: 100%; border-color: #3b82f6; color: #3b82f6; font-weight: 800;" onclick="openAssignCollectionModal('${char.id}', '${escapeAttr(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${entry.collectionId || ''}')">
+    ? `<button class="btn-retro btn-sm" style="width: 100%; border-color: #3b82f6; color: #3b82f6; font-weight: 800;" data-action="assign-collection">
         📁 ${entry.collection ? `Pasta: ${escapeHtml(entry.collection.name)}` : 'Mover Pasta'}
       </button>`
     : '';
@@ -1663,7 +1664,7 @@ function createPrivateHaremCard(entry, options = {}) {
         <img decoding="async" src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)" loading="lazy">
       </div>
       <div class="card-info">
-        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeAttr(char.name)}">${escapeHtml(char.name)}</div>
+        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="mythic-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="🔮 Personagem Mítico">🔮 Mítico</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
@@ -1679,7 +1680,7 @@ function createPrivateHaremCard(entry, options = {}) {
         <img decoding="async" src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)" loading="lazy">
       </div>
       <div class="card-info">
-        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeAttr(char.name)}">${escapeHtml(char.name)}</div>
+        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="soulmate-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="💖 Alma Gêmea (Vínculo Máximo)">💖 Soulmate</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
@@ -1697,7 +1698,7 @@ function createPrivateHaremCard(entry, options = {}) {
         ${rarityBadgeHtml}
         ${entry.keys ? `<div class="badge-keys"><span>🔑</span> <span>${entry.keys}</span></div>` : ''}
         ${entry.isFavorite ? `<div class="badge-married" style="background: #ec4899; color: white; top: 8px; right: ${entry.keys ? '56px' : '8px'};">💖</div>` : ''}
-        ${unseenCovets > 0 ? `<div class="badge-covets" onclick="event.stopPropagation(); openHaremCovetsModal('${char.id}', '${escapeAttr(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeAttr(char.series || '')}')" title="${unseenCovets} jogador(es) interessados">👀 ${unseenCovets}</div>` : ''}
+        ${unseenCovets > 0 ? `<div class="badge-covets" data-action="open-covets" title="${unseenCovets} jogador(es) interessados">👀 ${unseenCovets}</div>` : ''}
         ${colBadgeHtml}
       </div>
       <div class="card-info">
@@ -1712,6 +1713,14 @@ function createPrivateHaremCard(entry, options = {}) {
       </div>
     `;
   }
+
+  bindDataActions(card, {
+    'assign-collection': () => openAssignCollectionModal(char.id, char.name, char.imageUrl || '/media/characters/default.jpg', entry.collectionId || ''),
+    'open-covets': (event) => {
+      event.stopPropagation();
+      openHaremCovetsModal(char.id, char.name, char.imageUrl || '/media/characters/default.jpg', char.series || '');
+    },
+  });
 
   const imgEl = card.querySelector('.card-img-wrapper img');
   if (imgEl) {
@@ -1741,7 +1750,7 @@ function openCardOptionsModal(charId) {
         <button class="btn-retro btn-sm" style="width: 100%; background: #ec4899; color: white; border-color: #db2777;" onclick="closeModal('modal-card-options'); toggleFavorite('${char.id}')">
           💖 ${entry.isFavorite ? 'Desfavoritar' : 'Favoritar'}
         </button>
-        <button class="btn-retro btn-sm" style="width: 100%; border-color: #3b82f6; color: #3b82f6; font-weight: 800;" onclick="closeModal('modal-card-options'); openAssignCollectionModal('${char.id}', '${escapeAttr(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${entry.collectionId || ''}')">
+        <button class="btn-retro btn-sm" style="width: 100%; border-color: #3b82f6; color: #3b82f6; font-weight: 800;" data-action="assign-collection">
           📁 ${entry.collection ? `Mudar de Pasta (${escapeHtml(entry.collection.name)})` : 'Mover para Coleção'}
         </button>
         <button class="btn-retro btn-sm btn-purple" style="width: 100%; font-weight: 800;" onclick="closeModal('modal-card-options'); openChoosePhotoModal('${char.id}')">
@@ -1750,10 +1759,11 @@ function openCardOptionsModal(charId) {
         <button class="btn-retro btn-sm btn-gold" style="width: 100%; font-weight: 800;" onclick="closeModal('modal-card-options'); openEditMythicModalById('${char.id}')">
           🔮 Editar Criação Mítica
         </button>
-        <button class="btn-retro btn-sm btn-danger" style="width: 100%; font-weight: 800;" onclick="closeModal('modal-card-options'); confirmDeleteMythic('${char.id}', '${escapeAttr(char.name)}')">
+        <button class="btn-retro btn-sm btn-danger" style="width: 100%; font-weight: 800;" data-action="delete-mythic">
           🗑️ Excluir Mítico & Liberar Slot
         </button>
       `;
+      bindCardOptionsActions(listEl, entry);
     }
     openModal('modal-card-options');
     return;
@@ -1773,7 +1783,7 @@ function openCardOptionsModal(charId) {
       💖 ${entry.isFavorite ? 'Desfavoritar' : 'Favoritar'}
     </button>
     <!-- 2. Coleção -->
-    <button class="btn-retro btn-sm" style="width: 100%; border-color: #3b82f6; color: #3b82f6; font-weight: 800;" onclick="closeModal('modal-card-options'); openAssignCollectionModal('${char.id}', '${escapeAttr(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${entry.collectionId || ''}')">
+    <button class="btn-retro btn-sm" style="width: 100%; border-color: #3b82f6; color: #3b82f6; font-weight: 800;" data-action="assign-collection">
       📁 ${entry.collection ? `Mudar de Pasta (${escapeHtml(entry.collection.name)})` : 'Mover para Coleção'}
     </button>
     <!-- 3. Escolher Foto -->
@@ -1791,15 +1801,15 @@ function openCardOptionsModal(charId) {
       </button>
     `}
     <!-- 5. Vender -->
-    <button class="btn-retro btn-sm btn-gold" style="width: 100%;" onclick="closeModal('modal-card-options'); openSellModal('${char.id}', '${escapeAttr(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeAttr(char.series || '')}')">
+    <button class="btn-retro btn-sm btn-gold" style="width: 100%;" data-action="sell">
       <i class="fas fa-tag"></i> 💰 Vender
     </button>
     <!-- 6. Divorciar -->
-    <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="closeModal('modal-card-options'); openDivorceModal('${char.id}', '${escapeAttr(char.name)}')">
+    <button class="btn-retro btn-sm btn-danger" style="width: 100%;" data-action="divorce">
       <i class="fas fa-heart-crack"></i> Divorciar
     </button>
     <!-- 7. Sugerir Mudança -->
-    <button class="btn-retro btn-sm" style="width: 100%;" onclick="closeModal('modal-card-options'); openSuggestModal('${char.id}', '${escapeAttr(char.name)}', '${char.baseRarity}')">
+    <button class="btn-retro btn-sm" style="width: 100%;" data-action="suggest">
       <i class="fas fa-lightbulb"></i> Sugerir Alterações
     </button>
   `;
@@ -1807,14 +1817,34 @@ function openCardOptionsModal(charId) {
   // 8. Interessados: Mostrar só se >0
   if (unseenCovets > 0 || totalCovets > 0) {
     html += `
-      <button class="btn-retro btn-sm ${covetsBtnClass}" style="width: 100%; ${covetsBtnStyle}" onclick="closeModal('modal-card-options'); openHaremCovetsModal('${char.id}', '${escapeAttr(char.name)}', '${char.imageUrl || '/media/characters/default.jpg'}', '${escapeAttr(char.series || '')}')">
+      <button class="btn-retro btn-sm ${covetsBtnClass}" style="width: 100%; ${covetsBtnStyle}" data-action="open-covets">
         <i class="fas fa-eye"></i> 👀 ${covetsLabel}
       </button>
     `;
   }
 
-  if (listEl) listEl.innerHTML = html;
+  if (listEl) {
+    listEl.innerHTML = html;
+    bindCardOptionsActions(listEl, entry);
+  }
   openModal('modal-card-options');
+}
+
+function bindCardOptionsActions(listEl, entry) {
+  const char = entry.character;
+  const img = char.imageUrl || '/media/characters/default.jpg';
+  const closeThen = (fn) => () => {
+    closeModal('modal-card-options');
+    fn();
+  };
+  bindDataActions(listEl, {
+    'assign-collection': closeThen(() => openAssignCollectionModal(char.id, char.name, img, entry.collectionId || '')),
+    'delete-mythic': closeThen(() => confirmDeleteMythic(char.id, char.name)),
+    'sell': closeThen(() => openSellModal(char.id, char.name, img, char.series || '')),
+    'divorce': closeThen(() => openDivorceModal(char.id, char.name)),
+    'suggest': closeThen(() => openSuggestModal(char.id, char.name, char.baseRarity)),
+    'open-covets': closeThen(() => openHaremCovetsModal(char.id, char.name, img, char.series || '')),
+  });
 }
 
 async function openChoosePhotoModal(charId) {
@@ -1875,11 +1905,14 @@ async function openChoosePhotoModal(charId) {
             <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
               Envie no WhatsApp para as Ravenas gerarem a foto do casal:
             </p>
-            <button class="btn-retro btn-sm btn-pink" onclick="copyTextToClipboard('${escapeAttr(data.marriage?.requestCommand || `!mu-foto ${charId}`)}')">
+            <button class="btn-retro btn-sm btn-pink" data-action="copy-request-command">
               <i class="fas fa-copy"></i> Copiar ${escapeHtml(data.marriage?.requestCommand || `!mu-foto ${charId}`)}
             </button>
           </div>
         `;
+        bindDataActions(marriageContainer, {
+          'copy-request-command': () => copyTextToClipboard(data.marriage?.requestCommand || `!mu-foto ${charId}`),
+        });
       }
     }
 
@@ -2037,7 +2070,7 @@ function renderCollectionsReorderList(collections) {
       </div>
       <div style="display: flex; align-items: center; gap: 6px;">
         <!-- Botão Editar Nome da Pasta -->
-        <button class="btn-retro btn-sm" style="padding: 4px 8px; font-size: 11px;" onclick="openEditCollectionModal('${col.id}', '${escapeAttr(col.name)}')" title="Editar nome da pasta">
+        <button class="btn-retro btn-sm" style="padding: 4px 8px; font-size: 11px;" data-action="edit-collection" title="Editar nome da pasta">
           <i class="fas fa-edit"></i>
         </button>
         <!-- Botão Olho (Privacidade) -->
@@ -2052,15 +2085,21 @@ function renderCollectionsReorderList(collections) {
           ▼
         </button>
         <!-- Adicionar waifus -->
-        <button class="btn-retro btn-sm btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="openBatchAddCharactersModal('${col.id}', '${escapeAttr(col.name)}')" title="Adicionar personagens">
+        <button class="btn-retro btn-sm btn-primary" style="padding: 4px 8px; font-size: 11px;" data-action="batch-add-collection" title="Adicionar personagens">
           <i class="fas fa-plus"></i>
         </button>
         <!-- Excluir pasta -->
-        <button class="btn-retro btn-sm btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="confirmDeleteCollection('${col.id}', '${escapeAttr(col.name)}')" title="Excluir pasta">
+        <button class="btn-retro btn-sm btn-danger" style="padding: 4px 8px; font-size: 11px;" data-action="delete-collection" title="Excluir pasta">
           <i class="fas fa-trash"></i>
         </button>
       </div>
     `;
+
+    bindDataActions(item, {
+      'edit-collection': () => openEditCollectionModal(col.id, col.name),
+      'batch-add-collection': () => openBatchAddCharactersModal(col.id, col.name),
+      'delete-collection': () => confirmDeleteCollection(col.id, col.name),
+    });
 
     // HTML5 Drag and Drop events
     item.addEventListener('dragstart', (e) => {
@@ -2222,16 +2261,16 @@ function renderPrivateHarem(harem) {
             ${col.isPrivate ? '<span class="badge-tag" style="background: #ef4444; color: #fff; font-weight: 800;"><i class="fas fa-eye-slash"></i> Privada</span>' : ''}
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-            <button class="btn-retro btn-sm btn-primary" onclick="openBatchAddCharactersModal('${col.id}', '${escapeAttr(col.name)}')">
+            <button class="btn-retro btn-sm btn-primary" data-action="batch-add-collection">
               <i class="fas fa-plus"></i> + Adicionar Personagens
             </button>
-            <button class="btn-retro btn-sm" onclick="openEditCollectionModal('${col.id}', '${escapeAttr(col.name)}')" title="Editar nome da pasta">
+            <button class="btn-retro btn-sm" data-action="edit-collection" title="Editar nome da pasta">
               <i class="fas fa-edit"></i> Editar Nome
             </button>
             <button class="btn-retro btn-sm ${col.isPrivate ? 'btn-danger' : ''}" onclick="toggleCollectionPrivacy('${col.id}')" title="${col.isPrivate ? 'Privada (oculta no público)' : 'Pública'}">
               <i class="fas ${col.isPrivate ? 'fa-eye-slash' : 'fa-eye'}"></i> ${col.isPrivate ? 'Privada' : 'Pública'}
             </button>
-            <button class="btn-retro btn-sm btn-danger" onclick="confirmDeleteCollection('${col.id}', '${escapeAttr(col.name)}')">
+            <button class="btn-retro btn-sm btn-danger" data-action="delete-collection">
               <i class="fas fa-trash"></i> Excluir Pasta
             </button>
           </div>
@@ -2239,6 +2278,13 @@ function renderPrivateHarem(harem) {
         ${col.description ? `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">${escapeHtml(col.description)}</div>` : ''}
         <div class="waifu-grid" id="col-grid-${col.id}"></div>
       `;
+
+      // Liga antes de anexar os cards (que têm seus próprios data-action)
+      bindDataActions(colCard, {
+        'batch-add-collection': () => openBatchAddCharactersModal(col.id, col.name),
+        'edit-collection': () => openEditCollectionModal(col.id, col.name),
+        'delete-collection': () => confirmDeleteCollection(col.id, col.name),
+      });
 
       const subGrid = colCard.querySelector(`#col-grid-${col.id}`);
       if (matchingColChars.length > 0) {
@@ -2463,7 +2509,7 @@ function renderPrivateWishlist(wishlist) {
               <button class="btn-retro btn-sm btn-danger" style="flex: 1;" onclick="removeFromWishlist('${char.id}')">
                 <i class="fas fa-times"></i> Remover
               </button>
-              <button class="btn-retro btn-sm" style="flex: 1;" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
+              <button class="btn-retro btn-sm" style="flex: 1;" data-action="suggest">
                 <i class="fas fa-lightbulb"></i> Sugerir
               </button>
             </div>
@@ -2475,6 +2521,10 @@ function renderPrivateWishlist(wishlist) {
           </div>
         </div>
       `;
+
+      bindDataActions(card, {
+        'suggest': () => openSuggestModal(char.id, char.name, char.baseRarity),
+      });
 
       const imgEl = card.querySelector('.card-img-wrapper img');
       if (imgEl) {
@@ -2540,7 +2590,7 @@ function createPublicHaremCard(entry) {
         <img decoding="async" src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)" loading="lazy">
       </div>
       <div class="card-info">
-        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeAttr(char.name)}">${escapeHtml(char.name)}</div>
+        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="mythic-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="🔮 Personagem Mítico">🔮 Mítico</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
       </div>
@@ -2551,7 +2601,7 @@ function createPublicHaremCard(entry) {
         <img decoding="async" src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)" loading="lazy">
       </div>
       <div class="card-info">
-        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeAttr(char.name)}">${escapeHtml(char.name)}</div>
+        <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="soulmate-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="💖 Alma Gêmea (Vínculo Máximo)">💖 Soulmate</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
       </div>
@@ -3401,7 +3451,7 @@ async function loadCatalogCharacters() {
         <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes e fotos">
           <img loading="lazy" decoding="async" src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
           ${!isMythic ? topBadgeHtml : ''}
-          ${!isMythic && isMarried ? `<div class="badge-married ${spousePublicId ? 'badge-married-link' : ''}" title="${marriedTooltip}">💍</div>` : ''}
+          ${!isMythic && isMarried ? `<div class="badge-married ${spousePublicId ? 'badge-married-link' : ''}" title="${escapeHtml(marriedTooltip)}">💍</div>` : ''}
           ${!isMythic ? `
             <div class="badge-wishes" data-char-id="${char.id}" title="${wishlistCount} pessoa(s) adicionaram à wishlist. Clique para alternar Wishlist" onclick="event.stopPropagation(); toggleWishlist('${char.id}', null, event)">
               <span>✨</span> <span>${wishlistCount}</span>
@@ -3436,16 +3486,21 @@ async function loadCatalogCharacters() {
                   </button>
                 `}
               ` : ''}
-              <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="openReportModal('${char.id}', '${escapeHtml(char.name)}')">
+              <button class="btn-retro btn-sm btn-danger" style="width: 100%;" data-action="report">
                 <i class="fas fa-ban"></i> Denunciar 🔞
               </button>
-              <button class="btn-retro btn-sm" style="width: 100%;" onclick="openSuggestModal('${char.id}', '${escapeHtml(char.name)}', '${char.baseRarity}')">
+              <button class="btn-retro btn-sm" style="width: 100%;" data-action="suggest">
                 <i class="fas fa-lightbulb"></i> Sugerir Mudança
               </button>
             `}
           </div>
         </div>
       `;
+
+      bindDataActions(card, {
+        'report': () => openReportModal(char.id, char.name),
+        'suggest': () => openSuggestModal(char.id, char.name, char.baseRarity),
+      });
 
       if (isMarried && spousePublicId) {
         const marriedBadge = card.querySelector('.badge-married');
@@ -3954,8 +4009,9 @@ function renderSuggestTagsChips() {
       chip.className = 'tag-chip';
       chip.innerHTML = `
         #${escapeHtml(tag)}
-        <button type="button" class="tag-chip-remove" title="Remover tag" onclick="removeSuggestTag('${escapeAttr(tag)}')">&times;</button>
+        <button type="button" class="tag-chip-remove" title="Remover tag" data-action="remove-tag">&times;</button>
       `;
+      bindDataActions(chip, { 'remove-tag': () => removeSuggestTag(tag) });
       container.appendChild(chip);
     });
   }
@@ -4014,18 +4070,22 @@ function renderUserPhotosGrid() {
 
     item.innerHTML = `
       <div style="aspect-ratio: 9/14; width: 100%; position: relative;">
-        <img loading="lazy" decoding="async" src="${src}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg'">
+        <img loading="lazy" decoding="async" src="${escapeHtml(src)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/media/characters/default.jpg'">
         <span style="position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,0.7); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 3px;">#${idx + 1}</span>
       </div>
       <div style="padding: 4px; background: #fff; border-top: 1px solid #2d241e; display: flex; flex-direction: column; gap: 4px;">
-        <button type="button" class="btn-retro btn-sm btn-gold" style="padding: 2px 4px; font-size: 11px; width: 100%;" onclick="triggerUserReplacePhoto('${escapeAttr(src)}', ${idx})">
+        <button type="button" class="btn-retro btn-sm btn-gold" style="padding: 2px 4px; font-size: 11px; width: 100%;" data-action="replace-photo">
           🔄 Substituir
         </button>
-        <button type="button" class="btn-retro btn-sm btn-danger" style="padding: 2px 4px; font-size: 11px; width: 100%;" onclick="triggerUserDeletePhoto('${escapeAttr(src)}', ${idx})">
+        <button type="button" class="btn-retro btn-sm btn-danger" style="padding: 2px 4px; font-size: 11px; width: 100%;" data-action="delete-photo">
           🗑️ Excluir
         </button>
       </div>
     `;
+    bindDataActions(item, {
+      'replace-photo': () => triggerUserReplacePhoto(src, idx),
+      'delete-photo': () => triggerUserDeletePhoto(src, idx),
+    });
     container.appendChild(item);
   });
 }
@@ -4413,8 +4473,27 @@ function closeModal(id) {
   }
 }
 
+// Escape HTML completo (& < > " ') para texto e valores de atributo entre aspas.
 function escapeHtml(str) {
-  return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  return Api.escapeHtml(str);
+}
+
+/**
+ * Liga handlers de clique aos elementos [data-action] dentro de root usando closures.
+ * Evita interpolar dados de jogadores (nomes, séries, tags, URLs) em JS inline
+ * (onclick="f('...')"), onde o escape HTML não protege.
+ * Deve ser chamado logo após o innerHTML, antes de anexar elementos filhos que
+ * tenham seus próprios data-action.
+ */
+function bindDataActions(root, actions) {
+  if (!root) return;
+  root.querySelectorAll('[data-action]').forEach((el) => {
+    const handler = actions[el.dataset.action];
+    if (typeof handler === 'function' && !el.dataset.actionBound) {
+      el.dataset.actionBound = '1';
+      el.addEventListener('click', (event) => handler(event, el));
+    }
+  });
 }
 
 async function loadUserSuggestions() {
@@ -4484,7 +4563,7 @@ async function loadUserSuggestions() {
       if (s.type === 'NEW_CHARACTER') {
         detail = `<strong>${escapeHtml(s.characterName || 'Sem nome')}</strong> (${escapeHtml(s.series || 'Sem série')}) - Raridade: ${s.suggestedRarity || 'COMMON'}`;
         if (imgUrl) {
-          detail += ` <a href="${imgUrl}" target="_blank" style="margin-left: 6px; text-decoration: underline; font-size: 11px;">[Ver foto]</a>`;
+          detail += ` <a href="${escapeHtml(imgUrl)}" target="_blank" rel="noopener noreferrer" style="margin-left: 6px; text-decoration: underline; font-size: 11px;">[Ver foto]</a>`;
         }
       } else if (s.character) {
         detail = `<strong>${escapeHtml(s.character.name)}</strong> (${escapeHtml(s.character.series || '')})`;
@@ -4655,15 +4734,6 @@ function getCharImg(char) {
   return '/media/characters/default.jpg';
 }
 
-function escapeAttr(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '&quot;')
-    .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n');
-}
 
 const LOCAL_BUFF_DESCRIPTIONS = {
   bait_on_trash: 'Evita perder a isca ao pescar lixo',
@@ -5420,15 +5490,19 @@ async function loadMyListings() {
             <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
           </div>
           <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-            <button class="btn-retro btn-sm ${offersBtnClass}" style="width: 100%;" onclick="openViewOffersModal('${listing.id}', '${escapeAttr(char.name)}')">
+            <button class="btn-retro btn-sm ${offersBtnClass}" style="width: 100%;" data-action="view-offers">
               ${offersBtnText}
             </button>
-            <button class="btn-retro btn-sm btn-danger" style="width: 100%;" onclick="cancelMyListing('${listing.id}')">
+            <button class="btn-retro btn-sm btn-danger" style="width: 100%;" data-action="cancel-listing">
               <i class="fas fa-times-circle"></i> Cancelar Anúncio
             </button>
           </div>
         </div>
       `;
+      bindDataActions(card, {
+        'view-offers': () => openViewOffersModal(listing.id, char.name),
+        'cancel-listing': (event, el) => cancelMyListing(listing.id, el),
+      });
       grid.appendChild(card);
     });
   } catch (err) {
@@ -5436,7 +5510,12 @@ async function loadMyListings() {
   }
 }
 
-async function cancelMyListing(listingId) {
+// Ids com requisição em andamento (evita duplo envio por clique duplo/reabertura)
+const listingCancelsInFlight = new Set();
+const offerAcceptsInFlight = new Set();
+
+async function cancelMyListing(listingId, triggerBtn = null) {
+  if (listingCancelsInFlight.has(listingId)) return;
   const confirmed = await Api.showConfirm({
     icon: '🗑️',
     title: 'Cancelar Anúncio',
@@ -5446,7 +5525,9 @@ async function cancelMyListing(listingId) {
     confirmText: 'Cancelar Anúncio',
     confirmClass: 'btn-danger'
   });
-  if (!confirmed) return;
+  if (!confirmed || listingCancelsInFlight.has(listingId)) return;
+  listingCancelsInFlight.add(listingId);
+  if (triggerBtn) triggerBtn.disabled = true;
   try {
     const res = await Api.delete(`/api/web/user/${encodeURIComponent(userPublicId)}/market/listings/${encodeURIComponent(listingId)}?token=${encodeURIComponent(userSessionToken)}`);
     if (res.success) {
@@ -5460,10 +5541,32 @@ async function cancelMyListing(listingId) {
     }
   } catch (err) {
     Api.showToast('Erro de comunicação ao cancelar anúncio.', '❌');
+  } finally {
+    listingCancelsInFlight.delete(listingId);
+    if (triggerBtn) triggerBtn.disabled = false;
   }
 }
 
 let currentOffersMap = new Map();
+
+// Valor de moeda de uma oferta como número finito (ausente/inválido = 0)
+function offerAmount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatOfferCurrencyText(value, symbol, label) {
+  const warn = value < 0 ? ' ⚠️ (negativo, inválido)' : '';
+  return `${symbol} ${value.toLocaleString('pt-BR')} ${label}${warn}`;
+}
+
+function formatOfferCurrencyHtml(value, symbol, label, color) {
+  const invalid = value < 0;
+  const amountHtml = `<span style="color:${invalid ? 'var(--accent-red)' : color};font-weight:800;">${symbol} ${escapeHtml(value.toLocaleString('pt-BR'))} ${label}</span>`;
+  return invalid
+    ? `${amountHtml} <span style="color:var(--accent-red);font-weight:800;">⚠️ valor negativo (inválido)</span>`
+    : amountHtml;
+}
 
 async function openViewOffersModal(listingId, characterName) {
   currentOffersMap.clear();
@@ -5493,22 +5596,22 @@ async function openViewOffersModal(listingId, characterName) {
         const parts = [];
         if (Array.isArray(offered.waifus) && offered.waifus.length > 0) {
           parts.push(`<div><strong>Waifus (${offered.waifus.length}):</strong> ${offered.waifus.map(w => {
-            const wImg = getCharImg(w);
-            const wSeries = escapeAttr(w.series || '');
-            const wRarity = w.baseRarity || '';
-            const wName = escapeAttr(w.name || w.id);
-            return `<button type="button" class="badge-tag" style="background:#8b5cf6;color:#fff;border:none;cursor:pointer;margin:2px;padding:3px 8px;font-size:12px;" onclick="openWaifuPreview('${w.id}', '${wName}', '${wImg}', '${wSeries}', '${wRarity}')"><i class="fas fa-image"></i> ${escapeHtml(w.name || w.id)}</button>`;
+            return `<button type="button" class="badge-tag" style="background:#8b5cf6;color:#fff;border:none;cursor:pointer;margin:2px;padding:3px 8px;font-size:12px;" ${waifuPreviewDataAttrs(w.id, w.name || w.id, getCharImg(w), w.series || '', w.baseRarity || '')}><i class="fas fa-image"></i> ${escapeHtml(w.name || w.id)}</button>`;
           }).join(' ')}</div>`);
         } else if (Array.isArray(offered.waifuIds) && offered.waifuIds.length > 0) {
           parts.push(`<div><strong>Waifus (${offered.waifuIds.length}):</strong> ${offered.waifuIds.map(wId => {
-            return `<button type="button" class="badge-tag" style="background:#8b5cf6;color:#fff;border:none;cursor:pointer;margin:2px;padding:3px 8px;font-size:12px;" onclick="openWaifuPreview('${wId}', '${wId}', '', '', '')"><i class="fas fa-image"></i> ${escapeHtml(wId)}</button>`;
+            return `<button type="button" class="badge-tag" style="background:#8b5cf6;color:#fff;border:none;cursor:pointer;margin:2px;padding:3px 8px;font-size:12px;" ${waifuPreviewDataAttrs(wId, wId, '', '', '')}><i class="fas fa-image"></i> ${escapeHtml(wId)}</button>`;
           }).join(' ')}</div>`);
         }
-        if (offered.runas && Number(offered.runas) > 0) {
-          parts.push(`<div><strong>Moeda Global (Runas):</strong> <span style="color:#38bdf8;font-weight:800;">ᚱ ${Number(offered.runas).toLocaleString('pt-BR')} Runas</span></div>`);
+        // Exibe qualquer valor diferente de zero (inclusive negativos/fracionados, destacados)
+        // para que o vendedor nunca aceite uma oferta com valores ocultos.
+        const runasVal = offerAmount(offered.runas);
+        if (runasVal !== 0) {
+          parts.push(`<div><strong>Moeda Global (Runas):</strong> ${formatOfferCurrencyHtml(runasVal, 'ᚱ', 'Runas', '#38bdf8')}</div>`);
         }
-        if (offered.petalitas && Number(offered.petalitas) > 0) {
-          parts.push(`<div><strong>Moeda da Fazenda (Petalitas):</strong> <span style="color:#ec4899;font-weight:800;">🌸 ${Number(offered.petalitas).toLocaleString('pt-BR')} Petalitas</span></div>`);
+        const petalitasVal = offerAmount(offered.petalitas);
+        if (petalitasVal !== 0) {
+          parts.push(`<div><strong>Moeda da Fazenda (Petalitas):</strong> ${formatOfferCurrencyHtml(petalitasVal, '🌸', 'Petalitas', '#ec4899')}</div>`);
         }
         if (Array.isArray(offered.fishes) && offered.fishes.length > 0) {
           const fishSummary = {};
@@ -5527,10 +5630,11 @@ async function openViewOffersModal(listingId, characterName) {
           }).join(', ')}</div>`);
         }
         if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) {
-          parts.push(`<div><strong>Itens de Fazenda:</strong> ${offered.farmItems.map(it => `${it.amount}x ${escapeHtml(it.name || it.itemId)}`).join(', ')}</div>`);
+          parts.push(`<div><strong>Itens de Fazenda:</strong> ${offered.farmItems.map(it => `${Number(it.amount) || 0}x ${escapeHtml(it.name || it.itemId)}`).join(', ')}</div>`);
         }
-        if (offered.zinthos && Number(offered.zinthos) > 0) {
-          parts.push(`<div><strong>Moeda (Zinthos):</strong> <span style="color:#f59e0b;font-weight:800;">🪙 ${Number(offered.zinthos).toLocaleString('pt-BR')} Zinthos</span></div>`);
+        const zinthosVal = offerAmount(offered.zinthos);
+        if (zinthosVal !== 0) {
+          parts.push(`<div><strong>Moeda (Zinthos):</strong> ${formatOfferCurrencyHtml(zinthosVal, '🪙', 'Zinthos', '#f59e0b')}</div>`);
         }
         itemsHtml = parts.join('<div style="margin-top: 4px;"></div>') || '<span style="color: var(--text-muted);">Nenhum item especificado</span>';
       }
@@ -5548,6 +5652,7 @@ async function openViewOffersModal(listingId, characterName) {
       if (offer.status === 'CANCELLED') statusBadge = `<span class="badge-tag" style="background: #ef4444; color: #fff;">Cancelada</span>`;
 
       const card = document.createElement('div');
+      card.dataset.offerId = offer.id;
       card.style.background = 'var(--bg-card)';
       card.style.border = 'var(--border-retro)';
       card.style.borderRadius = 'var(--radius-retro)';
@@ -5565,15 +5670,22 @@ async function openViewOffersModal(listingId, characterName) {
         ${offer.cancelReason ? `<div style="font-size: 12px; color: var(--accent-red); font-weight: bold; margin-bottom: 8px;">Motivo do cancelamento: ${escapeHtml(offer.cancelReason)}</div>` : ''}
         ${isPending ? `
           <div style="display: flex; gap: 8px; margin-top: 10px;">
-            <button class="btn-retro btn-sm btn-gold" style="flex: 1;" onclick="promptAcceptMarketOffer('${offer.id}')">
+            <button class="btn-retro btn-sm btn-gold" style="flex: 1;" data-action="accept-offer">
               <i class="fas fa-check"></i> Aceitar Oferta
             </button>
-            <button class="btn-retro btn-sm btn-danger" style="flex: 1;" onclick="rejectMarketOffer('${offer.id}', '${listingId}', '${escapeHtml(characterName)}')">
+            <button class="btn-retro btn-sm btn-danger" style="flex: 1;" data-action="reject-offer">
               <i class="fas fa-times"></i> Negar
             </button>
           </div>
         ` : ''}
       `;
+      bindDataActions(card, {
+        'accept-offer': () => promptAcceptMarketOffer(offer.id),
+        'reject-offer': () => rejectMarketOffer(offer.id, listingId, characterName),
+      });
+      if (offerAcceptsInFlight.has(offer.id)) {
+        card.querySelectorAll('button[data-action]').forEach(b => { b.disabled = true; });
+      }
       container.appendChild(card);
     });
   } catch (err) {
@@ -5581,9 +5693,39 @@ async function openViewOffersModal(listingId, characterName) {
   }
 }
 
+// Atributos data-* para abrir a pré-visualização de uma waifu ofertada. O resumo da oferta
+// (itemsHtml) é reinjetado no modal de confirmação, por isso o clique é tratado por
+// delegação no document em vez de JS inline com dados de jogadores.
+function waifuPreviewDataAttrs(id, name, img, series, rarity) {
+  return [
+    `data-preview-char-id="${escapeHtml(id)}"`,
+    `data-preview-name="${escapeHtml(name)}"`,
+    `data-preview-img="${escapeHtml(img)}"`,
+    `data-preview-series="${escapeHtml(series)}"`,
+    `data-preview-rarity="${escapeHtml(rarity)}"`,
+  ].join(' ');
+}
+
+document.addEventListener('click', (event) => {
+  const btn = event.target instanceof Element ? event.target.closest('[data-preview-char-id]') : null;
+  if (!btn) return;
+  const d = btn.dataset;
+  openWaifuPreview(d.previewCharId, d.previewName || '', d.previewImg || '', d.previewSeries || '', d.previewRarity || '');
+});
+
+function setOfferActionsBusy(offerId, busy) {
+  document.querySelectorAll('#offers-list-container [data-offer-id]').forEach(card => {
+    if (card.dataset.offerId === String(offerId)) {
+      card.querySelectorAll('button[data-action]').forEach(b => { b.disabled = busy; });
+    }
+  });
+  const btnConfirm = document.getElementById('btn-confirm-accept-offer');
+  if (btnConfirm) btnConfirm.disabled = busy;
+}
+
 function promptAcceptMarketOffer(offerId) {
   const data = currentOffersMap.get(offerId);
-  if (!data) return;
+  if (!data || offerAcceptsInFlight.has(offerId)) return;
   const { offer, listingId, characterName, itemsHtml } = data;
   const buyerName = offer.buyer?.name || 'Jogador Anônimo';
 
@@ -5608,6 +5750,9 @@ function promptAcceptMarketOffer(offerId) {
 }
 
 async function executeAcceptMarketOffer(offerId, listingId, characterName) {
+  if (offerAcceptsInFlight.has(offerId)) return;
+  offerAcceptsInFlight.add(offerId);
+  setOfferActionsBusy(offerId, true);
   try {
     const res = await Api.post(`/api/web/user/${encodeURIComponent(userPublicId)}/market/offers/${encodeURIComponent(offerId)}/accept`, {
       token: userSessionToken,
@@ -5635,6 +5780,9 @@ async function executeAcceptMarketOffer(offerId, listingId, characterName) {
     }
   } catch (err) {
     Api.showToast('Erro de comunicação ao aceitar oferta.', '❌');
+  } finally {
+    offerAcceptsInFlight.delete(offerId);
+    setOfferActionsBusy(offerId, false);
   }
 }
 
@@ -5794,24 +5942,29 @@ async function loadWishlistMarket() {
 }
 
 function getMarketPageLimit() {
-  const grid = document.getElementById('global-market-grid') || document.getElementById('public-market-grid');
-  if (!grid) return 10;
+  const grid = document.getElementById('global-market-grid');
+  // Com o grid oculto (outra aba/subaba) o grid-template-columns não é resolvido e a
+  // largura é 0: mantém o limite atual em vez de calcular um valor errado.
+  if (!grid || grid.offsetParent === null || grid.clientWidth <= 0) {
+    return marketState.limit || 10;
+  }
 
-  try {
-    const style = window.getComputedStyle(grid);
-    const gridTemplateColumns = style.getPropertyValue('grid-template-columns');
-    if (gridTemplateColumns) {
-      const cols = gridTemplateColumns.split(' ').filter(Boolean).length;
-      if (cols <= 2) {
-        return 10; // Mobile / Retrato: exatamente 2 colunas x até 5 linhas = 10 itens
-      }
-      return cols * 2; // Desktop / Paisagem: exatamente 2 linhas x N colunas (ex: 2x5 = 10, 2x4 = 8, 2x3 = 6)
-    }
-  } catch (_) {}
+  let cols = 0;
+  const style = window.getComputedStyle(grid);
+  const tracks = (style.getPropertyValue('grid-template-columns') || '').trim().split(/\s+/).filter(Boolean);
+  if (tracks.length > 0 && tracks.every(t => /^[\d.]+px$/.test(t))) {
+    // Grid visível: trilhas já resolvidas pelo navegador (mesmo cálculo do auto-fill do CSS)
+    cols = tracks.length;
+  } else {
+    // Fallback pela largura útil do grid (mesmos mínimos do retro-theme.css)
+    const isTablet = window.innerWidth <= 768;
+    const gap = parseFloat(style.columnGap) || (isTablet ? 12 : 16);
+    const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const minCard = isTablet ? 160 : 180;
+    cols = Math.max(1, Math.floor((grid.clientWidth - padding + gap) / (minCard + gap)));
+  }
 
-  if (window.innerWidth <= 640) return 10;
-  const width = grid.offsetWidth || window.innerWidth;
-  const cols = Math.max(2, Math.floor(width / (180 + 16)));
+  // Mobile/retrato: 2 colunas x até 5 linhas = 10 itens; desktop: 2 linhas x N colunas
   return cols <= 2 ? 10 : cols * 2;
 }
 
@@ -5819,7 +5972,12 @@ async function loadGlobalMarket() {
   const grid = document.getElementById('global-market-grid');
   if (!grid) return;
 
-  marketState.limit = getMarketPageLimit();
+  // Só volta para a página 1 quando o tamanho da página realmente muda
+  const newLimit = getMarketPageLimit();
+  if (newLimit !== marketState.limit) {
+    marketState.limit = newLimit;
+    marketState.page = 1;
+  }
 
   grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 28px;">Buscando classificados globais...</div>';
 
@@ -5857,12 +6015,24 @@ async function loadGlobalMarket() {
   }
 }
 
-let liveBuyerInventory = {
-  runas: 0,
-  rates: { runasPerZinthos: 0.2857, runasPerJardimCoin: 0.125 },
-  fishingBuffs: [],
-  farm: { coins: 0, items: [] }
-};
+function emptyBuyerInventory() {
+  return {
+    runas: 0,
+    rates: { runasPerZinthos: 0.2857, runasPerJardimCoin: 0.125 },
+    fishingBuffs: [],
+    farm: { coins: 0, items: [] }
+  };
+}
+
+let liveBuyerInventory = emptyBuyerInventory();
+
+// Limpa o inventário ao vivo para que dados de uma abertura anterior do modal
+// não sejam usados em "Tudo"/envio quando a busca falhar.
+function resetLiveBuyerInventory() {
+  liveBuyerInventory = emptyBuyerInventory();
+  window.activeBuffGroups = [];
+  window.activeFarmItems = [];
+}
 
 function updateOfferRunasQuote() {
   const input = document.getElementById('offer-runas-input');
@@ -5996,9 +6166,9 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
       const k = item.keys || 1;
       const sm = k >= 10;
       return `
-        <label class="offer-waifu-card" title="${escapeHtml(char.name)} (${sm ? '💖' : '🔑'} ${k})" data-name="${escapeAttr(char.name || '')}" data-series="${escapeAttr(char.series || '')}">
+        <label class="offer-waifu-card" title="${escapeHtml(char.name)} (${sm ? '💖' : '🔑'} ${k})" data-name="${escapeHtml(char.name || '')}" data-series="${escapeHtml(char.series || '')}">
           <img decoding="async" src="${getCharImg(char)}" class="offer-waifu-img" onerror="handleImgError(this)" loading="lazy">
-          <input type="checkbox" name="offer-waifu-cb" value="${char.id}" style="display: none;" onchange="this.closest('.offer-waifu-card').classList.toggle('is-selected', this.checked)">
+          <input type="checkbox" name="offer-waifu-cb" value="${escapeHtml(char.id)}" style="display: none;" onchange="this.closest('.offer-waifu-card').classList.toggle('is-selected', this.checked)">
           <div class="offer-waifu-overlay">
             <span class="offer-waifu-name">${escapeHtml(char.name)}</span>
             <span class="offer-waifu-keys" style="color: ${sm ? '#f472b6' : '#fde047'};">${sm ? '💖' : '🔑'}${k}</span>
@@ -6027,6 +6197,8 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
   if (farmList) farmList.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 12px; text-align: center;"><i class="fas fa-spinner fa-spin"></i> Carregando itens da fazenda ao vivo...</div>';
 
   openModal('modal-market-offer');
+
+  resetLiveBuyerInventory();
 
   // Busca inventário ao vivo através do endpoint seguro
   try {
@@ -6107,8 +6279,8 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
         if (sortedFarmItems.length === 0) {
           farmList.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 12px; text-align: center;">Nenhum elixir, semente ou decoração disponível no seu inventário da fazenda.</div>';
         } else {
-          farmList.innerHTML = sortedFarmItems.map(it => {
-            const maxQty = Number(it.quantity) || 1;
+          farmList.innerHTML = sortedFarmItems.map((it, idx) => {
+            const maxQty = Math.max(1, Math.floor(Number(it.quantity) || 1));
             const isConsumable = it.type === 'consumable';
             const isSeed = it.type === 'seed';
             const borderColor = isConsumable ? '#10b981' : isSeed ? '#f59e0b' : '#a855f7';
@@ -6122,10 +6294,10 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
                   <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Em estoque: <strong>${maxQty}</strong></div>
                 </div>
                 <div class="retro-qty-control" style="display: flex; gap: 4px; align-items: center;">
-                  <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', -1, ${maxQty})">-</button>
-                  <input type="number" min="0" max="${maxQty}" id="farm-qty-${it.itemId}" value="0" style="width: 55px; text-align: center;" oninput="onInputOfferFarmQty('${it.itemId}', ${maxQty})">
-                  <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty('${it.itemId}', 1, ${maxQty})">+</button>
-                  <button type="button" class="btn-retro btn-sm btn-gold" onclick="setOfferFarmAll('${it.itemId}', ${maxQty})" title="Oferecer tudo">Tudo</button>
+                  <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty(${idx}, -1, ${maxQty})">-</button>
+                  <input type="number" min="0" max="${maxQty}" id="farm-qty-${idx}" value="0" style="width: 55px; text-align: center;" oninput="onInputOfferFarmQty(${idx}, ${maxQty})">
+                  <button type="button" class="btn-retro btn-sm" onclick="adjustOfferFarmQty(${idx}, 1, ${maxQty})">+</button>
+                  <button type="button" class="btn-retro btn-sm btn-gold" onclick="setOfferFarmAll(${idx}, ${maxQty})" title="Oferecer tudo">Tudo</button>
                 </div>
               </div>
             `;
@@ -6136,6 +6308,8 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
       throw new Error(res.error?.message || 'Falha ao buscar inventário');
     }
   } catch (err) {
+    resetLiveBuyerInventory();
+    updateOfferRunasQuote();
     if (runasBalanceEl) runasBalanceEl.textContent = '0 ᚱ';
     if (petalitasBalanceEl) petalitasBalanceEl.textContent = '0';
     if (buffsList) buffsList.innerHTML = '<div style="font-size: 12px; color: var(--accent-red); padding: 12px; text-align: center;">Não foi possível carregar buffs ao vivo.</div>';
@@ -6210,21 +6384,21 @@ function onInputOfferBuffGroupQty(idx, max) {
   else if (val > max) input.value = max;
 }
 
-function adjustOfferFarmQty(itemId, delta, max) {
-  const input = document.getElementById(`farm-qty-${itemId}`);
+function adjustOfferFarmQty(farmIdx, delta, max) {
+  const input = document.getElementById(`farm-qty-${farmIdx}`);
   if (!input) return;
   let val = parseInt(input.value, 10) || 0;
   val = Math.max(0, Math.min(max, val + delta));
   input.value = val;
 }
 
-function setOfferFarmAll(itemId, max) {
-  const input = document.getElementById(`farm-qty-${itemId}`);
+function setOfferFarmAll(farmIdx, max) {
+  const input = document.getElementById(`farm-qty-${farmIdx}`);
   if (input) input.value = Math.max(0, max);
 }
 
-function onInputOfferFarmQty(itemId, max) {
-  const input = document.getElementById(`farm-qty-${itemId}`);
+function onInputOfferFarmQty(farmIdx, max) {
+  const input = document.getElementById(`farm-qty-${farmIdx}`);
   if (!input) return;
   let val = parseInt(input.value, 10);
   if (isNaN(val)) return;
@@ -6269,8 +6443,8 @@ async function submitMarketOffer() {
 
   const farmItems = [];
   if (Array.isArray(window.activeFarmItems)) {
-    window.activeFarmItems.forEach(it => {
-      const qtyInput = document.getElementById(`farm-qty-${it.itemId}`);
+    window.activeFarmItems.forEach((it, idx) => {
+      const qtyInput = document.getElementById(`farm-qty-${idx}`);
       const qty = parseInt(qtyInput?.value, 10) || 0;
       if (qty > 0) {
         farmItems.push({
@@ -6282,9 +6456,28 @@ async function submitMarketOffer() {
     });
   }
 
-  const zinthos = parseInt(document.getElementById('offer-zinthos-input')?.value, 10) || 0;
-  const runas = parseFloat(document.getElementById('offer-runas-input')?.value) || 0;
-  const petalitas = parseInt(document.getElementById('offer-petalitas-input')?.value, 10) || 0;
+  // Moedas: inteiros >= 0. Valores negativos/inválidos bloqueiam o envio;
+  // frações são truncadas (e o campo é atualizado com o valor enviado).
+  const amountFields = [
+    { id: 'offer-zinthos-input', label: 'Zinthos' },
+    { id: 'offer-runas-input', label: 'Runas' },
+    { id: 'offer-petalitas-input', label: 'Petalitas' },
+  ];
+  const amounts = {};
+  for (const field of amountFields) {
+    const input = document.getElementById(field.id);
+    const raw = Number(input?.value || 0);
+    if (input?.validity?.badInput || !Number.isFinite(raw) || raw < 0) {
+      Api.showToast(`Informe um valor válido para ${field.label} (número inteiro maior ou igual a 0).`, '⚠️');
+      input?.focus();
+      return;
+    }
+    amounts[field.label] = Math.max(0, Math.floor(raw));
+    if (input && String(amounts[field.label]) !== String(input.value)) input.value = String(amounts[field.label]);
+  }
+  const zinthos = amounts.Zinthos;
+  const runas = amounts.Runas;
+  const petalitas = amounts.Petalitas;
 
   if (!isFree && selectedWaifuIds.length === 0 && selectedBuffs.length === 0 && farmItems.length === 0 && zinthos <= 0 && runas <= 0 && petalitas <= 0) {
     Api.showToast('Selecione ao menos um item, waifu, Zinthos, Runas ou Petalitas para oferecer (ou marque "Pedir de graça").', '⚠️');
@@ -6344,12 +6537,18 @@ async function loadMySentOffers() {
   const auth = getActiveAuthUser();
   const token = auth.token || userSessionToken;
   const pId = auth.publicId || userPublicId || 'token-session';
-  if (!token) return;
+  if (!token) {
+    mySentOffersState.items = [];
+    const countBadge = document.getElementById('my-sent-offers-count');
+    if (countBadge) countBadge.textContent = '0';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">Faça login pelo link do bot para ver as ofertas que você enviou.</td></tr>';
+    return;
+  }
 
   try {
     const res = await Api.get(`/api/web/user/${encodeURIComponent(pId)}/market/my-offers?token=${encodeURIComponent(token)}`);
     if (!res.success || !Array.isArray(res.data)) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-red); padding: 20px;">Erro ao carregar histórico de ofertas.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--accent-red); padding: 20px;">Erro ao carregar histórico de ofertas.</td></tr>';
       return;
     }
 
@@ -6362,7 +6561,7 @@ async function loadMySentOffers() {
 
     renderMySentOffersPage();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--accent-red); padding: 20px;">Erro ao carregar histórico de ofertas.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--accent-red); padding: 20px;">Erro ao carregar histórico de ofertas.</td></tr>';
   }
 }
 
@@ -6419,15 +6618,18 @@ function renderMySentOffersPage() {
       } else if (Array.isArray(offered.waifuIds) && offered.waifuIds.length > 0) {
         parts.push(`${offered.waifuIds.length} waifu(s)`);
       }
-      if (offered.runas && Number(offered.runas) > 0) parts.push(`ᚱ ${Number(offered.runas).toLocaleString('pt-BR')} runas`);
-      if (offered.petalitas && Number(offered.petalitas) > 0) parts.push(`🌸 ${Number(offered.petalitas).toLocaleString('pt-BR')} petalitas`);
+      const runasVal = offerAmount(offered.runas);
+      if (runasVal !== 0) parts.push(formatOfferCurrencyText(runasVal, 'ᚱ', 'runas'));
+      const petalitasVal = offerAmount(offered.petalitas);
+      if (petalitasVal !== 0) parts.push(formatOfferCurrencyText(petalitasVal, '🌸', 'petalitas'));
       if (Array.isArray(offered.fishes) && offered.fishes.length > 0) parts.push(`${offered.fishes.length} peixe(s)`);
       if (Array.isArray(offered.fishingBuffs) && offered.fishingBuffs.length > 0) parts.push(`${offered.fishingBuffs.length} buff(s)`);
       if (Array.isArray(offered.farmItems) && offered.farmItems.length > 0) {
         const farmCount = offered.farmItems.reduce((acc, it) => acc + (Number(it.amount) || 1), 0);
         parts.push(`${farmCount} item(ns) da fazenda`);
       }
-      if (offered.zinthos && Number(offered.zinthos) > 0) parts.push(`🪙 ${Number(offered.zinthos).toLocaleString('pt-BR')} zinthos`);
+      const zinthosVal = offerAmount(offered.zinthos);
+      if (zinthosVal !== 0) parts.push(formatOfferCurrencyText(zinthosVal, '🪙', 'zinthos'));
       summary = parts.join(', ') || 'Nenhum item';
     }
 
@@ -6443,7 +6645,7 @@ function renderMySentOffersPage() {
     }
 
     const actionCell = offer.status === 'PENDING'
-      ? `<button type="button" class="btn-retro btn-sm btn-danger" onclick="promptCancelSentOffer('${offer.id}', '${escapeAttr(charName)}')" title="Cancelar esta proposta para enviar outra"><i class="fas fa-ban"></i> Cancelar</button>`
+      ? `<button type="button" class="btn-retro btn-sm btn-danger" data-action="cancel-sent-offer" data-offer-id="${escapeHtml(offer.id)}" title="Cancelar esta proposta para enviar outra"><i class="fas fa-ban"></i> Cancelar</button>`
       : `<span style="color: var(--text-muted); font-size: 12px;">—</span>`;
 
     return `
@@ -6451,12 +6653,19 @@ function renderMySentOffersPage() {
         <td style="white-space: nowrap; font-size: 12px;">${dateStr}</td>
         <td style="font-weight: 700;">${escapeHtml(charName)}${series}</td>
         <td>${escapeHtml(seller)}</td>
-        <td style="font-size: 13px;">${summary}</td>
+        <td style="font-size: 13px;">${escapeHtml(summary)}</td>
         <td>${statusBadge}</td>
         <td style="white-space: nowrap;">${actionCell}</td>
       </tr>
     `;
   }).join('');
+
+  bindDataActions(tbody, {
+    'cancel-sent-offer': (event, el) => {
+      const offer = pageItems.find(o => String(o.id) === el.dataset.offerId);
+      if (offer) promptCancelSentOffer(offer.id, offer.listing?.character?.name || 'Personagem');
+    },
+  });
 }
 
 function promptCancelSentOffer(offerId, characterName) {
@@ -7103,7 +7312,7 @@ function createMythicCard(char) {
       <img loading="lazy" decoding="async" src="${char.imageUrl || '/media/characters/default.jpg'}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
     </div>
     <div class="card-info">
-      <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeAttr(char.name)}">${escapeHtml(char.name)}</div>
+      <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
       <div class="mythic-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="🔮 Personagem Mítico">🔮 Mítico</div>
       <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
       <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
@@ -7113,12 +7322,16 @@ function createMythicCard(char) {
         <button class="btn-retro btn-sm btn-purple" style="width: 100%; font-weight: 800;" onclick="openChoosePhotoModal('${char.id}')">
           <i class="fas fa-camera"></i> Foto Fixa
         </button>
-        <button class="btn-retro btn-sm btn-danger" style="width: 100%; font-weight: 800;" onclick="confirmDeleteMythic('${char.id}', '${escapeAttr(char.name)}')">
+        <button class="btn-retro btn-sm btn-danger" style="width: 100%; font-weight: 800;" data-action="delete-mythic">
           <i class="fas fa-trash-alt"></i> Excluir (Liberar Slot)
         </button>
       </div>
     </div>
   `;
+
+  bindDataActions(card, {
+    'delete-mythic': () => confirmDeleteMythic(char.id, char.name),
+  });
 
   const imgEl = card.querySelector('.card-img-wrapper img');
   if (imgEl && char.imageUrls && char.imageUrls.length > 1) {

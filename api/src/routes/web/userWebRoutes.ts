@@ -19,7 +19,8 @@ import { CooldownService } from '../../services/CooldownService.js';
 import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
 import { optimizeImageUnder1Mb, MAX_IMAGE_UPLOAD_BYTES } from '../../utils/imageOptimizer.js';
-import { config, activeHostingRates, inactiveHostingRates } from '../../config.js';
+import { config, activeHostingRates, inactiveHostingRates, ravenaMarketHeaders } from '../../config.js';
+import { toPublicListing, toPublicOffer } from '../../utils/marketPublic.js';
 import { Rarity, Gender } from '@prisma/client';
 
 interface RavenaBotHealth {
@@ -213,39 +214,37 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       const isInactive = (now - lastActiveTime) > graceMs;
       const rates = isInactive ? inactiveHostingRates : activeHostingRates;
 
-      const rarityCounts: Record<string, number> = {
-        COMMON: 0,
-        UNCOMMON: 0,
-        RARE: 0,
-        EPIC: 0,
-        LEGENDARY: 0,
-      };
-
-      for (const item of haremResult.data) {
-        const r = (item.character?.baseRarity || 'COMMON').toUpperCase();
-        if (rarityCounts[r] !== undefined) {
-          rarityCounts[r]++;
+      // Míticos não pagam taxa (HostingFeeService); a contagem segue a mesma regra
+      const buildHostingCostInfo = (entries: typeof haremResult.data) => {
+        const rarityCounts: Record<string, number> = { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 };
+        let counted = 0;
+        for (const item of entries) {
+          if ((item.character as any)?.isMythic) continue;
+          const r = (item.character?.baseRarity || 'COMMON').toUpperCase();
+          if (rarityCounts[r] !== undefined) {
+            rarityCounts[r]++;
+            counted++;
+          }
         }
-      }
-
-      const rarityCosts: Record<string, number> = {
-        COMMON: rarityCounts.COMMON * rates.COMMON,
-        UNCOMMON: rarityCounts.UNCOMMON * rates.UNCOMMON,
-        RARE: rarityCounts.RARE * rates.RARE,
-        EPIC: rarityCounts.EPIC * rates.EPIC,
-        LEGENDARY: rarityCounts.LEGENDARY * rates.LEGENDARY,
+        const rarityCosts: Record<string, number> = {
+          COMMON: rarityCounts.COMMON * rates.COMMON,
+          UNCOMMON: rarityCounts.UNCOMMON * rates.UNCOMMON,
+          RARE: rarityCounts.RARE * rates.RARE,
+          EPIC: rarityCounts.EPIC * rates.EPIC,
+          LEGENDARY: rarityCounts.LEGENDARY * rates.LEGENDARY,
+        };
+        return {
+          isInactive,
+          totalCost: Object.values(rarityCosts).reduce((acc, c) => acc + c, 0),
+          rates,
+          counts: rarityCounts,
+          costs: rarityCosts,
+          totalWaifus: counted,
+        };
       };
 
-      const totalDailyHostingCost = Object.values(rarityCosts).reduce((acc, c) => acc + c, 0);
-
-      const hostingCostInfo = {
-        isInactive,
-        totalCost: totalDailyHostingCost,
-        rates,
-        counts: rarityCounts,
-        costs: rarityCosts,
-        totalWaifus: haremResult.data.length,
-      };
+      // Dono vê o harém inteiro; visitantes só o que está fora de coleções privadas
+      const hostingCostInfo = buildHostingCostInfo(haremResult.data);
 
       if (isOwner) {
         const wishlistResult = await wishlistService.getWishlist(user.id);
@@ -259,6 +258,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           ...item,
           unseenCovetsCount: covetCountsMap[item.character.id]?.unseen || 0,
           totalCovetsCount: covetCountsMap[item.character.id]?.total || 0,
+          activeCovetsCount: covetCountsMap[item.character.id]?.active || 0,
         }));
 
         let currentInventory = session.inventory || null;
@@ -388,7 +388,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           collections: publicCollections,
           totalHarem: visibleEntries.length,
           listings: publicListings,
-          hostingCost: hostingCostInfo,
+          hostingCost: buildHostingCostInfo(visibleEntries),
         },
       });
     },
@@ -2219,7 +2219,11 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
     handler: async (request, reply) => {
       const query = request.query as any;
       const result = await marketService.listGlobalListings(query);
-      return reply.send({ success: true, data: result });
+      // Rota pública: sem JIDs de vendedores/donos (CLAUDE.md §3.2)
+      return reply.send({
+        success: true,
+        data: { ...result, listings: (result.listings || []).map((l: any) => toPublicListing(l)) },
+      });
     },
   });
 
@@ -2389,7 +2393,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const offers = await marketService.getUserSentOffers(session.userId);
-      return reply.send({ success: true, data: offers });
+      // O comprador não recebe o JID/telefone do vendedor
+      return reply.send({ success: true, data: offers.map((o: any) => toPublicOffer(o)) });
     },
   });
 
@@ -2511,7 +2516,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const offers = await marketService.getListingOffers(session.userId, listingId);
-      return reply.send({ success: true, data: offers });
+      // O vendedor não recebe o JID/telefone do comprador
+      return reply.send({ success: true, data: offers.map((o: any) => toPublicOffer(o)) });
     },
   });
 
@@ -2550,6 +2556,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
 
       try {
         const invRes = await fetch(`${config.RAVENA_API_URL}/api/market/user-inventory/${encodeURIComponent(session.userId)}`, {
+          headers: ravenaMarketHeaders(),
           signal: AbortSignal.timeout(6000),
         });
         if (!invRes.ok) {
@@ -2587,8 +2594,39 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           token: { type: 'string' },
           listingId: { type: 'string' },
           message: { type: 'string', maxLength: 500 },
-          offeredItems: { type: 'object' },
+          offeredItems: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              isFree: { type: 'boolean' },
+              zinthos: { type: 'integer', minimum: 0 },
+              runas: { type: 'integer', minimum: 0 },
+              petalitas: { type: 'integer', minimum: 0 },
+              waifuIds: { type: 'array', maxItems: 20, items: { type: 'string', maxLength: 200 } },
+              fishes: { type: 'array', maxItems: 50, items: { type: 'object' } },
+              fishingBuffs: {
+                type: 'array',
+                maxItems: 50,
+                items: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } },
+              },
+              fishingBuffIds: { type: 'array', maxItems: 50, items: { type: 'integer', minimum: 1 } },
+              farmItems: {
+                type: 'array',
+                maxItems: 50,
+                items: {
+                  type: 'object',
+                  required: ['itemId', 'amount'],
+                  properties: {
+                    itemId: { type: 'string', maxLength: 100 },
+                    name: { type: 'string', maxLength: 120 },
+                    amount: { type: 'integer', minimum: 1 },
+                  },
+                },
+              },
+            },
+          },
         },
+        additionalProperties: false,
       },
     },
     handler: async (request, reply) => {
@@ -2675,9 +2713,10 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       body: {
         type: 'object',
         required: ['token'],
+        additionalProperties: false,
         properties: {
           token: { type: 'string' },
-          reason: { type: 'string' },
+          reason: { type: 'string', maxLength: 1000 },
         },
       },
     },
@@ -2717,6 +2756,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       body: {
         type: 'object',
         required: ['token'],
+        additionalProperties: false,
         properties: { token: { type: 'string' } },
       },
     },

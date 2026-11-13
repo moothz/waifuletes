@@ -80,6 +80,21 @@ class MockRedis {
     return next;
   }
 
+  /**
+   * Emula o INCR_WITH_TTL_LUA do CooldownService (incremento com piso em zero e TTL atômico).
+   */
+  async eval(_script: string, _numKeys: number, key: string, delta: string, ttl: string, isFloat: string): Promise<string> {
+    const item = this.store.get(key);
+    const now = Date.now();
+    const alive = item && item.expiresAt > now;
+    const current = alive ? parseFloat(item!.val) || 0 : 0;
+    let next = Math.max(0, current + Number(delta));
+    if (isFloat !== '1') next = Math.floor(next);
+    const expiresAt = alive && item!.expiresAt !== Infinity ? item!.expiresAt : now + Number(ttl) * 1000;
+    this.store.set(key, { val: next.toString(), expiresAt });
+    return next.toString();
+  }
+
   async expire(key: string, seconds: number): Promise<number> {
     const item = this.store.get(key);
     if (!item) return 0;
@@ -326,6 +341,29 @@ describe('💍 Sistema de Cooldown de Casamento por Raridade (CooldownService)',
       // Mas o roll/casamento normal de Lendária continua livre sem limite!
       const canMarryNormal = await cooldownService.canMarryDaily(testUserId, Rarity.LEGENDARY, false);
       expect(canMarryNormal.allowed).toBe(true);
+    });
+
+    it('estornar um casamento que falhou libera só a trava de claim, sem zerar a cota diária', async () => {
+      await cooldownService.incrementDailyMarry(testUserId, Rarity.COMMON, 1);
+      await cooldownService.incrementDailyMarry(testUserId, Rarity.COMMON, 1);
+      await cooldownService.incrementDailyTrade(testUserId, Rarity.LEGENDARY, 3);
+      const acquired = await cooldownService.acquireClaimLock(testUserId, Rarity.COMMON, 600);
+      expect(acquired).toBe(true);
+
+      // Caminho usado pelo rollback do MarryService (corrida perdida, P2002 etc.)
+      await cooldownService.releaseClaimCooldown(testUserId, Rarity.COMMON);
+
+      expect(await cooldownService.getDailyMarryCount(testUserId, Rarity.COMMON)).toBe(2);
+      expect(await cooldownService.getDailyTradeCount(testUserId, Rarity.LEGENDARY)).toBe(3);
+      expect(await cooldownService.acquireClaimLock(testUserId, Rarity.COMMON, 600)).toBe(true);
+    });
+
+    it('contadores diários nunca ficam sem TTL nem negativos', async () => {
+      await cooldownService.decrementDailyMarry(testUserId, Rarity.UNCOMMON, 5);
+      expect(await cooldownService.getDailyMarryCount(testUserId, Rarity.UNCOMMON)).toBe(0);
+      await cooldownService.incrementDailyMarry(testUserId, Rarity.UNCOMMON, 0.5);
+      const ttl = await redis.ttl(`cooldown:daily:marry:${testUserId}:UNCOMMON`);
+      expect(ttl).toBeGreaterThan(0);
     });
   });
 });

@@ -363,7 +363,7 @@ const Waifinder = {
           this.publicId = this.userData.publicId;
           const userBadge = document.getElementById('waifinder-user-badge');
           if (userBadge) {
-            userBadge.innerHTML = `<i class="fas fa-user-circle"></i> <span>${this.userData.name}</span> <span style="color:#eab308;font-weight:800;">(${this.userData.kakera} 💎)</span>`;
+            userBadge.innerHTML = `<i class="fas fa-user-circle"></i> <span>${Api.escapeHtml(this.userData.name)}</span> <span style="color:#eab308;font-weight:800;">(${Number(this.userData.kakera) || 0} 💎)</span>`;
             userBadge.classList.remove('hidden');
           }
           const haremLink = document.getElementById('waifinder-harem-link');
@@ -449,7 +449,7 @@ const Waifinder = {
 
     card.innerHTML = `
       <div class="waifinder-card-img-wrap">
-        <img decoding="async" class="waifinder-card-img" src="${imgUrl}" alt="${char.name}" onerror="window.handleImgError(this)">
+        <img decoding="async" class="waifinder-card-img" src="${Api.escapeHtml(imgUrl)}" alt="${Api.escapeHtml(char.name)}" onerror="window.handleImgError(this)">
         <div class="waifinder-card-gradient"></div>
 
         <div class="waifinder-badges-top">
@@ -464,11 +464,11 @@ const Waifinder = {
 
       <div class="waifinder-card-info">
         <div class="waifinder-char-name">
-          <span>${char.name}</span>
+          <span>${Api.escapeHtml(char.name)}</span>
           ${char.isWishlisted ? '<span title="Já na sua Wishlist!" style="font-size:15px;color:#eab308;">★</span>' : ''}
         </div>
         <div class="waifinder-char-series">
-          <i class="fas fa-tv"></i> <span>${char.series || 'Origem desconhecida'}</span>
+          <i class="fas fa-tv"></i> <span>${Api.escapeHtml(char.series || 'Origem desconhecida')}</span>
         </div>
         <div class="waifinder-char-stats">
           <span>❤️ ${char.likeCount || 0} curtidas</span>
@@ -476,7 +476,7 @@ const Waifinder = {
           ${char.gender ? `<span>${char.gender === 'FEMALE' ? '♀' : char.gender === 'MALE' ? '♂' : '⚧'}</span>` : ''}
         </div>
         <div class="waifinder-char-desc">
-          ${char.description || 'Nenhuma descrição cadastrada para este personagem.'}
+          ${Api.escapeHtml(char.description || 'Nenhuma descrição cadastrada para este personagem.')}
         </div>
 
         <div class="waifinder-card-actions-wrap waifinder-rarity-action-wrap">
@@ -950,7 +950,13 @@ const Waifinder = {
       toast.className = 'retro-toast hidden';
       document.body.appendChild(toast);
     }
-    toast.innerHTML = `<span style="font-size:18px;">${icon}</span> <span>${message}</span>`;
+    // Texto puro: mensagens podem conter nomes de personagens
+    const iconEl = document.createElement('span');
+    iconEl.style.fontSize = '18px';
+    iconEl.textContent = icon == null ? '' : String(icon);
+    const msgEl = document.createElement('span');
+    msgEl.textContent = message == null ? '' : String(message);
+    toast.replaceChildren(iconEl, document.createTextNode(' '), msgEl);
     toast.classList.remove('hidden');
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => {

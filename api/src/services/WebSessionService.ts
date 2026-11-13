@@ -57,6 +57,13 @@ export class WebSessionService {
   /**
    * Valida uma sessão web de usuário e confere se pertence ao publicId solicitado
    */
+  private async touchLastActive(userId: string): Promise<void> {
+    if (!userId) return;
+    const acquired = await this.redis.set(`touch:active:web:${userId}`, '1', 'EX', 300, 'NX');
+    if (!acquired) return;
+    await this.prisma.user.updateMany({ where: { id: userId }, data: { lastActiveAt: new Date() } });
+  }
+
   async validateUserSession(publicId: string, token?: string) {
     if (!token || typeof token !== 'string') {
       return { valid: false as const, userId: null, inventory: null, expiresIn: 0, isPersistent: false };
@@ -81,6 +88,10 @@ export class WebSessionService {
         await this.redis.expire(`web:session:${token}`, 3 * 86400);
         ttl = 3 * 86400;
       }
+
+      // Uso do painel web conta como atividade (taxa de hospedagem de inativos usa lastActiveAt).
+      // Fire-and-forget e no máximo uma escrita a cada 5 minutos por jogador.
+      this.touchLastActive(data.userId).catch(() => {});
 
       return {
         valid: true as const,

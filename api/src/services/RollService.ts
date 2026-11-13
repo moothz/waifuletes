@@ -144,6 +144,8 @@ export class RollService {
       };
     }
 
+    // Declarado fora do try: o catch precisa saber se o roll já foi estornado (Mítico) para não estornar de novo
+    let mythicRollRefunded = false;
     try {
       // 2. Garantir cache do pool em memória
       if (!this.poolLoaded || this.inMemoryPool.length === 0) {
@@ -373,7 +375,6 @@ export class RollService {
       }
 
       // Personagens míticos funcionam como showcase e NÃO devem consumir roll do jogador
-      let mythicRollRefunded = false;
       if (chosen.isMythic && !isFreeRoll) {
         await this.cooldownService.refundRoll(userId, extraMaxRolls);
         rollsState = await this.cooldownService.getUserRolls(userId, extraMaxRolls);
@@ -670,13 +671,18 @@ export class RollService {
           regenSeconds: rollsState.regenSeconds,
           dailyMarryLimit: {
             rarity: chosen.baseRarity,
-            limitReached: !(await this.cooldownService.canMarryDaily(userId, chosen.baseRarity, false)).allowed,
+            // Informativo: uma falha de Redis aqui não pode derrubar um roll já concluído (e estornar o roll)
+            limitReached: await this.cooldownService
+              .canMarryDaily(userId, chosen.baseRarity, false)
+              .then((r) => !r.allowed)
+              .catch(() => false),
           },
         },
       };
     } catch (err: any) {
-      // Estorna a tentativa caso haja falha não recuperável (apenas se não for free roll)
-      if (!isFreeRoll) {
+      // Estorna a tentativa caso haja falha não recuperável (apenas se não for free roll e se o roll
+      // ainda não tiver sido estornado pela regra do Mítico — senão o jogador ganharia um roll grátis)
+      if (!isFreeRoll && !mythicRollRefunded) {
         await this.cooldownService.refundRoll(userId, extraMaxRolls);
       }
       if (err.message === 'NO_CHARACTERS_AVAILABLE') {

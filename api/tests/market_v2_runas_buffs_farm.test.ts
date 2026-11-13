@@ -145,6 +145,10 @@ describe('🤝 Classificados v2 — Runas, Buffs, Fazenda & Robustez de Troca', 
         }),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }), // Trava atômica com sucesso
         update: vi.fn().mockResolvedValue({}),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      marketListing: {
+        findUnique: vi.fn().mockResolvedValue({ status: ListingStatus.ACTIVE }),
       },
       haremEntry: {
         findFirst: vi.fn().mockResolvedValue({ userId: 'seller_123', characterId: 'char_target' }),
@@ -189,15 +193,105 @@ describe('🤝 Classificados v2 — Runas, Buffs, Fazenda & Robustez de Troca', 
       fishingBuffIds: [42],
     });
 
-    // Deve ter atualizado a oferta para CANCELLED com motivo de compensação
-    expect(mockPrisma.marketOffer.update).toHaveBeenCalledWith(
+    // Deve ter atualizado a oferta para CANCELLED com motivo de compensação (condicional ao PROCESSING)
+    expect(mockPrisma.marketOffer.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'off_1' },
+        where: { id: 'off_1', status: OfferStatus.PROCESSING },
         data: expect.objectContaining({
           status: OfferStatus.CANCELLED,
           cancelReason: expect.stringContaining('Itens externos foram estornados'),
         }),
       })
+    );
+  });
+
+  function buildAcceptMock(overrides: any = {}) {
+    return {
+      marketOffer: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'off_1',
+          sellerId: 'seller_123',
+          buyerId: 'buyer_456',
+          listingId: 'list_1',
+          status: OfferStatus.PENDING,
+          offeredItems: { runas: 250 },
+          listing: {
+            id: 'list_1',
+            userId: 'seller_123',
+            characterId: 'char_target',
+            status: ListingStatus.ACTIVE,
+            character: { id: 'char_target', name: 'Asuna', isMythic: false },
+          },
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({}),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      marketListing: { findUnique: vi.fn().mockResolvedValue({ status: ListingStatus.ACTIVE }) },
+      haremEntry: {
+        findFirst: vi.fn().mockResolvedValue({ userId: 'seller_123', characterId: 'char_target' }),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      $transaction: vi.fn().mockRejectedValue(new Error('PG_FAIL')),
+      ...overrides,
+    } as any;
+  }
+
+  it('acceptOffer não afirma estorno quando a compensação externa falha', async () => {
+    const mockPrisma = buildAcceptMock();
+    let call = 0;
+    global.fetch = vi.fn().mockImplementation(() => {
+      call++;
+      // 1ª chamada (transferência) ok; 2ª (compensação) falha
+      return Promise.resolve(
+        call === 1
+          ? { ok: true, json: async () => ({ success: true }) }
+          : { ok: false, status: 500, json: async () => ({ success: false, reason: 'saldo insuficiente' }) }
+      );
+    });
+
+    const marketService = new MarketService(mockPrisma);
+    vi.spyOn((marketService as any).notificationService, 'notifyMarketEvent').mockResolvedValue(undefined);
+    const result = await marketService.acceptOffer('seller_123', 'off_1');
+
+    expect(result.success).toBe(false);
+    expect(result.reason).not.toContain('estornados com sucesso');
+    expect(result.reason).toContain('falhou');
+    expect(mockPrisma.marketOffer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ cancelReason: expect.stringContaining('conferência manual') }),
+      })
+    );
+  });
+
+  it('acceptOffer recusa iniciar quando outra oferta do mesmo anúncio já está em processamento', async () => {
+    const mockPrisma = buildAcceptMock();
+    mockPrisma.marketOffer.count = vi.fn().mockResolvedValue(1);
+    global.fetch = vi.fn();
+
+    const marketService = new MarketService(mockPrisma);
+    await expect(marketService.acceptOffer('seller_123', 'off_1')).rejects.toThrow(DomainError);
+
+    // Nenhuma transferência externa e a trava PROCESSING é devolvida para PENDING
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockPrisma.marketOffer.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'off_1', status: OfferStatus.PROCESSING }),
+        data: { status: OfferStatus.PENDING },
+      })
+    );
+  });
+
+  it('acceptOffer cancela a oferta quando o anúncio já não está ativo após a trava', async () => {
+    const mockPrisma = buildAcceptMock();
+    mockPrisma.marketListing.findUnique = vi.fn().mockResolvedValue({ status: ListingStatus.COMPLETED });
+    global.fetch = vi.fn();
+
+    const marketService = new MarketService(mockPrisma);
+    await expect(marketService.acceptOffer('seller_123', 'off_1')).rejects.toThrow(DomainError);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockPrisma.marketOffer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: OfferStatus.CANCELLED }) })
     );
   });
 });

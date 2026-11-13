@@ -299,7 +299,7 @@ function createWaifuCard(char) {
 
   card.innerHTML = `
     <div class="card-img-wrapper">
-      <img decoding="async" src="${imgSrc}" loading="lazy" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
+      <img decoding="async" src="${escapeHtml(imgSrc)}" loading="lazy" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
       
       <div class="badge-rarity" style="border-color: ${rarityCfg.color}; color: ${rarityCfg.color};" title="Raridade: ${rarityCfg.label}">
         ${rarityCfg.emoji} ${rarityCfg.label}
@@ -307,12 +307,12 @@ function createWaifuCard(char) {
 
       ${
         isMarried
-          ? `<div class="badge-married ${spousePublicId ? 'badge-married-link' : ''}" title="${marriedTooltip}">💍</div>`
+          ? `<div class="badge-married ${spousePublicId ? 'badge-married-link' : ''}" title="${escapeHtml(marriedTooltip)}">💍</div>`
           : ''
       }
 
       <div class="badge-wishes" title="${wishlistCount} pessoa(s) adicionaram à wishlist">
-        <span>✨</span> <span>${wishlistCount}</span>
+        <span>✨</span> <span>${Number(wishlistCount) || 0}</span>
       </div>
 
       <button class="btn-card-report" title="Denunciar este personagem (🔞)">
@@ -492,11 +492,5 @@ async function fetchRavenaContact() {
 }
 
 function escapeHtml(text) {
-  if (!text) return '';
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  return Api.escapeHtml(text);
 }

@@ -179,20 +179,26 @@ export class CovetService {
   /**
    * Retorna um mapa com contagem de interessados (não vistos e totais) por personagem do harém do dono
    */
-  async getHaremCovetCounts(ownerId: string): Promise<Record<string, { unseen: number; total: number }>> {
+  async getHaremCovetCounts(
+    ownerId: string
+  ): Promise<Record<string, { unseen: number; active: number; total: number }>> {
     const covets = await this.prisma.characterCovet.findMany({
       where: { ownerId },
       select: { characterId: true, status: true },
     });
 
-    const map: Record<string, { unseen: number; total: number }> = {};
+    // unseen = PENDING; active = tudo que não foi ignorado (PENDING + SEEN); total inclui IGNORED
+    const map: Record<string, { unseen: number; active: number; total: number }> = {};
     for (const c of covets) {
       if (!map[c.characterId]) {
-        map[c.characterId] = { unseen: 0, total: 0 };
+        map[c.characterId] = { unseen: 0, active: 0, total: 0 };
       }
       map[c.characterId].total++;
       if (c.status === CovetStatus.PENDING) {
         map[c.characterId].unseen++;
+      }
+      if (c.status !== CovetStatus.IGNORED) {
+        map[c.characterId].active++;
       }
     }
 

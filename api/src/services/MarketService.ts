@@ -1,5 +1,5 @@
 import { PrismaClient, ListingStatus, OfferStatus, KakeraReason, Rarity } from '@prisma/client';
-import { config } from '../config.js';
+import { config, ravenaMarketHeaders } from '../config.js';
 import { DomainError } from '../errors/DomainError.js';
 import { CharacterService } from './CharacterService.js';
 import { CooldownService } from './CooldownService.js';
@@ -404,6 +404,8 @@ export class MarketService {
         buyerId,
       },
       orderBy: { createdAt: 'desc' },
+      // Histórico limitado: o payload crescia sem limite desde que o corte de 15 dias foi removido
+      take: 200,
       include: {
         listing: {
           include: {
@@ -506,7 +508,80 @@ export class MarketService {
   /**
    * Cria uma proposta de oferta para um anúncio
    */
+  /**
+   * Normaliza e valida os itens ofertados. Quantidades precisam ser inteiras e não negativas:
+   * antes, runas/petalitas/quantidades negativas passavam direto para a transferência da Ravena
+   * (o vendedor via só os valores positivos, mas o comprador podia receber runas do vendedor).
+   */
+  private sanitizeOfferedItems(raw: any): CreateOfferData['offeredItems'] {
+    const items = raw && typeof raw === 'object' ? raw : {};
+    const invalid = (msg: string): never => {
+      throw new DomainError('INVALID_OFFER_ITEMS', msg);
+    };
+    const nonNegInt = (value: any, label: string): number => {
+      if (value === undefined || value === null || value === '') return 0;
+      const n = Number(value);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+        invalid(`Quantidade inválida de ${label}: use um número inteiro maior ou igual a zero.`);
+      }
+      return n;
+    };
+    const posInt = (value: any, label: string): number => {
+      const n = Number(value);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+        invalid(`Valor inválido em ${label}: use um número inteiro maior que zero.`);
+      }
+      return n;
+    };
+
+    const waifuIds: string[] = Array.isArray(items.waifuIds)
+      ? [...new Set<string>(items.waifuIds.map((id: any) => String(id || '').trim()).filter(Boolean))]
+      : [];
+    if (waifuIds.length > 20) invalid('Você pode ofertar no máximo 20 waifus por proposta.');
+
+    const fishingBuffs = Array.isArray(items.fishingBuffs)
+      ? items.fishingBuffs.map((b: any) => ({
+          ...(b && typeof b === 'object' ? b : {}),
+          id: posInt(b?.id, 'buffs de pesca'),
+        }))
+      : [];
+    const buffIdSet = new Set<number>([
+      ...fishingBuffs.map((b: any) => b.id),
+      ...(Array.isArray(items.fishingBuffIds) ? items.fishingBuffIds.map((id: any) => posInt(id, 'buffs de pesca')) : []),
+    ]);
+    if (buffIdSet.size > 50) invalid('Você pode ofertar no máximo 50 buffs de pesca por proposta.');
+
+    const farmMap = new Map<string, { itemId: string; name?: string; amount: number }>();
+    if (Array.isArray(items.farmItems)) {
+      for (const it of items.farmItems) {
+        const itemId = String(it?.itemId || '').trim();
+        if (!itemId) invalid('Item da fazenda sem identificador.');
+        const amount = posInt(it?.amount ?? it?.quantity, 'itens da fazenda');
+        const prev = farmMap.get(itemId);
+        farmMap.set(itemId, {
+          itemId,
+          name: typeof it?.name === 'string' ? it.name.slice(0, 80) : prev?.name,
+          amount: (prev?.amount || 0) + amount,
+        });
+      }
+    }
+    if (farmMap.size > 50) invalid('Você pode ofertar no máximo 50 itens da fazenda diferentes por proposta.');
+
+    return {
+      isFree: Boolean(items.isFree),
+      zinthos: nonNegInt(items.zinthos, 'Zinthos'),
+      runas: nonNegInt(items.runas, 'Runas'),
+      petalitas: nonNegInt(items.petalitas, 'Petalitas'),
+      waifuIds,
+      fishes: Array.isArray(items.fishes) ? items.fishes.slice(0, 50) : [],
+      fishingBuffs,
+      fishingBuffIds: [...buffIdSet],
+      farmItems: [...farmMap.values()],
+    };
+  }
+
   async createOffer(buyerId: string, listingId: string, data: CreateOfferData) {
+    data = { ...data, offeredItems: this.sanitizeOfferedItems(data?.offeredItems) };
     const listing = await this.prisma.marketListing.findUnique({
       where: { id: listingId },
       include: { character: true },
@@ -571,6 +646,7 @@ export class MarketService {
     if (hasExternalItems) {
       try {
         const invRes = await fetch(`${config.RAVENA_API_URL}/api/market/user-inventory/${encodeURIComponent(buyerId)}`, {
+          headers: ravenaMarketHeaders(),
           signal: AbortSignal.timeout(6000),
         });
         if (!invRes.ok) {
@@ -694,14 +770,22 @@ export class MarketService {
 
     const cleanReason = typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 300) : null;
 
-    const rejected = await this.prisma.marketOffer.update({
-      where: { id: offerId },
+    // Condicional ao status: um aceite em andamento (PROCESSING) ou concluído não pode ser sobrescrito
+    const rejectedCount = await this.prisma.marketOffer.updateMany({
+      where: { id: offerId, sellerId, status: OfferStatus.PENDING },
       data: {
         status: OfferStatus.REJECTED,
         cancelReason: cleanReason,
         notifiedBuyer: false,
         buyerNotifiedStatus: 'REJECTED',
       },
+    });
+    if (rejectedCount.count !== 1) {
+      throw new DomainError('INVALID_STATUS', 'Esta oferta já foi finalizada ou está sendo processada.');
+    }
+
+    const rejected = await this.prisma.marketOffer.findUniqueOrThrow({
+      where: { id: offerId },
       include: {
         listing: { include: { character: true, user: { select: { name: true, publicId: true } } } },
       },
@@ -752,8 +836,9 @@ export class MarketService {
       throw new DomainError('INVALID_STATUS', 'Apenas propostas pendentes podem ser canceladas.');
     }
 
-    const cancelled = await this.prisma.marketOffer.update({
-      where: { id: offerId },
+    // Condicional ao status: se o vendedor já está aceitando (PROCESSING), o cancelamento não sobrescreve
+    const cancelledCount = await this.prisma.marketOffer.updateMany({
+      where: { id: offerId, buyerId, status: OfferStatus.PENDING },
       data: {
         status: OfferStatus.CANCELLED,
         cancelReason: 'Cancelada pelo comprador',
@@ -761,14 +846,35 @@ export class MarketService {
         buyerNotifiedStatus: 'CANCELLED',
       },
     });
+    if (cancelledCount.count !== 1) {
+      throw new DomainError('INVALID_STATUS', 'Esta proposta já foi respondida ou está sendo processada pelo vendedor.');
+    }
 
-    return cancelled;
+    return this.prisma.marketOffer.findUniqueOrThrow({ where: { id: offerId } });
   }
 
   /**
    * Aceita uma oferta com validação em tempo real e transferência atômica multi-jogo
    */
   async acceptOffer(sellerId: string, offerId: string) {
+    try {
+      return await this.acceptOfferLocked(sellerId, offerId);
+    } finally {
+      // Nenhum caminho pode deixar a oferta presa em PROCESSING: se o fluxo saiu sem marcá-la como
+      // ACCEPTED/CANCELLED/PENDING (exceção de Redis/Prisma, throw de validação), devolve para PENDING.
+      // Condicional ao status, então é no-op quando outro caminho já finalizou a oferta.
+      await this.prisma.marketOffer
+        .updateMany({
+          where: { id: offerId, sellerId, status: OfferStatus.PROCESSING },
+          data: { status: OfferStatus.PENDING },
+        })
+        .catch((err: any) => {
+          console.error(`[Market] Falha ao liberar trava PROCESSING da oferta ${offerId}:`, err?.message);
+        });
+    }
+  }
+
+  private async acceptOfferLocked(sellerId: string, offerId: string) {
     const offer = await this.prisma.marketOffer.findUnique({
       where: { id: offerId },
       include: {
@@ -802,8 +908,34 @@ export class MarketService {
     }
 
     const listing = offer.listing;
-    if (listing.status !== ListingStatus.ACTIVE) {
+    // Relê o status do anúncio depois da trava (o include acima pode estar defasado)
+    const freshListing = await this.prisma.marketListing.findUnique({
+      where: { id: listing.id },
+      select: { status: true },
+    });
+    if (!freshListing || freshListing.status !== ListingStatus.ACTIVE) {
+      await this.prisma.marketOffer.updateMany({
+        where: { id: offer.id, status: OfferStatus.PROCESSING },
+        data: {
+          status: OfferStatus.CANCELLED,
+          cancelReason: 'O anúncio não está mais ativo.',
+          notifiedBuyer: false,
+          buyerNotifiedStatus: 'CANCELLED',
+        },
+      });
       throw new DomainError('LISTING_NOT_ACTIVE', 'O anúncio não está mais ativo.');
+    }
+
+    // Serializa aceites do mesmo anúncio: se outra oferta dele já está em processamento, não inicia
+    // uma segunda transferência externa (a trava acima é por oferta, não por anúncio).
+    const otherProcessing = await this.prisma.marketOffer.count({
+      where: { listingId: listing.id, id: { not: offer.id }, status: OfferStatus.PROCESSING },
+    });
+    if (otherProcessing > 0) {
+      throw new DomainError(
+        'OFFER_ALREADY_PROCESSED',
+        'Outra proposta deste anúncio está sendo processada. Aguarde alguns segundos e tente novamente.'
+      );
     }
 
     if (listing.character.isMythic || (listing.character as any).baseRarity === 'MYTHIC') {
@@ -984,7 +1116,7 @@ export class MarketService {
         const timeoutId = setTimeout(() => controller.abort(), 12000);
         const transferRes = await fetch(`${config.RAVENA_API_URL}/api/market/transfer`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: ravenaMarketHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             fromUserId: offer.buyerId,
             toUserId: sellerId,
@@ -1040,15 +1172,29 @@ export class MarketService {
     // 5. Executa a transferência de Waifus e Zinthos atomicamente no PostgreSQL com reversão por compensação
     try {
       await this.prisma.$transaction(async (tx) => {
-        // Passa a waifu anunciada do vendedor para o comprador (remove da coleção do antigo dono e reseta favorito)
-        await tx.haremEntry.update({
-          where: { characterId: listing.characterId },
+        // Reivindica o anúncio atomicamente: só uma transação consegue mover ACTIVE -> COMPLETED.
+        // Aceites concorrentes (outra oferta do mesmo anúncio) falham aqui e caem na compensação.
+        const claimedListing = await tx.marketListing.updateMany({
+          where: { id: listing.id, status: ListingStatus.ACTIVE },
+          data: { status: ListingStatus.COMPLETED },
+        });
+        if (claimedListing.count !== 1) {
+          throw new DomainError('LISTING_NOT_ACTIVE', 'O anúncio foi concluído ou cancelado durante o processamento.');
+        }
+
+        // Passa a waifu anunciada do vendedor para o comprador (remove da coleção do antigo dono e reseta favorito).
+        // Condicionado ao dono atual: se o vendedor perdeu o personagem no meio do caminho, aborta.
+        const movedListed = await tx.haremEntry.updateMany({
+          where: { characterId: listing.characterId, userId: sellerId },
           data: {
             userId: offer.buyerId,
             collectionId: null,
             isFavorite: false,
           },
         });
+        if (movedListed.count !== 1) {
+          throw new DomainError('SELLER_LOST_WAIFU', 'O vendedor não possui mais o personagem anunciado.');
+        }
 
         // Se o comprador tiver cobiçado este personagem anunciado, remove o covet dele
         await tx.characterCovet.deleteMany({
@@ -1063,14 +1209,17 @@ export class MarketService {
 
         // Passa as waifus ofertadas do comprador para o vendedor (remove da coleção do comprador e reseta favorito)
         for (const wId of waifuIds) {
-          await tx.haremEntry.update({
-            where: { characterId: wId },
+          const movedOffered = await tx.haremEntry.updateMany({
+            where: { characterId: wId, userId: offer.buyerId },
             data: {
               userId: sellerId,
               collectionId: null,
               isFavorite: false,
             },
           });
+          if (movedOffered.count !== 1) {
+            throw new DomainError('BUYER_LOST_WAIFU', 'O proponente não possui mais uma das waifus ofertadas.');
+          }
 
           // Atualiza covets das waifus ofertadas para o novo dono
           await tx.characterCovet.deleteMany({
@@ -1084,10 +1233,13 @@ export class MarketService {
 
         // Transfere Zinthos (se houver)
         if (offeredZinthos > 0) {
-          await tx.user.update({
-            where: { id: offer.buyerId },
+          const debited = await tx.user.updateMany({
+            where: { id: offer.buyerId, kakera: { gte: offeredZinthos } },
             data: { kakera: { decrement: offeredZinthos } },
           });
+          if (debited.count !== 1) {
+            throw new DomainError('INSUFFICIENT_FUNDS', 'O proponente não possui mais os Zinthos ofertados.');
+          }
           await tx.user.update({
             where: { id: sellerId },
             data: { kakera: { increment: offeredZinthos } },
@@ -1110,41 +1262,64 @@ export class MarketService {
           });
         }
 
-        // Marca a oferta como ACEITA
-        await tx.marketOffer.update({
-          where: { id: offer.id },
+        // Marca a oferta como ACEITA (só se continuar em PROCESSING: um cancelamento concorrente vence)
+        const acceptedOffer = await tx.marketOffer.updateMany({
+          where: { id: offer.id, status: OfferStatus.PROCESSING },
           data: {
             status: OfferStatus.ACCEPTED,
             notifiedBuyer: false,
             buyerNotifiedStatus: 'ACCEPTED',
           },
         });
-
-        // Marca o anúncio como CONCLUÍDO
-        await tx.marketListing.update({
-          where: { id: listing.id },
-          data: { status: ListingStatus.COMPLETED },
-        });
+        if (acceptedOffer.count !== 1) {
+          throw new DomainError('INVALID_STATUS', 'A proposta foi cancelada durante o processamento.');
+        }
 
         // Cancela outros anúncios ativos desse mesmo personagem (caso existam)
-        await tx.marketListing.updateMany({
-          where: {
-            characterId: listing.characterId,
-            id: { not: listing.id },
-            status: ListingStatus.ACTIVE,
-          },
-          data: { status: ListingStatus.CANCELLED },
+        const sameCharListings = await tx.marketListing.findMany({
+          where: { characterId: listing.characterId, id: { not: listing.id }, status: ListingStatus.ACTIVE },
+          select: { id: true },
         });
+        if (sameCharListings.length > 0) {
+          const sameCharIds = sameCharListings.map((l) => l.id);
+          await tx.marketListing.updateMany({
+            where: { id: { in: sameCharIds } },
+            data: { status: ListingStatus.CANCELLED },
+          });
+          await tx.marketOffer.updateMany({
+            where: { listingId: { in: sameCharIds }, status: OfferStatus.PENDING },
+            data: {
+              status: OfferStatus.CANCELLED,
+              cancelReason: 'O personagem anunciado foi trocado em outra negociação.',
+              notifiedBuyer: false,
+              buyerNotifiedStatus: 'CANCELLED',
+            },
+          });
+        }
 
         // Se o comprador ofertou waifus, cancela anúncios ativos delas também
         if (waifuIds.length > 0) {
-          await tx.marketListing.updateMany({
-            where: {
-              characterId: { in: waifuIds },
-              status: ListingStatus.ACTIVE,
-            },
-            data: { status: ListingStatus.CANCELLED },
+          const offeredListings = await tx.marketListing.findMany({
+            where: { characterId: { in: waifuIds }, status: ListingStatus.ACTIVE },
+            select: { id: true },
           });
+          if (offeredListings.length > 0) {
+            const offeredListingIds = offeredListings.map((l) => l.id);
+            await tx.marketListing.updateMany({
+              where: { id: { in: offeredListingIds } },
+              data: { status: ListingStatus.CANCELLED },
+            });
+            // Sem isso, as propostas desses anúncios ficariam PENDING para sempre em anúncios mortos
+            await tx.marketOffer.updateMany({
+              where: { listingId: { in: offeredListingIds }, status: OfferStatus.PENDING },
+              data: {
+                status: OfferStatus.CANCELLED,
+                cancelReason: 'O personagem anunciado foi trocado em outra negociação.',
+                notifiedBuyer: false,
+                buyerNotifiedStatus: 'CANCELLED',
+              },
+            });
+          }
         }
 
         // Cancela outras ofertas pendentes no mesmo anúncio
@@ -1166,13 +1341,14 @@ export class MarketService {
       console.error('[Market Transaction] Erro na transação PostgreSQL, iniciando compensação externa:', pgTxErr);
 
       // Compensating Transaction: Devolve itens externos do vendedor de volta para o comprador
+      let compensationOk = !hasExternalItems;
       if (hasExternalItems) {
         try {
           const compController = new AbortController();
           const compTimeout = setTimeout(() => compController.abort(), 12000);
           const rollbackRes = await fetch(`${config.RAVENA_API_URL}/api/market/transfer`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: ravenaMarketHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               fromUserId: sellerId,
               toUserId: offer.buyerId,
@@ -1188,6 +1364,7 @@ export class MarketService {
           clearTimeout(compTimeout);
           const rollbackData = (await rollbackRes.json().catch(() => ({}))) as any;
           if (rollbackRes.ok && rollbackData?.success) {
+            compensationOk = true;
             console.log(`[Market Compensation] Sucesso ao devolver itens externos para o comprador ${offer.buyerId}`);
           } else {
             console.error(`[Market Compensation] CRÍTICO: Falha ao devolver itens externos para ${offer.buyerId}:`, rollbackData);
@@ -1197,20 +1374,44 @@ export class MarketService {
         }
       }
 
-      await this.prisma.marketOffer.update({
-        where: { id: offer.id },
+      const isDomain = pgTxErr instanceof DomainError;
+      const baseReason = (
+        isDomain ? pgTxErr.message : `Erro no processamento interno da troca: ${pgTxErr?.message || 'Falha no banco'}`
+      ).replace(/[.\s]+$/, '');
+      const refundNote = !hasExternalItems
+        ? ''
+        : compensationOk
+        ? ' Itens externos foram estornados.'
+        : ' ATENÇÃO: o estorno automático dos itens externos falhou e precisa de conferência manual da administração.';
+
+      await this.prisma.marketOffer.updateMany({
+        where: { id: offer.id, status: OfferStatus.PROCESSING },
         data: {
           status: OfferStatus.CANCELLED,
-          cancelReason: `Erro no processamento interno da troca: ${pgTxErr?.message || 'Falha no banco'}. Itens externos foram estornados.`,
+          cancelReason: `${baseReason}.${refundNote}`,
           notifiedBuyer: false,
           buyerNotifiedStatus: 'CANCELLED',
         },
       });
 
+      if (hasExternalItems && !compensationOk) {
+        this.notificationService
+          .notifyMarketEvent(
+            offer.buyerId,
+            'SYSTEM',
+            '⚠️ Troca não concluída: estorno pendente',
+            'A troca não pôde ser concluída e a devolução automática dos seus itens externos (runas, buffs ou itens da fazenda) falhou. A administração foi avisada para conferir manualmente.',
+            { listingId: listing.id, offerId: offer.id, needsReconciliation: true }
+          )
+          .catch(() => {});
+      }
+
       return {
         success: false,
         cancelled: true,
-        reason: 'Não foi possível concluir a negociação devido a um erro no banco de dados. Seus itens ofertados foram estornados com sucesso.',
+        reason: `Não foi possível concluir a negociação: ${baseReason}.${
+          !hasExternalItems ? '' : compensationOk ? ' Os itens externos ofertados foram estornados.' : ' O estorno automático dos itens externos falhou e será conferido manualmente.'
+        }`,
       };
     }
 
@@ -1545,7 +1746,7 @@ export class MarketService {
         const timeoutId = setTimeout(() => controller.abort(), 8000);
         const transferRes = await fetch(`${config.RAVENA_API_URL}/api/market/transfer`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: ravenaMarketHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             fromUserId: offer.sellerId,
             toUserId: offer.buyerId,

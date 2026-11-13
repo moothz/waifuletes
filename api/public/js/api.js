@@ -161,7 +161,13 @@ const Api = {
       document.body.appendChild(toast);
     }
 
-    toast.innerHTML = `<span style="font-size: 18px;">${icon}</span> <span>${message}</span>`;
+    // Mensagens podem conter nomes/textos de jogadores: renderiza sempre como texto puro
+    const iconEl = document.createElement('span');
+    iconEl.style.fontSize = '18px';
+    iconEl.textContent = icon == null ? '' : String(icon);
+    const msgEl = document.createElement('span');
+    msgEl.textContent = String(message);
+    toast.replaceChildren(iconEl, document.createTextNode(' '), msgEl);
     toast.classList.remove('hidden');
 
     clearTimeout(this._toastTimer);
@@ -255,6 +261,46 @@ const Api = {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  },
+
+  /**
+   * Escape HTML completo (& < > " ') para texto e valores de atributo entre aspas.
+   */
+  escapeHtml(str) {
+    return this._escapeHtml(str);
+  },
+
+  /**
+   * Escapa um valor para uma string JS entre aspas simples embutida em atributo HTML
+   * entre aspas duplas, ex.: onclick="f('${Api.escapeJsAttr(x)}')".
+   * Primeiro escapa para JS (o parser HTML decodifica entidades antes do JS rodar),
+   * depois escapa para o atributo HTML.
+   */
+  escapeJsAttr(str) {
+    if (str === null || str === undefined) return '';
+    const js = String(str)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '\\"')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029')
+      .replace(/</g, '\\x3C')
+      .replace(/>/g, '\\x3E');
+    return this._escapeHtml(js);
+  },
+
+  /**
+   * Escapa tudo e reabilita apenas tags de formatação simples SEM atributos
+   * (b, i, u, s, em, strong, code, pre, br). Útil para textos gerados com
+   * formatação HTML estilo Telegram que podem conter conteúdo de jogadores.
+   */
+  sanitizeBasicHtml(str) {
+    return this._escapeHtml(str).replace(
+      /&lt;(\/?)(b|i|u|s|em|strong|code|pre|br)\s*\/?&gt;/gi,
+      (_, slash, tag) => `<${slash}${tag.toLowerCase()}>`
+    );
   },
 
   _formatMultilineText(str) {
@@ -388,6 +434,9 @@ const Api = {
 
     return new Promise((resolve) => {
       let settled = false;
+      // Elementos de fundo tornados inertes enquanto o diálogo está aberto
+      // (impede foco/clique fora do modal; restaurado ao fechar)
+      const inertEls = [];
 
       const settle = (value, isCancel = false) => {
         if (settled) return;
@@ -399,6 +448,7 @@ const Api = {
           this._dialogState.keyHandler = null;
         }
 
+        inertEls.forEach((el) => { el.inert = false; });
         overlay.classList.add('hidden');
         if (!document.querySelector('.modal-overlay:not(.hidden)')) {
           document.body.classList.remove('modal-open');
@@ -445,10 +495,39 @@ const Api = {
           e.preventDefault();
           e.stopImmediatePropagation();
           settle(undefined);
+        } else if (e.key === 'Tab') {
+          // Mantém o foco circulando apenas dentro do diálogo
+          const box = overlay.querySelector('.retro-dialog-box') || overlay;
+          const focusables = Array.from(
+            box.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+          ).filter((el) => !el.disabled && el.offsetParent !== null);
+          const active = document.activeElement;
+          if (focusables.length === 0) {
+            e.preventDefault();
+            return;
+          }
+          const first = focusables[0];
+          const last = focusables[focusables.length - 1];
+          if (!box.contains(active)) {
+            e.preventDefault();
+            (e.shiftKey ? last : first).focus();
+          } else if (e.shiftKey && active === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+          }
         }
       };
       this._dialogState.keyHandler = keyHandler;
       window.addEventListener('keydown', keyHandler, true);
+
+      Array.from(document.body.children).forEach((el) => {
+        if (el === overlay || el.inert || el.tagName === 'SCRIPT') return;
+        el.inert = true;
+        inertEls.push(el);
+      });
 
       overlay.classList.remove('hidden');
       document.body.classList.add('modal-open');

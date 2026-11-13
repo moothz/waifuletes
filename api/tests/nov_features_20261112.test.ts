@@ -110,7 +110,8 @@ describe('Features Nov/2026 — Backend Rules', () => {
             sellerId: 'seller_1',
             status: 'PENDING',
           }),
-          update: vi.fn().mockResolvedValue({
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUniqueOrThrow: vi.fn().mockResolvedValue({
             id: 'off_1',
             status: 'REJECTED',
             cancelReason: 'Valor muito baixo',
@@ -126,9 +127,9 @@ describe('Features Nov/2026 — Backend Rules', () => {
 
       await service.rejectOffer('seller_1', 'off_1', '  Valor muito baixo  ');
 
-      expect(mockPrisma.marketOffer.update).toHaveBeenCalledWith(
+      expect(mockPrisma.marketOffer.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'off_1' },
+          where: { id: 'off_1', sellerId: 'seller_1', status: 'PENDING' },
           data: expect.objectContaining({
             status: 'REJECTED',
             cancelReason: 'Valor muito baixo',
@@ -154,7 +155,8 @@ describe('Features Nov/2026 — Backend Rules', () => {
             sellerId: 'seller_1',
             status: 'PENDING',
           }),
-          update: vi.fn().mockResolvedValue({
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUniqueOrThrow: vi.fn().mockResolvedValue({
             id: 'off_1',
             status: 'CANCELLED',
             cancelReason: 'Cancelada pelo comprador',
@@ -167,8 +169,8 @@ describe('Features Nov/2026 — Backend Rules', () => {
 
       const res = await service.cancelOffer('buyer_1', 'off_1');
       expect(res.status).toBe('CANCELLED');
-      expect(mockPrisma.marketOffer.update).toHaveBeenCalledWith({
-        where: { id: 'off_1' },
+      expect(mockPrisma.marketOffer.updateMany).toHaveBeenCalledWith({
+        where: { id: 'off_1', buyerId: 'buyer_1', status: 'PENDING' },
         data: {
           status: 'CANCELLED',
           cancelReason: 'Cancelada pelo comprador',
@@ -176,6 +178,26 @@ describe('Features Nov/2026 — Backend Rules', () => {
           buyerNotifiedStatus: 'CANCELLED',
         },
       });
+    });
+
+    it('cancelOffer e rejectOffer não sobrescrevem uma oferta que o vendedor já está aceitando (PROCESSING)', async () => {
+      const mockPrisma: any = {
+        marketOffer: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'off_1',
+            buyerId: 'buyer_1',
+            sellerId: 'seller_1',
+            status: 'PENDING', // leitura defasada: o aceite travou a oferta logo depois
+          }),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          findUniqueOrThrow: vi.fn(),
+        },
+      };
+      const service = new MarketService(mockPrisma, { formatImageUrl: vi.fn() } as any);
+
+      await expect(service.cancelOffer('buyer_1', 'off_1')).rejects.toThrow(DomainError);
+      await expect(service.rejectOffer('seller_1', 'off_1', 'não')).rejects.toThrow(DomainError);
+      expect(mockPrisma.marketOffer.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
     it('getListings com sortBy=rarity deve priorizar Mítico > Raridade > Chaves', async () => {

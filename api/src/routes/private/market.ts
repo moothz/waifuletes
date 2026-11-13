@@ -142,9 +142,10 @@ export const privateMarketRoutes: FastifyPluginAsync = async (fastify) => {
       body: {
         type: 'object',
         required: ['userId'],
+        additionalProperties: false,
         properties: {
           userId: { type: 'string' },
-          reason: { type: 'string' },
+          reason: { type: 'string', maxLength: 1000 },
         },
       },
     },

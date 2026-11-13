@@ -125,7 +125,8 @@ export class MarryService {
 
     // Helper para estorno do cooldown em caso de desistência/falha antes de casar
     const rollbackClaimCooldown = async () => {
-      await this.cooldownService.resetCooldown(userId, 'claim', rarity);
+      // Só libera a trava de claim; os contadores diários de casamento/troca não podem ser zerados aqui
+      await this.cooldownService.releaseClaimCooldown(userId, rarity);
     };
 
     // 5. Efetuar casamento atômico no banco

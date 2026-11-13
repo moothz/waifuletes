@@ -7,9 +7,10 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 dotenv.config();
 
-const DATABASE_URL = process.env.DATABASE_URL?.replace('postgres:5432', '127.0.0.1:5433') || 'postgresql://waifuletes:e868c1cc2a267a7ddd2226ec7bedf59b0bd747c364af22e7@127.0.0.1:5433/waifuletes';
+// Sem fallback com credenciais: o teste só roda quando DATABASE_URL está configurada.
+const DATABASE_URL = process.env.DATABASE_URL?.replace('postgres:5432', '127.0.0.1:5433');
 
-describe('🔍 Resolução de Personagens e Desambiguação de IDs Homônimos', () => {
+describe.skipIf(!DATABASE_URL)('🔍 Resolução de Personagens e Desambiguação de IDs Homônimos', () => {
   let prisma: PrismaClient;
   let characterService: CharacterService;
 
