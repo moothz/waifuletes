@@ -1,4 +1,4 @@
-import { PrismaClient, SuggestionType, SuggestionStatus, Rarity, Gender } from '@prisma/client';
+import { PrismaClient, SuggestionType, SuggestionStatus, Rarity, Gender, ListingStatus } from '@prisma/client';
 import { Redis } from 'ioredis';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -10,6 +10,7 @@ import { CharacterService, slugify } from './CharacterService.js';
 import { TelegramNotificationService } from './TelegramNotificationService.js';
 import { NotificationService } from './NotificationService.js';
 import { RarityAdvisorService } from './RarityAdvisorService.js';
+import { rejectPendingOffersForListings } from './MarketService.js';
 
 export type SuggestionBlockDuration = '24h' | '7d' | '30d' | 'forever';
 
@@ -1408,6 +1409,7 @@ export class SuggestionService {
         where: { id: suggestion.characterId },
         data: { isActive: false },
       });
+      await this.cancelActiveListingsForCharacter(suggestion.characterId);
       successMessage = `Personagem desativado/removido do catálogo com sucesso.`;
     }
 
@@ -1663,6 +1665,8 @@ export class SuggestionService {
       data: { isActive: false },
     });
 
+    await this.cancelActiveListingsForCharacter(character.id);
+
     await this.prisma.characterSuggestion.create({
       data: {
         characterId: character.id,
@@ -1676,6 +1680,29 @@ export class SuggestionService {
 
     await this.invalidateCharacterCaches();
     return character;
+  }
+
+  /**
+   * Cancela anúncios ativos e recusa propostas pendentes quando o personagem é desativado
+   */
+  private async cancelActiveListingsForCharacter(characterId: string): Promise<void> {
+    if (typeof (this.prisma as any).marketListing?.findMany !== 'function') {
+      return;
+    }
+
+    const activeListings = await this.prisma.marketListing.findMany({
+      where: { characterId, status: ListingStatus.ACTIVE },
+      select: { id: true },
+    });
+
+    if (activeListings.length === 0) return;
+
+    const listingIds = activeListings.map((l) => l.id);
+    await rejectPendingOffersForListings(this.prisma, listingIds);
+    await this.prisma.marketListing.updateMany({
+      where: { id: { in: listingIds } },
+      data: { status: ListingStatus.CANCELLED },
+    });
   }
 
   /**

@@ -20,6 +20,42 @@ export interface CreateOfferData {
   };
 }
 
+export const UNLISTED_OFFER_REJECTION_REASON = 'Personagem não está mais anunciado';
+
+export const UNLISTED_OFFER_REJECTION_DATA = {
+  status: OfferStatus.REJECTED,
+  cancelReason: UNLISTED_OFFER_REJECTION_REASON,
+  notifiedBuyer: false,
+  buyerNotifiedStatus: 'REJECTED' as const,
+};
+
+/**
+ * Marca todas as ofertas pendentes dos anúncios informados como Recusada
+ * quando o personagem sai dos classificados por qualquer motivo.
+ */
+export async function rejectPendingOffersForListings(
+  db: Pick<PrismaClient, 'marketOffer'>,
+  listingIds: string[],
+  excludeOfferId?: string
+): Promise<void> {
+  if (!listingIds.length || typeof db?.marketOffer?.updateMany !== 'function') {
+    return;
+  }
+
+  const where: any = {
+    listingId: { in: listingIds },
+    status: OfferStatus.PENDING,
+  };
+  if (excludeOfferId) {
+    where.id = { not: excludeOfferId };
+  }
+
+  await db.marketOffer.updateMany({
+    where,
+    data: UNLISTED_OFFER_REJECTION_DATA,
+  });
+}
+
 export class MarketService {
   private notificationService: NotificationService;
 
@@ -29,6 +65,18 @@ export class MarketService {
     private cooldownService?: CooldownService
   ) {
     this.notificationService = new NotificationService(this.prisma);
+  }
+
+  private async cancelListingsAndRejectPendingOffers(
+    tx: Pick<PrismaClient, 'marketListing' | 'marketOffer'>,
+    listingIds: string[]
+  ): Promise<void> {
+    if (!listingIds.length) return;
+    await tx.marketListing.updateMany({
+      where: { id: { in: listingIds } },
+      data: { status: ListingStatus.CANCELLED },
+    });
+    await rejectPendingOffersForListings(tx, listingIds);
   }
 
   public formatCharacter(character: any) {
@@ -168,16 +216,7 @@ export class MarketService {
     }
 
     return await this.prisma.$transaction(async (tx) => {
-      // Cancela todas as ofertas pendentes desse anúncio
-      await tx.marketOffer.updateMany({
-        where: { listingId, status: OfferStatus.PENDING },
-        data: {
-          status: OfferStatus.CANCELLED,
-          cancelReason: 'Anúncio cancelado pelo vendedor.',
-          notifiedBuyer: false,
-          buyerNotifiedStatus: 'CANCELLED',
-        },
-      });
+      await rejectPendingOffersForListings(tx, [listingId]);
 
       return await tx.marketListing.update({
         where: { id: listingId },
@@ -916,13 +955,9 @@ export class MarketService {
     if (!freshListing || freshListing.status !== ListingStatus.ACTIVE) {
       await this.prisma.marketOffer.updateMany({
         where: { id: offer.id, status: OfferStatus.PROCESSING },
-        data: {
-          status: OfferStatus.CANCELLED,
-          cancelReason: 'O anúncio não está mais ativo.',
-          notifiedBuyer: false,
-          buyerNotifiedStatus: 'CANCELLED',
-        },
+        data: UNLISTED_OFFER_REJECTION_DATA,
       });
+      await rejectPendingOffersForListings(this.prisma, [listing.id], offer.id);
       throw new DomainError('LISTING_NOT_ACTIVE', 'O anúncio não está mais ativo.');
     }
 
@@ -943,13 +978,11 @@ export class MarketService {
         where: { id: listing.id },
         data: { status: ListingStatus.CANCELLED },
       });
-      await this.prisma.marketOffer.update({
-        where: { id: offer.id },
-        data: {
-          status: OfferStatus.CANCELLED,
-          cancelReason: 'Personagens Míticos não podem ser negociados nos classificados.',
-        },
+      await this.prisma.marketOffer.updateMany({
+        where: { id: offer.id, status: OfferStatus.PROCESSING },
+        data: UNLISTED_OFFER_REJECTION_DATA,
       });
+      await rejectPendingOffersForListings(this.prisma, [listing.id], offer.id);
       throw new DomainError('CANNOT_TRADE_MYTHIC', 'Personagens Míticos pertencem exclusivamente ao seu criador e não podem ser negociados nos classificados.');
     }
 
@@ -963,13 +996,11 @@ export class MarketService {
         where: { id: listing.id },
         data: { status: ListingStatus.CANCELLED },
       });
-      await this.prisma.marketOffer.update({
-        where: { id: offer.id },
-        data: {
-          status: OfferStatus.CANCELLED,
-          cancelReason: 'O vendedor não possui mais o personagem anunciado.',
-        },
+      await this.prisma.marketOffer.updateMany({
+        where: { id: offer.id, status: OfferStatus.PROCESSING },
+        data: UNLISTED_OFFER_REJECTION_DATA,
       });
+      await rejectPendingOffersForListings(this.prisma, [listing.id], offer.id);
       throw new DomainError('SELLER_LOST_WAIFU', 'Você não possui mais o personagem deste anúncio.');
     }
 
@@ -1281,20 +1312,10 @@ export class MarketService {
           select: { id: true },
         });
         if (sameCharListings.length > 0) {
-          const sameCharIds = sameCharListings.map((l) => l.id);
-          await tx.marketListing.updateMany({
-            where: { id: { in: sameCharIds } },
-            data: { status: ListingStatus.CANCELLED },
-          });
-          await tx.marketOffer.updateMany({
-            where: { listingId: { in: sameCharIds }, status: OfferStatus.PENDING },
-            data: {
-              status: OfferStatus.CANCELLED,
-              cancelReason: 'O personagem anunciado foi trocado em outra negociação.',
-              notifiedBuyer: false,
-              buyerNotifiedStatus: 'CANCELLED',
-            },
-          });
+          await this.cancelListingsAndRejectPendingOffers(
+            tx,
+            sameCharListings.map((l) => l.id)
+          );
         }
 
         // Se o comprador ofertou waifus, cancela anúncios ativos delas também
@@ -1304,38 +1325,15 @@ export class MarketService {
             select: { id: true },
           });
           if (offeredListings.length > 0) {
-            const offeredListingIds = offeredListings.map((l) => l.id);
-            await tx.marketListing.updateMany({
-              where: { id: { in: offeredListingIds } },
-              data: { status: ListingStatus.CANCELLED },
-            });
-            // Sem isso, as propostas desses anúncios ficariam PENDING para sempre em anúncios mortos
-            await tx.marketOffer.updateMany({
-              where: { listingId: { in: offeredListingIds }, status: OfferStatus.PENDING },
-              data: {
-                status: OfferStatus.CANCELLED,
-                cancelReason: 'O personagem anunciado foi trocado em outra negociação.',
-                notifiedBuyer: false,
-                buyerNotifiedStatus: 'CANCELLED',
-              },
-            });
+            await this.cancelListingsAndRejectPendingOffers(
+              tx,
+              offeredListings.map((l) => l.id)
+            );
           }
         }
 
-        // Cancela outras ofertas pendentes no mesmo anúncio
-        await tx.marketOffer.updateMany({
-          where: {
-            listingId: listing.id,
-            id: { not: offer.id },
-            status: OfferStatus.PENDING,
-          },
-          data: {
-            status: OfferStatus.CANCELLED,
-            cancelReason: 'Outra oferta foi aceita pelo vendedor.',
-            notifiedBuyer: false,
-            buyerNotifiedStatus: 'CANCELLED',
-          },
-        });
+        // Marca outras ofertas pendentes no mesmo anúncio como Recusada
+        await rejectPendingOffersForListings(tx, [listing.id], offer.id);
       });
     } catch (pgTxErr: any) {
       console.error('[Market Transaction] Erro na transação PostgreSQL, iniciando compensação externa:', pgTxErr);
@@ -1384,15 +1382,27 @@ export class MarketService {
         ? ' Itens externos foram estornados.'
         : ' ATENÇÃO: o estorno automático dos itens externos falhou e precisa de conferência manual da administração.';
 
+      const isListingGone = pgTxErr instanceof DomainError && pgTxErr.code === 'LISTING_NOT_ACTIVE';
+
       await this.prisma.marketOffer.updateMany({
         where: { id: offer.id, status: OfferStatus.PROCESSING },
-        data: {
-          status: OfferStatus.CANCELLED,
-          cancelReason: `${baseReason}.${refundNote}`,
-          notifiedBuyer: false,
-          buyerNotifiedStatus: 'CANCELLED',
-        },
+        data: isListingGone
+          ? {
+              ...UNLISTED_OFFER_REJECTION_DATA,
+              cancelReason: refundNote
+                ? `${UNLISTED_OFFER_REJECTION_REASON}.${refundNote}`
+                : UNLISTED_OFFER_REJECTION_REASON,
+            }
+          : {
+              status: OfferStatus.CANCELLED,
+              cancelReason: `${baseReason}.${refundNote}`,
+              notifiedBuyer: false,
+              buyerNotifiedStatus: 'CANCELLED',
+            },
       });
+      if (isListingGone) {
+        await rejectPendingOffersForListings(this.prisma, [listing.id], offer.id);
+      }
 
       if (hasExternalItems && !compensationOk) {
         this.notificationService
@@ -1483,7 +1493,9 @@ export class MarketService {
         return '🤩 Uma oferta sua foi aceita nos classificados!';
       }
       if (buyerOffer.buyerNotifiedStatus === 'REJECTED') {
-        return '👎 Uma oferta sua foi negada nos classificados.';
+        return buyerOffer.cancelReason
+          ? `👎 Uma oferta sua foi recusada nos classificados: ${buyerOffer.cancelReason}.`
+          : '👎 Uma oferta sua foi recusada nos classificados.';
       }
       if (buyerOffer.buyerNotifiedStatus === 'CANCELLED') {
         return '⚠️ Uma oferta sua foi cancelada nos classificados por falta de itens!';
@@ -1848,11 +1860,11 @@ export class MarketService {
         data: { status: ListingStatus.ACTIVE },
       });
 
-      // Restaura ofertas pendentes que haviam sido canceladas automaticamente
+      // Restaura ofertas pendentes que haviam sido recusadas automaticamente quando o anúncio saiu do ar
       await tx.marketOffer.updateMany({
         where: {
           listingId: listing.id,
-          cancelReason: 'Outra oferta foi aceita pelo vendedor.',
+          cancelReason: UNLISTED_OFFER_REJECTION_REASON,
         },
         data: {
           status: OfferStatus.PENDING,

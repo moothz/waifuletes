@@ -1,9 +1,10 @@
-import { PrismaClient, Prisma, Rarity, ListingStatus, OfferStatus } from '@prisma/client';
+import { PrismaClient, Prisma, Rarity, ListingStatus } from '@prisma/client';
 import { Redis } from 'ioredis';
 import { DomainError } from '../errors/DomainError.js';
 import { calculateDivorceRefund, getDailyDivorceRate } from '../utils/rarityCalculator.js';
 import { config } from '../config.js';
 import { MarketInvestmentService, BASE_MONEY_SUPPLY, INFLATION_ALPHA } from './MarketInvestmentService.js';
+import { rejectPendingOffersForListings } from './MarketService.js';
 
 export class DivorceService {
   constructor(
@@ -124,7 +125,7 @@ export class DivorceService {
     tx: Prisma.TransactionClient,
     userId: string,
     characterId: string,
-    cancelReason: string
+    _cancelReason?: string
   ): Promise<number> {
     const listings = await tx.marketListing.findMany({
       where: { userId, characterId, status: ListingStatus.ACTIVE },
@@ -137,15 +138,7 @@ export class DivorceService {
 
     const listingIds = listings.map((l) => l.id);
 
-    await tx.marketOffer.updateMany({
-      where: { listingId: { in: listingIds }, status: OfferStatus.PENDING },
-      data: {
-        status: OfferStatus.CANCELLED,
-        cancelReason,
-        notifiedBuyer: false,
-        buyerNotifiedStatus: 'CANCELLED',
-      },
-    });
+    await rejectPendingOffersForListings(tx, listingIds);
 
     await tx.marketListing.updateMany({
       where: { id: { in: listingIds } },

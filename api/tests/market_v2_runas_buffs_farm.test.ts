@@ -282,7 +282,7 @@ describe('🤝 Classificados v2 — Runas, Buffs, Fazenda & Robustez de Troca', 
     );
   });
 
-  it('acceptOffer cancela a oferta quando o anúncio já não está ativo após a trava', async () => {
+  it('acceptOffer marca oferta como Recusada quando o anúncio já não está ativo após a trava', async () => {
     const mockPrisma = buildAcceptMock();
     mockPrisma.marketListing.findUnique = vi.fn().mockResolvedValue({ status: ListingStatus.COMPLETED });
     global.fetch = vi.fn();
@@ -291,7 +291,13 @@ describe('🤝 Classificados v2 — Runas, Buffs, Fazenda & Robustez de Troca', 
     await expect(marketService.acceptOffer('seller_123', 'off_1')).rejects.toThrow(DomainError);
     expect(global.fetch).not.toHaveBeenCalled();
     expect(mockPrisma.marketOffer.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: OfferStatus.CANCELLED }) })
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: OfferStatus.REJECTED,
+          cancelReason: 'Personagem não está mais anunciado',
+          buyerNotifiedStatus: 'REJECTED',
+        }),
+      })
     );
   });
 });

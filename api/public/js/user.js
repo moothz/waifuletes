@@ -5648,7 +5648,7 @@ async function openViewOffersModal(listingId, characterName) {
 
       let statusBadge = `<span class="badge-tag" style="background: #eab308; color: #000;">Pendente</span>`;
       if (offer.status === 'ACCEPTED') statusBadge = `<span class="badge-tag" style="background: #22c55e; color: #fff;">Aceita 🎉</span>`;
-      if (offer.status === 'REJECTED') statusBadge = `<span class="badge-tag" style="background: #64748b; color: #fff;">Negada</span>`;
+      if (offer.status === 'REJECTED') statusBadge = `<span class="badge-tag" style="background: #64748b; color: #fff;">Recusada</span>`;
       if (offer.status === 'CANCELLED') statusBadge = `<span class="badge-tag" style="background: #ef4444; color: #fff;">Cancelada</span>`;
 
       const card = document.createElement('div');
@@ -5667,7 +5667,7 @@ async function openViewOffersModal(listingId, characterName) {
           ${itemsHtml}
         </div>
         ${offer.message ? `<div style="font-size: 12px; color: var(--text-muted); font-style: italic; margin-bottom: 8px;">"${escapeHtml(offer.message)}"</div>` : ''}
-        ${offer.cancelReason ? `<div style="font-size: 12px; color: var(--accent-red); font-weight: bold; margin-bottom: 8px;">Motivo do cancelamento: ${escapeHtml(offer.cancelReason)}</div>` : ''}
+        ${offer.cancelReason ? `<div style="font-size: 12px; color: var(--accent-red); font-weight: bold; margin-bottom: 8px;">${offer.status === 'REJECTED' ? 'Motivo da recusa' : 'Motivo do cancelamento'}: ${escapeHtml(offer.cancelReason)}</div>` : ''}
         ${isPending ? `
           <div style="display: flex; gap: 8px; margin-top: 10px;">
             <button class="btn-retro btn-sm btn-gold" style="flex: 1;" data-action="accept-offer">
@@ -6637,7 +6637,7 @@ function renderMySentOffersPage() {
     if (offer.status === 'ACCEPTED') statusBadge = `<span class="badge-tag" style="background: #22c55e; color: #fff;">Aceita 🎉</span>`;
     if (offer.status === 'REJECTED') {
       const rejectReason = offer.cancelReason ? `<div style="font-size: 11px; color: var(--accent-red); margin-top: 4px; font-weight: 700;">Motivo: ${escapeHtml(offer.cancelReason)}</div>` : '';
-      statusBadge = `<span class="badge-tag" style="background: #64748b; color: #fff;">Negada 👎</span>${rejectReason}`;
+      statusBadge = `<span class="badge-tag" style="background: #64748b; color: #fff;">Recusada 👎</span>${rejectReason}`;
     }
     if (offer.status === 'CANCELLED') {
       const reasonTooltip = offer.cancelReason ? ` - Motivo: ${escapeHtml(offer.cancelReason)}` : '';

@@ -165,12 +165,12 @@ describe('MarketService - Reversão Administrativa de Negociações', () => {
       })
     );
 
-    // Verifica se ofertas auto-canceladas foram restauradas para PENDING
+    // Verifica se ofertas auto-recusadas foram restauradas para PENDING
     expect(mockPrisma.marketOffer.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           listingId: 'list_1',
-          cancelReason: 'Outra oferta foi aceita pelo vendedor.',
+          cancelReason: 'Personagem não está mais anunciado',
         },
         data: expect.objectContaining({
           status: OfferStatus.PENDING,

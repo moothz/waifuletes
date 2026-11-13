@@ -89,10 +89,10 @@ describe('💔 Divórcio encerra anúncios nos classificados', () => {
       listingId: { in: ['listing_1'] },
       status: 'PENDING',
     });
-    expect(offerCancel.data.status).toBe('CANCELLED');
-    expect(offerCancel.data.buyerNotifiedStatus).toBe('CANCELLED');
+    expect(offerCancel.data.status).toBe('REJECTED');
+    expect(offerCancel.data.buyerNotifiedStatus).toBe('REJECTED');
     expect(offerCancel.data.notifiedBuyer).toBe(false);
-    expect(offerCancel.data.cancelReason).toContain('divórcio');
+    expect(offerCancel.data.cancelReason).toBe('Personagem não está mais anunciado');
 
     const listingCancel = calls.find((c) => c.op === 'listing.updateMany');
     expect(listingCancel).toBeDefined();
