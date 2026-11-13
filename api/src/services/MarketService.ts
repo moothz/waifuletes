@@ -230,6 +230,7 @@ export class MarketService {
    */
   async listGlobalListings(options: {
     search?: string;
+    rarity?: Rarity | 'MYTHIC' | string;
     sortBy?: 'rarity' | 'wishlist' | 'popularity' | 'recent';
     page?: number;
     limit?: number;
@@ -238,10 +239,17 @@ export class MarketService {
     const limit = Math.min(50, Math.max(1, Number(options.limit) || 12));
     const skip = (page - 1) * limit;
     const search = options.search?.trim();
+    const rarity = options.rarity?.trim().toUpperCase();
 
     const where: any = {
       status: ListingStatus.ACTIVE,
     };
+
+    if (rarity === 'MYTHIC') {
+      where.character = { isMythic: true };
+    } else if (rarity && ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'].includes(rarity)) {
+      where.character = { baseRarity: rarity as Rarity, isMythic: false };
+    }
 
     if (search) {
       const searchTerms = search.replace(/[,;+]/g, ' ').trim().split(/\s+/).filter(Boolean);

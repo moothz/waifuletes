@@ -53,6 +53,7 @@ export const privateMarketRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'object',
         properties: {
           search: { type: 'string' },
+          rarity: { type: 'string', enum: ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC'] },
           sortBy: { type: 'string', enum: ['rarity', 'wishlist', 'popularity', 'recent'], default: 'rarity' },
           page: { type: 'number', default: 1 },
           limit: { type: 'number', default: 10 },
@@ -62,6 +63,7 @@ export const privateMarketRoutes: FastifyPluginAsync = async (fastify) => {
     handler: async (request, reply) => {
       const query = request.query as {
         search?: string;
+        rarity?: string;
         sortBy?: 'rarity' | 'wishlist' | 'popularity' | 'recent';
         page?: number;
         limit?: number;

@@ -126,4 +126,54 @@ describe('🔍 Busca Agressiva nos Classificados (Personagem, Anime e Procura)',
       })
     );
   });
+
+  it('deve filtrar classificados por raridade combinada com busca sem quebrar contagem/listagem', async () => {
+    const mockPrisma: any = {
+      marketListing: {
+        count: vi.fn().mockResolvedValue(2),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    };
+
+    const marketService = new MarketService(mockPrisma);
+    await marketService.listGlobalListings({ search: 'Persona', rarity: 'LEGENDARY' });
+
+    const expectedWhere = {
+      status: ListingStatus.ACTIVE,
+      character: { baseRarity: 'LEGENDARY', isMythic: false },
+      OR: [
+        { character: { name: { contains: 'Persona', mode: 'insensitive' } } },
+        { character: { series: { contains: 'Persona', mode: 'insensitive' } } },
+        { interest: { contains: 'Persona', mode: 'insensitive' } },
+      ],
+    };
+    expect(mockPrisma.marketListing.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(mockPrisma.marketListing.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it('deve filtrar raridade MYTHIC usando isMythic=true e ignorar raridade vazia', async () => {
+    const mockPrisma: any = {
+      marketListing: {
+        count: vi.fn().mockResolvedValue(0),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    };
+
+    const marketService = new MarketService(mockPrisma);
+    await marketService.listGlobalListings({ rarity: 'MYTHIC' });
+    expect(mockPrisma.marketListing.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { status: ListingStatus.ACTIVE, character: { isMythic: true } },
+      })
+    );
+
+    await marketService.listGlobalListings({ rarity: '' });
+    expect(mockPrisma.marketListing.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { status: ListingStatus.ACTIVE },
+      })
+    );
+  });
 });

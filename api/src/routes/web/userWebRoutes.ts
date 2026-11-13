@@ -2210,6 +2210,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'object',
         properties: {
           search: { type: 'string' },
+          rarity: { type: 'string', enum: ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC'] },
           sortBy: { type: 'string', enum: ['rarity', 'wishlist', 'popularity', 'recent'], default: 'rarity' },
           page: { type: 'number', default: 1 },
           limit: { type: 'number', default: 12 },
