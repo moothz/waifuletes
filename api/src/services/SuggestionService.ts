@@ -812,6 +812,52 @@ export class SuggestionService {
   /**
    * Lista sugestões com filtros e paginação
    */
+  /**
+   * Classifica se uma sugestão EDIT altera raridade e/ou dados gerais do personagem
+   */
+  private classifyEditSuggestionChanges(s: {
+    type: string;
+    currentRarity?: string | null;
+    suggestedRarity?: string | null;
+    suggestedName?: string | null;
+    suggestedSeries?: string | null;
+    suggestedGender?: string | null;
+    suggestedDescription?: string | null;
+    suggestedTags?: string[] | null;
+    character?: {
+      name?: string | null;
+      series?: string | null;
+      baseRarity?: string | null;
+      gender?: string | null;
+      description?: string | null;
+      tags?: string[] | null;
+    } | null;
+  }): { rarityChanged: boolean; generalChanged: boolean } {
+    const char = s.character;
+    const baseRarity = s.currentRarity || char?.baseRarity || null;
+    const rarityChanged = Boolean(s.suggestedRarity && (!baseRarity || s.suggestedRarity !== baseRarity));
+
+    if (!char) {
+      return { rarityChanged, generalChanged: !rarityChanged };
+    }
+
+    const nameChanged = Boolean(s.suggestedName && s.suggestedName.trim() !== (char.name || '').trim());
+    const seriesChanged = Boolean(s.suggestedSeries && s.suggestedSeries.trim() !== (char.series || '').trim());
+    const genderChanged = Boolean(s.suggestedGender && s.suggestedGender !== char.gender);
+
+    const curTagsNorm = [...(char.tags || [])].sort().join(',');
+    const sugTagsNorm = [...(s.suggestedTags || [])].sort().join(',');
+    const tagsChanged = s.suggestedTags !== undefined && s.suggestedTags !== null && sugTagsNorm !== curTagsNorm;
+
+    const curDesc = (char.description || '').trim();
+    const sugDesc = (s.suggestedDescription || '').trim();
+    const descChanged =
+      s.suggestedDescription !== undefined && s.suggestedDescription !== null && sugDesc !== curDesc;
+
+    const generalChanged = nameChanged || seriesChanged || genderChanged || tagsChanged || descChanged;
+    return { rarityChanged, generalChanged };
+  }
+
   async listSuggestions(filter: {
     status?: SuggestionStatus | 'all';
     type?: SuggestionType | 'IMAGE_REPLACE' | 'IMAGE_ADD' | 'REPORT_REMOVE' | 'all' | string;
@@ -826,64 +872,131 @@ export class SuggestionService {
     if (filter.status && filter.status !== 'all') {
       where.status = filter.status;
     }
-    if (filter.type && filter.type !== 'all') {
-      if (filter.type === 'IMAGE_REPLACE') {
-        where.type = 'IMAGE';
-        where.description = { contains: '"action":"REPLACE"' };
-      } else if (filter.type === 'IMAGE_ADD') {
-        where.type = 'IMAGE';
-        where.OR = [
-          { description: null },
-          {
-            AND: [
-              { NOT: { description: { contains: '"action":"REPLACE"' } } },
-              { NOT: { description: { contains: '"action":"DELETE"' } } },
-            ],
-          },
-        ];
-      } else if (filter.type === 'REPORT_REMOVE') {
-        where.OR = [
-          { type: 'DELETE_CHARACTER' },
-          { type: 'IMAGE', description: { contains: '"action":"DELETE"' } },
-        ];
-      } else {
-        where.type = filter.type;
-      }
-    }
 
-    const [total, suggestions] = await Promise.all([
-      this.prisma.characterSuggestion.count({ where }),
-      this.prisma.characterSuggestion.findMany({
-        where,
-        skip,
-        take: limit,
+    const suggestionInclude = {
+      character: {
+        select: {
+          id: true,
+          name: true,
+          series: true,
+          baseRarity: true,
+          gender: true,
+          description: true,
+          tags: true,
+          imageUrls: true,
+          haremEntries: {
+            select: {
+              user: {
+                select: { id: true, name: true, publicId: true },
+              },
+            },
+          },
+        },
+      },
+      user: {
+        select: { id: true, publicId: true, name: true },
+      },
+    };
+
+    let total: number;
+    let suggestions: any[];
+
+    if (filter.type === 'RARITY' || filter.type === 'EDIT') {
+      const candidateWhere: any = {
+        ...where,
+        type: filter.type === 'RARITY' ? { in: ['RARITY', 'EDIT'] } : 'EDIT',
+      };
+
+      const candidates = await this.prisma.characterSuggestion.findMany({
+        where: candidateWhere,
         orderBy: [{ createdAt: 'desc' }],
-        include: {
+        select: {
+          id: true,
+          type: true,
+          currentRarity: true,
+          suggestedRarity: true,
+          suggestedName: true,
+          suggestedSeries: true,
+          suggestedGender: true,
+          suggestedDescription: true,
+          suggestedTags: true,
           character: {
             select: {
-              id: true,
               name: true,
               series: true,
               baseRarity: true,
               gender: true,
               description: true,
               tags: true,
-              imageUrls: true,
-              haremEntries: {
-                select: {
-                  user: {
-                    select: { id: true, name: true, publicId: true },
-                  },
-                },
-              },
             },
           },
-          user: {
-            select: { id: true, publicId: true, name: true },
-          },
         },
-      }),
-    ]);
+      });
+
+      const matchingIds = candidates
+        .filter((s) => {
+          if (s.type === 'RARITY') {
+            return filter.type === 'RARITY';
+          }
+          const { rarityChanged, generalChanged } = this.classifyEditSuggestionChanges(s);
+          if (filter.type === 'RARITY') {
+            return rarityChanged;
+          }
+          // Dados Gerais (EDIT): exclui sugestões que sejam apenas troca de raridade
+          return generalChanged || !rarityChanged;
+        })
+        .map((s) => s.id);
+
+      total = matchingIds.length;
+      const pageIds = matchingIds.slice(skip, skip + limit);
+
+      if (pageIds.length === 0) {
+        suggestions = [];
+      } else {
+        const fetched = await this.prisma.characterSuggestion.findMany({
+          where: { id: { in: pageIds } },
+          include: suggestionInclude,
+        });
+        const byId = new Map(fetched.map((item) => [item.id, item]));
+        suggestions = pageIds.map((id) => byId.get(id)).filter(Boolean);
+      }
+    } else {
+      if (filter.type && filter.type !== 'all') {
+        if (filter.type === 'IMAGE_REPLACE') {
+          where.type = 'IMAGE';
+          where.description = { contains: '"action":"REPLACE"' };
+        } else if (filter.type === 'IMAGE_ADD') {
+          where.type = 'IMAGE';
+          where.OR = [
+            { description: null },
+            {
+              AND: [
+                { NOT: { description: { contains: '"action":"REPLACE"' } } },
+                { NOT: { description: { contains: '"action":"DELETE"' } } },
+              ],
+            },
+          ];
+        } else if (filter.type === 'REPORT_REMOVE') {
+          where.OR = [
+            { type: 'DELETE_CHARACTER' },
+            { type: 'IMAGE', description: { contains: '"action":"DELETE"' } },
+          ];
+        } else {
+          where.type = filter.type;
+        }
+      }
+
+      [total, suggestions] = await Promise.all([
+        this.prisma.characterSuggestion.count({ where }),
+        this.prisma.characterSuggestion.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [{ createdAt: 'desc' }],
+          include: suggestionInclude,
+        }),
+      ]);
+    }
 
     const userIds = [...new Set(suggestions.map((s) => s.userId).filter(Boolean))] as string[];
     const blockMap: Record<string, UserSuggestionBlockInfo> = {};
@@ -963,7 +1076,7 @@ export class SuggestionService {
             ? {
                 ...s.character,
                 imageUrl: this.characterService.getRandomImageUrl(s.character.id, s.character.imageUrls),
-                imageUrls: s.character.imageUrls.map((img) => this.characterService.formatImageUrl(s.character!.id, img)),
+                imageUrls: s.character.imageUrls.map((img: string) => this.characterService.formatImageUrl(s.character!.id, img)),
                 rawImageUrls: s.character.imageUrls,
               }
             : null,

@@ -805,3 +805,90 @@ describe('🔧 Aplicação de Ações de Foto no SuggestionService (ADD vs REPLA
     ).rejects.toThrow('A raridade máxima permitida para o mesmo é ÉPICO');
   });
 });
+
+describe('🔍 Filtros RARITY vs EDIT (Dados Gerais) em listSuggestions', () => {
+  const baseChar = {
+    id: 'char_1',
+    name: 'Rem',
+    series: 'Re:Zero',
+    baseRarity: 'EPIC',
+    gender: 'FEMALE',
+    description: 'Empregada demônio',
+    tags: ['anime', 'maid'],
+    imageUrls: ['chars/rem.jpg'],
+    haremEntries: [],
+  };
+
+  const makeSuggestion = (overrides: Record<string, any>) => ({
+    id: overrides.id,
+    type: overrides.type || 'EDIT',
+    status: 'PENDING',
+    userId: 'u1',
+    characterId: 'char_1',
+    currentRarity: 'EPIC',
+    suggestedRarity: 'EPIC',
+    suggestedName: 'Rem',
+    suggestedSeries: 'Re:Zero',
+    suggestedGender: 'FEMALE',
+    suggestedDescription: 'Empregada demônio',
+    suggestedTags: ['anime', 'maid'],
+    reason: 'Motivo qualquer',
+    imageUrl: null,
+    reviewedAt: null,
+    reviewedBy: null,
+    rejectionReason: null,
+    createdAt: new Date(),
+    character: baseChar,
+    user: { id: 'u1', publicId: 'pub1', name: 'Tester' },
+    ...overrides,
+  });
+
+  const sampleRows = [
+    // 1. Apenas troca de raridade via EDIT
+    makeSuggestion({ id: 'sug_only_rarity_edit', type: 'EDIT', suggestedRarity: 'LEGENDARY' }),
+    // 2. Apenas dados gerais via EDIT (rarity igual à atual)
+    makeSuggestion({ id: 'sug_only_general_edit', type: 'EDIT', suggestedDescription: 'Nova bio detalhada' }),
+    // 3. Ambos (raridade + tags)
+    makeSuggestion({ id: 'sug_both_edit', type: 'EDIT', suggestedRarity: 'RARE', suggestedTags: ['anime', 'waifu'] }),
+    // 4. Legado RARITY
+    makeSuggestion({ id: 'sug_legacy_rarity', type: 'RARITY', suggestedRarity: 'LEGENDARY' }),
+  ];
+
+  const createMockPrisma = () => ({
+    characterSuggestion: {
+      findMany: vi.fn().mockImplementation(async (args: any) => {
+        if (args?.where?.id?.in) {
+          const ids = args.where.id.in as string[];
+          return sampleRows.filter((r) => ids.includes(r.id));
+        }
+        const types: string[] = Array.isArray(args?.where?.type?.in)
+          ? args.where.type.in
+          : [args?.where?.type].filter(Boolean);
+        return sampleRows.filter((r) => types.length === 0 || types.includes(r.type));
+      }),
+      count: vi.fn().mockResolvedValue(sampleRows.length),
+    },
+  });
+
+  it('deve incluir sugestões EDIT com mudança de raridade no filtro RARITY e excluir do filtro EDIT', async () => {
+    const { SuggestionService } = await import('../src/services/SuggestionService.js');
+    const mockPrisma = createMockPrisma();
+    const mockRedis: any = { mget: vi.fn().mockResolvedValue([]) };
+    const mockCharSvc: any = {
+      getRandomImageUrl: vi.fn().mockReturnValue('/media/chars/rem.jpg'),
+      formatImageUrl: vi.fn().mockImplementation((_id: string, img: string) => `/media/${img}`),
+    };
+
+    const service = new SuggestionService(mockPrisma as any, mockRedis, mockCharSvc);
+
+    const rarityResult = await service.listSuggestions({ status: 'PENDING', type: 'RARITY' });
+    const rarityIds = rarityResult.data.map((i: any) => i.id);
+    expect(rarityIds).toEqual(['sug_only_rarity_edit', 'sug_both_edit', 'sug_legacy_rarity']);
+    expect(rarityResult.total).toBe(3);
+
+    const editResult = await service.listSuggestions({ status: 'PENDING', type: 'EDIT' });
+    const editIds = editResult.data.map((i: any) => i.id);
+    expect(editIds).toEqual(['sug_only_general_edit', 'sug_both_edit']);
+    expect(editResult.total).toBe(2);
+  });
+});
