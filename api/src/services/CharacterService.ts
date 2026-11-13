@@ -231,15 +231,14 @@ export class CharacterService {
             { id: { contains: term, mode: 'insensitive' } },
             { name: { contains: term, mode: 'insensitive' } },
             { series: { contains: term, mode: 'insensitive' } },
-            { description: { contains: term, mode: 'insensitive' } },
           ],
         }));
-      } else {
+      } else if (searchTerms.length === 1) {
+        const term = searchTerms[0];
         where.OR = [
-          { id: { contains: filter.search, mode: 'insensitive' } },
-          { name: { contains: filter.search, mode: 'insensitive' } },
-          { series: { contains: filter.search, mode: 'insensitive' } },
-          { description: { contains: filter.search, mode: 'insensitive' } },
+          { id: { contains: term, mode: 'insensitive' } },
+          { name: { contains: term, mode: 'insensitive' } },
+          { series: { contains: term, mode: 'insensitive' } },
         ];
       }
     }
