@@ -31,12 +31,12 @@ export const privateCollectionRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * Cria uma nova coleção para o usuário (máx 15)
+   * Cria uma nova coleção para o usuário (máx 100)
    */
   fastify.post('/user/:userId/collections', {
     preHandler: verifyApiKey,
     schema: {
-      description: 'Cria uma nova coleção de personagens para o usuário (limite de 15)',
+      description: 'Cria uma nova coleção de personagens para o usuário (limite de 100)',
       tags: ['Coleções (Privado)'],
       params: {
         type: 'object',

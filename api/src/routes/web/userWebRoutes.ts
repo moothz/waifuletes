@@ -1184,7 +1184,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post('/api/web/user/:publicId/collections', {
     schema: {
-      description: 'Cria uma nova coleção de personagens (limite de 15) no harém',
+      description: 'Cria uma nova coleção de personagens (limite de 100) no harém',
       tags: ['Usuário (Web)'],
       params: {
         type: 'object',

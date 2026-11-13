@@ -74,7 +74,7 @@ export class CollectionService {
   }
 
   /**
-   * Cria uma nova coleção para o usuário (limite máximo de 15)
+   * Cria uma nova coleção para o usuário (limite máximo de 100)
    */
   async createCollection(userId: string, name: string, description?: string) {
     const trimmedName = (name || '').trim();
@@ -86,8 +86,8 @@ export class CollectionService {
       where: { userId },
     });
 
-    if (currentCount >= 15) {
-      throw new DomainError('COLLECTION_LIMIT_REACHED', 'Você atingiu o limite máximo de 15 coleções.', 400);
+    if (currentCount >= 100) {
+      throw new DomainError('COLLECTION_LIMIT_REACHED', 'Você atingiu o limite máximo de 100 coleções.', 400);
     }
 
     const existing = await this.prisma.userCollection.findUnique({
@@ -127,7 +127,7 @@ export class CollectionService {
       position: collection.position,
       createdAt: collection.createdAt,
       totalCollections: currentCount + 1,
-      message: `Coleção "${collection.name}" criada com sucesso! (${currentCount + 1}/15)`,
+      message: `Coleção "${collection.name}" criada com sucesso! (${currentCount + 1}/100)`,
     };
   }
 

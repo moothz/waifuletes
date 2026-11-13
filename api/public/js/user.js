@@ -2198,9 +2198,9 @@ function renderPrivateHarem(harem) {
 
   // Renderiza lista reordenável de coleções no container Configurações do Harém
   const collections = userSessionData?.collections || [];
-  if (colBadge) colBadge.textContent = `${collections.length}/15`;
+  if (colBadge) colBadge.textContent = `${collections.length}/100`;
   const btnNewCol = document.getElementById('btn-open-new-collection');
-  if (btnNewCol) btnNewCol.disabled = collections.length >= 15;
+  if (btnNewCol) btnNewCol.disabled = collections.length >= 100;
   renderCollectionsReorderList(collections);
 
   if (marriedHarem.length === 0) {
@@ -2830,8 +2830,8 @@ async function submitAssignCollection() {
 
 function openNewCollectionModal() {
   const collections = userSessionData?.collections || [];
-  if (collections.length >= 15) {
-    Api.showToast('Você atingiu o limite máximo de 15 coleções.', '⚠️');
+  if (collections.length >= 100) {
+    Api.showToast('Você atingiu o limite máximo de 100 coleções.', '⚠️');
     return;
   }
   const nameInput = document.getElementById('new-collection-name');
@@ -2839,7 +2839,7 @@ function openNewCollectionModal() {
   if (nameInput) nameInput.value = '';
   if (descInput) descInput.value = '';
   const infoEl = document.getElementById('new-collection-count-info');
-  if (infoEl) infoEl.textContent = `Coleções atuais: ${collections.length}/15`;
+  if (infoEl) infoEl.textContent = `Coleções atuais: ${collections.length}/100`;
   openModal('modal-new-collection');
 }
 

@@ -3,6 +3,7 @@ import { HaremService } from '../src/services/HaremService.js';
 import { SuggestionService } from '../src/services/SuggestionService.js';
 import { MarketService } from '../src/services/MarketService.js';
 import { RollService } from '../src/services/RollService.js';
+import { CollectionService } from '../src/services/CollectionService.js';
 import { DomainError } from '../src/errors/DomainError.js';
 
 describe('Features Nov/2026 — Backend Rules', () => {
@@ -341,6 +342,35 @@ describe('Features Nov/2026 — Backend Rules', () => {
       expect(mockCooldown.refundRoll).toHaveBeenCalledWith('u1', 0);
       expect(result.data.mythicRollRefunded).toBe(true);
       expect(result.data.rollsRemaining).toBe(5);
+    });
+  });
+
+  describe('6. CollectionService — Limite de até 100 coleções', () => {
+    it('deve permitir criar a 16ª coleção e bloquear ao atingir 100', async () => {
+      const mockPrisma: any = {
+        userCollection: {
+          count: vi.fn().mockResolvedValueOnce(15).mockResolvedValueOnce(100),
+          findUnique: vi.fn().mockResolvedValue(null),
+          aggregate: vi.fn().mockResolvedValue({ _max: { position: 15 } }),
+          create: vi.fn().mockResolvedValue({
+            id: 'col_16',
+            name: 'Pasta 16',
+            description: null,
+            isPrivate: false,
+            position: 16,
+            createdAt: new Date(),
+          }),
+        },
+      };
+      const service = new CollectionService(mockPrisma, {} as any);
+
+      const created = await service.createCollection('u1', 'Pasta 16');
+      expect(created.totalCollections).toBe(16);
+      expect(created.message).toContain('(16/100)');
+
+      await expect(service.createCollection('u1', 'Pasta 101')).rejects.toThrow(
+        'Você atingiu o limite máximo de 100 coleções.'
+      );
     });
   });
 });
