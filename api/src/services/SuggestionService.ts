@@ -860,7 +860,7 @@ export class SuggestionService {
 
   async listSuggestions(filter: {
     status?: SuggestionStatus | 'all';
-    type?: SuggestionType | 'IMAGE_REPLACE' | 'IMAGE_ADD' | 'REPORT_REMOVE' | 'all' | string;
+    type?: SuggestionType | 'IMAGE_REPLACE' | 'IMAGE_ADD' | 'IMAGE_DELETE' | 'REPORT_REMOVE' | 'all' | string;
     page?: number;
     limit?: number;
   }) {
@@ -976,11 +976,11 @@ export class SuggestionService {
               ],
             },
           ];
+        } else if (filter.type === 'IMAGE_DELETE') {
+          where.type = 'IMAGE';
+          where.description = { contains: '"action":"DELETE"' };
         } else if (filter.type === 'REPORT_REMOVE') {
-          where.OR = [
-            { type: 'DELETE_CHARACTER' },
-            { type: 'IMAGE', description: { contains: '"action":"DELETE"' } },
-          ];
+          where.type = 'DELETE_CHARACTER';
         } else {
           where.type = filter.type;
         }

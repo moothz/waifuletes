@@ -424,6 +424,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
               'IMAGE',
               'IMAGE_REPLACE',
               'IMAGE_ADD',
+              'IMAGE_DELETE',
               'REPORT_REMOVE',
               'EDIT',
               'NEW_CHARACTER',

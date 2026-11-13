@@ -38,7 +38,7 @@ describe('Features Nov/2026 — Backend Rules', () => {
   });
 
   describe('2. SuggestionService — Filtros por tipo e approveSuggestionsBatch', () => {
-    it('deve filtrar IMAGE_REPLACE, IMAGE_ADD e REPORT_REMOVE corretamente', async () => {
+    it('deve filtrar IMAGE_REPLACE, IMAGE_ADD, IMAGE_DELETE e REPORT_REMOVE corretamente', async () => {
       const capturedWheres: any[] = [];
       const mockPrisma: any = {
         characterSuggestion: {
@@ -53,6 +53,7 @@ describe('Features Nov/2026 — Backend Rules', () => {
 
       await service.listSuggestions({ status: 'PENDING', type: 'IMAGE_REPLACE', limit: 100 });
       await service.listSuggestions({ status: 'PENDING', type: 'IMAGE_ADD', limit: 100 });
+      await service.listSuggestions({ status: 'PENDING', type: 'IMAGE_DELETE', limit: 100 });
       await service.listSuggestions({ status: 'PENDING', type: 'REPORT_REMOVE', limit: 100 });
 
       expect(capturedWheres[0]).toEqual({
@@ -65,10 +66,12 @@ describe('Features Nov/2026 — Backend Rules', () => {
       expect(Array.isArray(capturedWheres[1].OR)).toBe(true);
       expect(capturedWheres[2]).toEqual({
         status: 'PENDING',
-        OR: [
-          { type: 'DELETE_CHARACTER' },
-          { type: 'IMAGE', description: { contains: '"action":"DELETE"' } },
-        ],
+        type: 'IMAGE',
+        description: { contains: '"action":"DELETE"' },
+      });
+      expect(capturedWheres[3]).toEqual({
+        status: 'PENDING',
+        type: 'DELETE_CHARACTER',
       });
     });
 
