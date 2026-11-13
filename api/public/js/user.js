@@ -399,6 +399,7 @@ function performFullLogout() {
 
 let marketState = {
   search: '',
+  rarity: '',
   sortBy: 'rarity',
   page: 1,
   limit: 12,
@@ -1053,6 +1054,16 @@ function setupEventListeners() {
         marketState.page = 1;
         loadGlobalMarket();
       }, 350);
+    });
+  }
+
+  // Filtro de raridade nos classificados globais
+  const marketRaritySelect = document.getElementById('market-rarity-select');
+  if (marketRaritySelect) {
+    marketRaritySelect.addEventListener('change', () => {
+      marketState.rarity = marketRaritySelect.value;
+      marketState.page = 1;
+      loadGlobalMarket();
     });
   }
 
@@ -5988,6 +5999,9 @@ async function loadGlobalMarket() {
       page: marketState.page,
       limit: marketState.limit,
     });
+    if (marketState.rarity) {
+      query.append('rarity', marketState.rarity);
+    }
 
     const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/listings?${query.toString()}`);
     if (!res.success || !res.data || !Array.isArray(res.data.listings) || res.data.listings.length === 0) {

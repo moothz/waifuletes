@@ -520,6 +520,17 @@
             </div>
             <div class="filters-row" style="margin-top: 10px;">
               <div class="filter-group">
+                <span><i class="fas fa-gem"></i> Raridade:</span>
+                <select id="market-rarity-select" class="retro-select">
+                  <option value="">Todas</option>
+                  <option value="LEGENDARY">⭐ Lendário</option>
+                  <option value="EPIC">🟣 Épico</option>
+                  <option value="RARE">🔵 Raro</option>
+                  <option value="UNCOMMON">🟢 Incomum</option>
+                  <option value="COMMON">⚪ Comum</option>
+                </select>
+              </div>
+              <div class="filter-group">
                 <span><i class="fas fa-sort"></i> Ordenação:</span>
                 <select id="market-sort-select" class="retro-select">
                   <option value="rarity">⭐ Por Raridade</option>
@@ -1947,6 +1958,6 @@
 
   <script src="/vendor/cropper.min.js"></script>
   <script src="/js/api.js?v=20261113-modal-focus"></script>
-  <script src="/js/user.js?v=20261113-market-offer-rejected"></script>
+  <script src="/js/user.js?v=20261113-market-rarity-filter"></script>
 </body>
 </html>
