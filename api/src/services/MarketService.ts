@@ -651,6 +651,18 @@ export class MarketService {
       throw new DomainError('ALREADY_OFFERED', 'Você já possui uma oferta pendente neste anúncio.');
     }
 
+    // Valida cota diária de trocas/casamento para o comprador receber o personagem anunciado
+    if (this.cooldownService) {
+      const buyerCharRarity = (listing.character.baseRarity || 'COMMON') as Rarity;
+      const buyerCheck = await this.cooldownService.canMarryDaily(buyerId, buyerCharRarity, true);
+      if (!buyerCheck.allowed) {
+        throw new DomainError(
+          'DAILY_LIMIT_REACHED',
+          buyerCheck.reason || 'Você já atingiu seu limite diário de trocas/casamentos para esta raridade.'
+        );
+      }
+    }
+
     // Se ofertou waifus, valida se o comprador tem todas elas no harém e não são míticas
     const waifuIds = data.offeredItems?.waifuIds || [];
     if (waifuIds.length > 0) {
@@ -1070,10 +1082,20 @@ export class MarketService {
           where: { id: offer.id },
           data: { status: OfferStatus.PENDING },
         });
+        const rarityLabel =
+          buyerCharRarity === 'COMMON'
+            ? 'Comuns'
+            : buyerCharRarity === 'UNCOMMON'
+            ? 'Incomuns'
+            : buyerCharRarity === 'RARE'
+            ? 'Raros'
+            : buyerCharRarity === 'EPIC'
+            ? 'Épicos'
+            : 'Lendários';
         return {
           success: false,
           cancelled: false,
-          reason: `Não foi possível aceitar a oferta: ${buyerCheck.reason || 'O proponente atingiu o limite diário de casamentos/trocas.'}`,
+          reason: `Não foi possível aceitar a oferta: O comprador (proponente) já atingiu o limite diário de casamentos/trocas para personagens ${rarityLabel} (${buyerCheck.used}/${buyerCheck.limit}). O limite dele reseta às 04:00 BRT.`,
         };
       }
 
@@ -1104,10 +1126,20 @@ export class MarketService {
                 where: { id: offer.id },
                 data: { status: OfferStatus.PENDING },
               });
+              const label =
+                wRarity === 'COMMON'
+                  ? 'Comuns'
+                  : wRarity === 'UNCOMMON'
+                  ? 'Incomuns'
+                  : wRarity === 'RARE'
+                  ? 'Raros'
+                  : wRarity === 'EPIC'
+                  ? 'Épicos'
+                  : 'Lendários';
               return {
                 success: false,
                 cancelled: false,
-                reason: `Não foi possível aceitar a oferta: Você atingiu seu limite diário para personagens ${wRarity}.`,
+                reason: `Não foi possível aceitar a oferta: Você já atingiu seu limite diário para personagens ${label} (${sellerCheck.used}/${sellerCheck.limit}). O limite reseta às 04:00 BRT.`,
               };
             }
           }
