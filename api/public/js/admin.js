@@ -60,6 +60,13 @@ const inactivityState = {
   totalPages: 1
 };
 
+const currentInactiveState = {
+  page: 1,
+  limit: 20,
+  total: 0,
+  totalPages: 1
+};
+
 let selectedMarryTargetUser = null;
 let suggestionFilterStatus = 'PENDING';
 let suggestionFilterType = 'all';
@@ -121,6 +128,7 @@ function setupAdminEvents() {
         loadAdminTrades();
       } else if (targetId === 'tab-inactivity') {
         loadAdminInactivity();
+        loadAdminCurrentInactivePlayers();
       }
     });
   });
@@ -416,6 +424,35 @@ function setupAdminEvents() {
         inactivityState.page++;
         loadAdminInactivity();
       }
+    });
+  }
+
+  // Paginação dos jogadores inativos agora
+  const currentInactiveBtnPrev = document.getElementById('admin-inactivity-current-btn-prev');
+  if (currentInactiveBtnPrev) {
+    currentInactiveBtnPrev.addEventListener('click', () => {
+      if (currentInactiveState.page > 1) {
+        currentInactiveState.page--;
+        loadAdminCurrentInactivePlayers();
+      }
+    });
+  }
+
+  const currentInactiveBtnNext = document.getElementById('admin-inactivity-current-btn-next');
+  if (currentInactiveBtnNext) {
+    currentInactiveBtnNext.addEventListener('click', () => {
+      if (currentInactiveState.page < currentInactiveState.totalPages) {
+        currentInactiveState.page++;
+        loadAdminCurrentInactivePlayers();
+      }
+    });
+  }
+
+  const currentInactiveRefreshBtn = document.getElementById('admin-inactivity-current-btn-refresh');
+  if (currentInactiveRefreshBtn) {
+    currentInactiveRefreshBtn.addEventListener('click', () => {
+      currentInactiveState.page = 1;
+      loadAdminCurrentInactivePlayers();
     });
   }
 
@@ -2297,6 +2334,87 @@ async function adminRevertTrade(offerId, charName, sellerName, buyerName) {
     Api.showToast('Erro de comunicação ao reverter negociação.', '❌');
   } finally {
     Api.hideLoading();
+  }
+}
+
+// ========================================================
+// JOGADORES INATIVOS AGORA (acima da tabela de confiscos)
+// ========================================================
+async function loadAdminCurrentInactivePlayers() {
+  const tbody = document.getElementById('admin-inactivity-current-tbody');
+  const totalCountEl = document.getElementById('admin-inactivity-current-total-count');
+  const pageIndicatorEl = document.getElementById('admin-inactivity-current-page-indicator');
+  const btnPrev = document.getElementById('admin-inactivity-current-btn-prev');
+  const btnNext = document.getElementById('admin-inactivity-current-btn-next');
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 24px;"><i class="fas fa-spinner fa-spin"></i> Carregando jogadores inativos...</td></tr>';
+
+  try {
+    const params = new URLSearchParams({
+      page: currentInactiveState.page,
+      limit: currentInactiveState.limit,
+    });
+
+    const res = await Api.get(`/api/admin/inactivity/current?${params.toString()}`, {
+      Authorization: `Bearer ${adminToken}`,
+    });
+
+    if (!res.success) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px; color: red;">${escapeHtml(res.error?.message || 'Erro ao carregar jogadores inativos.')}</td></tr>`;
+      return;
+    }
+
+    const { items, pagination } = res.data;
+    currentInactiveState.total = pagination.total;
+    currentInactiveState.totalPages = pagination.totalPages;
+
+    if (totalCountEl) totalCountEl.textContent = `${currentInactiveState.total.toLocaleString('pt-BR')} jogadores inativos`;
+    if (pageIndicatorEl) pageIndicatorEl.textContent = `${currentInactiveState.page} / ${currentInactiveState.totalPages}`;
+    if (btnPrev) btnPrev.disabled = currentInactiveState.page <= 1;
+    if (btnNext) btnNext.disabled = currentInactiveState.page >= currentInactiveState.totalPages;
+
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 24px;">Nenhum jogador além da carência no momento. 🎉</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    items.forEach((item) => {
+      const tr = document.createElement('tr');
+
+      const cleanUserNumber = (item.userId || '').replace('@s.whatsapp.net', '').replace('@c.us', '');
+      const userPlatformBadge = item.platform === 'WHATSAPP'
+        ? '<span style="color: #16a34a; font-size: 11px;"><i class="fab fa-whatsapp"></i> WhatsApp</span>'
+        : `<small style="font-size: 11px;">${escapeHtml(item.platform || '')}</small>`;
+
+      const offlineHours = item.offlineHours || 0;
+      const offlineDays = item.offlineDays || 0;
+      const offlineStr = offlineDays > 0 ? `${offlineDays}d ${offlineHours % 24}h` : `${offlineHours}h`;
+
+      let estimatedBadge = '<span style="color: #64748b; font-size: 12px;">Indeterminado</span>';
+      if (item.estimatedDays !== null && item.estimatedDays !== undefined) {
+        const color = item.estimatedDays <= 3 ? '#ef4444' : item.estimatedDays <= 14 ? '#f59e0b' : '#64748b';
+        estimatedBadge = `<span style="font-weight: 800; color: ${color};">${item.estimatedDays} dia${item.estimatedDays > 1 ? 's' : ''}</span>`;
+      }
+
+      tr.innerHTML = `
+        <td>
+          <div style="font-weight: 800; font-size: 13px;">${escapeHtml(item.name || item.userId || 'Desconhecido')}</div>
+          <div style="font-size: 11px; color: var(--text-muted);">${userPlatformBadge} <code>${escapeHtml(cleanUserNumber || item.userId || '')}</code></div>
+        </td>
+        <td style="font-size: 12px; font-weight: 700;">${escapeHtml(offlineStr)}</td>
+        <td style="font-weight: 800; font-size: 13px; color: #10b981;">${Number(item.balance || 0).toLocaleString('pt-BR')} z</td>
+        <td style="text-align: center; font-size: 13px; font-weight: 700;">${Number(item.waifus || 0).toLocaleString('pt-BR')}</td>
+        <td style="font-size: 13px;">${Number(item.valueRemainingWithDiscount || 0).toLocaleString('pt-BR')} z</td>
+        <td style="font-size: 13px;">${Number(item.chargedSinceInactive || 0).toLocaleString('pt-BR')} z</td>
+        <td style="font-size: 13px;" title="${Number(item.multiplier ?? 1).toFixed(2)}x multiplicador">${Number(item.dailyFee || 0).toLocaleString('pt-BR')} z</td>
+        <td>${estimatedBadge}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 24px; color: red;">Falha de comunicação ao carregar jogadores inativos.</td></tr>';
   }
 }
 

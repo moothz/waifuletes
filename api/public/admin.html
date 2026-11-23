@@ -294,6 +294,48 @@
           </div>
         </div>
 
+        <!-- Jogadores inativos agora (acima da tabela de confiscos) -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;">
+            <div>
+              <h3 style="font-size: 16px; font-weight: 800; margin: 0; color: #b45309;"><i class="fas fa-hourglass-half"></i> Jogadores Inativos Agora</h3>
+              <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-muted);">Jogadores além da janela de carência, com saldo, harém restante e estimativa de dias até perder tudo.</p>
+            </div>
+            <button class="btn-retro btn-sm" id="admin-inactivity-current-btn-refresh"><i class="fas fa-rotate-right"></i> Atualizar</button>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="retro-table" id="admin-inactivity-current-table">
+              <thead>
+                <tr style="background: #fef3c7;">
+                  <th style="min-width: 160px;">Usuário</th>
+                  <th style="min-width: 110px;">Inativo há</th>
+                  <th style="min-width: 110px;">Saldo Atual</th>
+                  <th style="min-width: 90px; text-align: center;">Harém</th>
+                  <th style="min-width: 150px;">Valor Restante (descont.)</th>
+                  <th style="min-width: 140px;">Cobrado desde inativo</th>
+                  <th style="min-width: 120px;">Taxa de Hoje</th>
+                  <th style="min-width: 150px;">Est. perda total</th>
+                </tr>
+              </thead>
+              <tbody id="admin-inactivity-current-tbody">
+                <tr>
+                  <td colspan="8" style="text-align: center; padding: 24px;"><i class="fas fa-spinner fa-spin"></i> Carregando jogadores inativos...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination-bar" style="margin-top: 10px;">
+            <div class="page-info"><span id="admin-inactivity-current-total-count">0 jogadores</span></div>
+            <div class="page-controls">
+              <button class="btn-retro btn-sm" id="admin-inactivity-current-btn-prev" disabled><i class="fas fa-angle-left"></i> Anterior</button>
+              <span class="page-indicator" id="admin-inactivity-current-page-indicator">1 / 1</span>
+              <button class="btn-retro btn-sm" id="admin-inactivity-current-btn-next" disabled>Próxima <i class="fas fa-angle-right"></i></button>
+            </div>
+          </div>
+        </div>
+
         <div class="search-panel" style="margin-bottom: 20px;">
           <div class="search-input-group" style="margin-bottom: 0;">
             <i class="fas fa-search"></i>
@@ -669,6 +711,6 @@
 
   <script src="/vendor/cropper.min.js"></script>
   <script src="/js/api.js?v=20261121-sugestoes-fix"></script>
-  <script src="/js/admin.js?v=20261122-ai-advisor-fix"></script>
+  <script src="/js/admin.js?v=20261123-inactivity-current"></script>
 </body>
 </html>
