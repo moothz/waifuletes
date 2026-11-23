@@ -119,6 +119,8 @@ const GROUPS: Record<string, Record<string, Source>> = {
   hosting: {
     HOSTING_CONFISCO_PERMILLE: config.HOSTING_CONFISCO_PERMILLE,
     HOSTING_GRACE_HOURS: config.HOSTING_GRACE_HOURS,
+    HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT: config.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT,
+    HOSTING_INACTIVE_MAX_MULTIPLIER: config.HOSTING_INACTIVE_MAX_MULTIPLIER,
     // Taxas efetivas (CSV do env já convertido; CSV inválido cai no padrão de config.ts).
     HOSTING_TAXAS_ATIVAS: activeHostingRates,
     HOSTING_TAXAS_INATIVAS: inactiveHostingRates,

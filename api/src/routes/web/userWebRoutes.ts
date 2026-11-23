@@ -22,6 +22,7 @@ import { verifyApiKey } from '../../plugins/auth.js';
 import { DomainError } from '../../errors/DomainError.js';
 import { optimizeImageUnder1Mb, MAX_IMAGE_UPLOAD_BYTES } from '../../utils/imageOptimizer.js';
 import { config, activeHostingRates, inactiveHostingRates, ravenaMarketHeaders } from '../../config.js';
+import { calculateInactiveMultiplier } from '../../services/HostingFeeService.js';
 import { toPublicListing, toPublicOffer } from '../../utils/marketPublic.js';
 import {
   fetchRavenaRollContext,
@@ -224,8 +225,28 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         ? new Date(user.lastActiveAt).getTime()
         : new Date(user.updatedAt).getTime();
       const graceMs = config.HOSTING_GRACE_HOURS * 3600 * 1000;
-      const isInactive = (now - lastActiveTime) > graceMs;
-      const rates = isInactive ? inactiveHostingRates : activeHostingRates;
+      const offlineMs = Math.max(0, now - lastActiveTime);
+      const isInactive = offlineMs > graceMs;
+      let multiplier = 1.0;
+      let extraDays = 0;
+      let rates = activeHostingRates;
+
+      if (isInactive) {
+        extraDays = Math.floor((offlineMs - graceMs) / (24 * 3600 * 1000));
+        multiplier = calculateInactiveMultiplier(
+          offlineMs,
+          graceMs,
+          config.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT,
+          config.HOSTING_INACTIVE_MAX_MULTIPLIER
+        );
+        rates = {
+          COMMON: Math.round(inactiveHostingRates.COMMON * multiplier),
+          UNCOMMON: Math.round(inactiveHostingRates.UNCOMMON * multiplier),
+          RARE: Math.round(inactiveHostingRates.RARE * multiplier),
+          EPIC: Math.round(inactiveHostingRates.EPIC * multiplier),
+          LEGENDARY: Math.round(inactiveHostingRates.LEGENDARY * multiplier),
+        };
+      }
 
       // Míticos não pagam taxa (HostingFeeService); a contagem segue a mesma regra
       const buildHostingCostInfo = (entries: typeof haremResult.data) => {
@@ -248,6 +269,8 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         };
         return {
           isInactive,
+          multiplier,
+          extraDays,
           totalCost: Object.values(rarityCosts).reduce((acc, c) => acc + c, 0),
           rates,
           counts: rarityCounts,

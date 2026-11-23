@@ -97,9 +97,11 @@ const envSchema = z.object({
 
   // Taxa de Hospedagem e Inatividade
   HOSTING_CONFISCO_PERMILLE: z.coerce.number().default(3000),
-  HOSTING_TAXAS_INATIVAS: z.string().default('10,60,200,350,1000'),
+  HOSTING_TAXAS_INATIVAS: z.string().default('20,120,400,700,2000'),
   HOSTING_TAXAS_ATIVAS: z.string().default('1,3,8,15,40'),
   HOSTING_GRACE_HOURS: z.coerce.number().default(72),
+  HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT: z.coerce.number().default(10),
+  HOSTING_INACTIVE_MAX_MULTIPLIER: z.coerce.number().default(5),
 });
 
 export const config = envSchema.parse(process.env);
@@ -191,11 +193,11 @@ export const activeHostingRates = parseHostingRates(config.HOSTING_TAXAS_ATIVAS,
 });
 
 export const inactiveHostingRates = parseHostingRates(config.HOSTING_TAXAS_INATIVAS, {
-  COMMON: 10,
-  UNCOMMON: 60,
-  RARE: 200,
-  EPIC: 350,
-  LEGENDARY: 1000,
+  COMMON: 20,
+  UNCOMMON: 120,
+  RARE: 400,
+  EPIC: 700,
+  LEGENDARY: 2000,
 });
 
 export type Config = typeof config;
