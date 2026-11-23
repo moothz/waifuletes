@@ -298,10 +298,180 @@
 
         <!-- Subtabs do Harém -->
         <div class="retro-tabs retro-subtabs" id="harem-subtabs">
+          <button class="retro-tab retro-subtab" data-subtab="subtab-harem-summary"><i class="fas fa-chart-pie"></i> Resumo</button>
           <button class="retro-tab retro-subtab active" data-subtab="subtab-harem-married"><i class="fas fa-ring"></i> Casados (<span id="harem-count-sub">0</span>)</button>
           <button class="retro-tab retro-subtab" data-subtab="subtab-harem-mythics"><i class="fas fa-hat-wizard"></i> 🔮 Míticos (<span id="mythics-count">0</span>/<span id="mythics-total-slots">0</span>)</button>
           <button class="retro-tab retro-subtab" data-subtab="subtab-harem-wishlist"><i class="fas fa-star"></i> Wishlist (<span id="wishlist-count">0</span>)</button>
           <button class="retro-tab retro-subtab" data-subtab="subtab-harem-settings"><i class="fas fa-cog"></i> Configurações</button>
+        </div>
+
+        <!-- Subtab 3.0: Resumo do Harém (Diário do Usuário) -->
+        <div class="subtab-content hidden" id="subtab-harem-summary">
+          <!-- Top Bar: Status dos Ciclos e Ação de Atualizar -->
+          <div style="background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px 18px; margin-bottom: 20px; box-shadow: var(--shadow-retro-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-calendar-day" style="color: #ec4899; font-size: 18px;"></i>
+                <span style="font-weight: 800; font-size: 15px; color: var(--text-main);">Diário & Resumo do Harém</span>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px;">
+                <span class="badge-tag" style="background: #3b82f6; color: #fff; font-weight: 700; padding: 4px 8px;" id="summary-daily-reset-badge" title="Horário padrão de reset diário: 04:00 BRT / 07:00 UTC">
+                  <i class="fas fa-clock"></i> Reset diário em: <span id="summary-daily-reset-time">--:--:--</span>
+                </span>
+                <span class="badge-tag" style="background: #8b5cf6; color: #fff; font-weight: 700; padding: 4px 8px;" id="summary-weekly-reset-badge" title="Horário padrão de reset semanal: Segundas 04:00 BRT">
+                  <i class="fas fa-sync-alt"></i> Reset semanal em: <span id="summary-weekly-reset-time">--d --h</span>
+                </span>
+              </div>
+            </div>
+            <button class="btn-retro btn-sm btn-purple" id="btn-refresh-summary" onclick="loadHaremSummary(true)">
+              <i class="fas fa-redo-alt"></i> Atualizar Resumo
+            </button>
+          </div>
+
+          <!-- Loading state -->
+          <div id="summary-loading" class="retro-loading-box" style="padding: 30px; text-align: center;">
+            <div class="retro-spinner" style="margin: 0 auto 12px auto;"></div>
+            <div class="retro-loading-title">Carregando diário e estatísticas do harém...</div>
+          </div>
+
+          <!-- Content Grid (inicialmente hidden até carregar) -->
+          <div id="summary-content" class="hidden" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-bottom: 24px;">
+            
+            <!-- Card 1: Divórcios Diários e Diminishing Returns -->
+            <div class="summary-card" style="background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 16px; box-shadow: var(--shadow-retro-sm);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color, #2d241e);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fas fa-heart-broken" style="color: #ef4444; font-size: 16px;"></i>
+                  <span style="font-weight: 800; font-size: 15px;">Divórcios Diários & DR</span>
+                </div>
+                <span class="badge-tag" id="summary-divorces-today-badge" style="background: #6b7280; color: #fff; font-weight: 800;">0 hoje</span>
+              </div>
+              <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 12px 0;">
+                O reembolso diminui conforme você divorcia personagens da mesma raridade no dia (1º: 100%, 2º: 75%, 3º: 50%, 4º: 25%, 5º+: 5%). O multiplicador reseta diariamente às 04:00 BRT.
+              </p>
+              <div id="summary-divorce-rarities-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Preenchido via JS -->
+              </div>
+            </div>
+
+            <!-- Card 2: Rolls da Semana & DR de Lendários -->
+            <div class="summary-card" style="background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 16px; box-shadow: var(--shadow-retro-sm);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color, #2d241e);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fas fa-dice" style="color: #f59e0b; font-size: 16px;"></i>
+                  <span style="font-weight: 800; font-size: 15px;">DR de Lendários na Semana</span>
+                </div>
+                <span class="badge-tag" id="summary-legendary-status-badge" style="background: #22c55e; color: #fff; font-weight: 800;">Ativo</span>
+              </div>
+              <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 12px 0;">
+                A probabilidade de obter Lendários nos rolls diminui a cada lendário tirado na mesma semana, atingindo o teto semanal (hard cap). Reseta às segundas-feiras às 04:00 BRT.
+              </p>
+              <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 12px; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 700;">
+                  <span>Lendários Obtidos:</span>
+                  <span id="summary-legendary-count-text">0 / 8</span>
+                </div>
+                <!-- Barra de Progresso DR -->
+                <div style="width: 100%; height: 10px; background: #374151; border-radius: 5px; overflow: hidden; margin-bottom: 8px;">
+                  <div id="summary-legendary-progress-bar" style="width: 0%; height: 100%; background: #22c55e; transition: width 0.3s ease;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted);">
+                  <span>Multiplicador de Chance:</span>
+                  <span id="summary-legendary-mult-text" style="font-weight: 800; color: #22c55e;">100%</span>
+                </div>
+              </div>
+              <div id="summary-legendary-warning" class="hidden" style="font-size: 12px; color: #ef4444; font-weight: 700; margin-top: 6px;">
+                <i class="fas fa-exclamation-triangle"></i> Teto semanal de lendários atingido! Novos lendários bloqueados até a próxima segunda-feira.
+              </div>
+            </div>
+
+            <!-- Card 3: Casamentos & Atividade -->
+            <div class="summary-card" style="background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 16px; box-shadow: var(--shadow-retro-sm);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color, #2d241e);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fas fa-ring" style="color: #ec4899; font-size: 16px;"></i>
+                  <span style="font-weight: 800; font-size: 15px;">Casamentos & Harém</span>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; text-align: center;">
+                <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px 6px;">
+                  <div style="font-size: 20px; font-weight: 900; color: #ec4899;" id="summary-marriages-today">0</div>
+                  <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Hoje</div>
+                </div>
+                <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px 6px;">
+                  <div style="font-size: 20px; font-weight: 900; color: #a855f7;" id="summary-marriages-week">0</div>
+                  <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Na Semana</div>
+                </div>
+                <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px 6px;">
+                  <div style="font-size: 20px; font-weight: 900; color: #3b82f6;" id="summary-marriages-total">0</div>
+                  <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Total no Harém</div>
+                </div>
+              </div>
+              <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+                Mantenha seu harém ativo! Seus casamentos ajudam no ranking global e na valorização dos seus personagens.
+              </p>
+            </div>
+
+            <!-- Card 4: Custos Diários de Hospedagem -->
+            <div class="summary-card" style="background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 16px; box-shadow: var(--shadow-retro-sm);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color, #2d241e);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fas fa-home" style="color: #10b981; font-size: 16px;"></i>
+                  <span style="font-weight: 800; font-size: 15px;">Custos de Hospedagem</span>
+                </div>
+                <span class="badge-tag" id="summary-hosting-status-badge" style="background: #10b981; color: #fff; font-weight: 800;">Ativo</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
+                <div>
+                  <div style="font-size: 12px; color: var(--text-muted);">Custo Diário Total:</div>
+                  <div style="font-size: 18px; font-weight: 900; color: #f59e0b;">
+                    <i class="fas fa-coins"></i> <span id="summary-hosting-total-cost">0</span> Zinthos/dia
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 12px; color: var(--text-muted);">Autonomia estimada:</div>
+                  <div style="font-size: 14px; font-weight: 800; color: var(--text-main);" id="summary-hosting-autonomy">-- dias</div>
+                </div>
+              </div>
+              <div id="summary-hosting-rarities-breakdown" style="display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+                <!-- Discriminação de custos por raridade preenchida via JS -->
+              </div>
+            </div>
+
+            <!-- Card 5: Classificados & Mercado -->
+            <div class="summary-card" style="background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 16px; box-shadow: var(--shadow-retro-sm);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color, #2d241e);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fas fa-store" style="color: #6366f1; font-size: 16px;"></i>
+                  <span style="font-weight: 800; font-size: 15px;">Classificados & Mercado</span>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px;">
+                <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px; text-align: center;">
+                  <div style="font-size: 18px; font-weight: 900; color: #3b82f6;" id="summary-market-active">0</div>
+                  <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Anúncios Ativos</div>
+                </div>
+                <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px; text-align: center;">
+                  <div style="font-size: 18px; font-weight: 900; color: #10b981;" id="summary-market-sold">0</div>
+                  <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Vendidos / Concluídos</div>
+                </div>
+                <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px; text-align: center;">
+                  <div style="font-size: 18px; font-weight: 900; color: #f59e0b;" id="summary-market-offers-received">0</div>
+                  <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Ofertas Recebidas</div>
+                </div>
+                <div style="background: var(--bg-input, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, #374151); border-radius: 6px; padding: 10px; text-align: center;">
+                  <div style="font-size: 18px; font-weight: 900; color: #8b5cf6;" id="summary-market-offers-sent">0</div>
+                  <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Ofertas Enviadas</div>
+                </div>
+              </div>
+              <div style="text-align: center;">
+                <button class="btn-retro btn-sm btn-purple" style="width: 100%;" onclick="activateMainTab('tab-market');">
+                  <i class="fas fa-external-link-alt"></i> Ver Classificados
+                </button>
+              </div>
+            </div>
+
+          </div>
         </div>
 
         <!-- Subtab 3.1: Waifus Casadas -->
