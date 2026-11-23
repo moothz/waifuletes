@@ -689,7 +689,7 @@
       <div class="tab-content public-tab-content" id="public-tab-harem">
         <!-- Barra Superior do Harém Público: Navegação de Coleções e Custo de Hospedagem (Direita Superior) -->
         <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
-          <div id="public-harem-collections-nav-badge" class="harem-hosting-badge harem-collections-nav-badge hidden" title="Ir para coleção...">
+          <div id="public-harem-collections-nav-badge" class="harem-hosting-badge harem-collections-nav-badge" title="Ir para coleção...">
             <i class="fas fa-layer-group"></i>
             <span id="public-harem-collections-nav-text">Ir para coleção...</span>
             <div id="public-harem-collections-nav-tooltip" class="harem-collections-nav-tooltip">
@@ -714,6 +714,29 @@
               <div id="public-hosting-tooltip-body" class="harem-hosting-tooltip-body">
                 Carregando detalhes...
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Busca e Filtros do Harém Público -->
+        <div class="search-panel" id="public-harem-search-panel" style="margin-bottom: 24px; max-width: 650px; margin-left: auto; margin-right: auto;">
+          <div class="search-input-group">
+            <i class="fas fa-search"></i>
+            <input type="text" id="public-harem-search-input" class="retro-input" placeholder="Buscar no harém por personagem ou série...">
+            <button id="btn-clear-public-harem-search" class="btn-retro btn-sm hidden" style="padding: 4px 8px; margin-right: 4px;" title="Limpar busca">&times;</button>
+          </div>
+          <div class="filters-row" style="margin-top: 10px; justify-content: center;">
+            <div class="filter-group">
+              <span><i class="fas fa-filter"></i> Filtro:</span>
+              <select id="public-harem-rarity-select" class="retro-select">
+                <option value="">Todas</option>
+                <option value="COVETED">👀 Cobiçados</option>
+                <option value="LEGENDARY">⭐ Lendário</option>
+                <option value="EPIC">🟣 Épico</option>
+                <option value="RARE">🔵 Raro</option>
+                <option value="UNCOMMON">🟢 Incomum</option>
+                <option value="COMMON">⚪ Comum</option>
+              </select>
             </div>
           </div>
         </div>
@@ -749,6 +772,16 @@
 
         <!-- Grid dos Demais Personagens (Quebra forçada para baixo) -->
         <div id="public-harem-grid" class="waifu-grid"></div>
+
+        <!-- Paginação do Harém Geral Público -->
+        <div class="pagination-bar hidden" id="public-harem-pagination" style="margin-top: 20px;">
+          <div class="page-info"><span id="public-harem-general-total-count">0 personagens</span></div>
+          <div class="page-controls">
+            <button class="btn-retro btn-sm" id="public-harem-btn-prev" disabled><i class="fas fa-angle-left"></i> Anterior</button>
+            <span class="page-indicator" id="public-harem-page-indicator">1 / 1</span>
+            <button class="btn-retro btn-sm" id="public-harem-btn-next" disabled>Próxima <i class="fas fa-angle-right"></i></button>
+          </div>
+        </div>
       </div>
 
       <!-- Aba 2: Classificados do Usuário Específico -->
