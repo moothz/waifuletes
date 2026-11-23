@@ -54,6 +54,7 @@ import { externalCatalogRoutes } from './routes/external/externalCatalogRoutes.j
 const fastify = Fastify({
   trustProxy: true,
   bodyLimit: 75 * 1024 * 1024, // 75MB para permitir envio de fotos de personagens e míticos
+  maxParamLength: 500, // Permite slugs e identificadores de personagens extensos (ex.: títulos de light novel)
   logger: {
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     redact: ['req.headers.authorization', 'req.headers["x-api-key"]'],
