@@ -11,6 +11,9 @@ import { CooldownService } from '../../services/CooldownService.js';
 import { MarryService } from '../../services/MarryService.js';
 import { UserService } from '../../services/UserService.js';
 import { MarketService } from '../../services/MarketService.js';
+import { DivorceService } from '../../services/DivorceService.js';
+import { simulateInactiveLoss, haremValueWithDiscount, DEFAULT_MAX_SIMULATION_DAYS } from '../../services/InactiveProjectionService.js';
+import { withBusinessSpan, setAttrs } from '../../telemetry.js';
 import { Prisma, Rarity, Gender, SuggestionStatus, SuggestionType } from '@prisma/client';
 
 export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
@@ -1816,6 +1819,150 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
             lastExecution,
             hoursSinceLastExecution: hoursSinceLastExecution ? Math.round(hoursSinceLastExecution) : null,
             isSystemOperational,
+          },
+        },
+      });
+    },
+  });
+
+  /**
+   * Lista de jogadores inativos agora + simulação de perda total
+   */
+  fastify.get('/api/admin/inactivity/current', {
+    preHandler: requireAdminAuth,
+    schema: {
+      description: 'Lista jogadores inativos agora (além da carência) com saldo, cobrado desde inativo, valor restante e estimativa de dias para perder tudo',
+      tags: ['Admin (Web)'],
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          page: { type: 'integer', minimum: 1, default: 1 },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const query = request.query as { page?: number; limit?: number };
+      const page = Math.max(1, Number(query.page) || 1);
+      const limit = Math.min(100, Math.max(1, Number(query.limit) || 25));
+
+      const now = new Date();
+      const graceMs = config.HOSTING_GRACE_HOURS * 3600 * 1000;
+      const graceDate = new Date(now.getTime() - graceMs);
+      const divorceService = new DivorceService(fastify.prisma, undefined, fastify.redis);
+      const inflationMultiplier = await divorceService.getInflationMultiplier().catch(() => 1.0);
+      const soulmateKeys = config.SOULMATE_KEYS_REQUIRED ?? 10;
+
+      const candidates = await fastify.prisma.user.findMany({
+        where: {
+          harem: { some: { character: { isMythic: false } } },
+          OR: [
+            { lastActiveAt: { lt: graceDate } },
+            { lastActiveAt: null, updatedAt: { lt: graceDate } },
+          ],
+        },
+        select: { id: true, name: true, publicId: true, platform: true, kakera: true, lastActiveAt: true, updatedAt: true },
+      });
+
+      const enriched = await withBusinessSpan(
+        'inactivity projection',
+        { 'waifu.inactivity.users_evaluated': candidates.length },
+        async () => {
+          const results = await Promise.all(candidates.map(async (user) => {
+            const lastActive = user.lastActiveAt ?? user.updatedAt;
+            const offlineMs = Math.max(0, now.getTime() - new Date(lastActive).getTime());
+            const offlineDays = Math.floor(offlineMs / 86400000);
+            const becomeInactiveDate = new Date(new Date(lastActive).getTime() + graceMs);
+
+            const [haremRows, soulmateRows, chargedResult, confiscatedResult] = await Promise.all([
+              fastify.prisma.haremEntry.findMany({
+                where: { userId: user.id, character: { isMythic: false } },
+                select: {
+                  characterId: true,
+                  keys: true,
+                  claimedAt: true,
+                  character: { select: { baseRarity: true } },
+                },
+              }),
+              fastify.prisma.soulmate.findMany({
+                where: { userId: user.id },
+                select: { characterId: true },
+              }),
+              fastify.prisma.kakeraTransaction.aggregate({
+                where: { userId: user.id, reason: 'HOSTING_FEE', createdAt: { gte: becomeInactiveDate } },
+                _sum: { amount: true },
+              }),
+              fastify.prisma.kakeraTransaction.aggregate({
+                where: { userId: user.id, reason: 'HOSTING_FEE_WAIFU' },
+                _sum: { amount: true },
+                _count: { id: true },
+              }),
+            ]);
+
+            const soulmateIds = new Set(soulmateRows.map((sm) => sm.characterId));
+            const entries = haremRows.map((h) => ({
+              characterId: h.characterId,
+              rarity: h.character.baseRarity as Rarity,
+              keys: h.keys,
+              claimedAt: h.claimedAt,
+              isSoulmate: h.keys >= soulmateKeys || soulmateIds.has(h.characterId),
+            }));
+
+            const simulation = simulateInactiveLoss({
+              balance: user.kakera,
+              harem: entries,
+              offlineMs,
+              graceMs,
+              inflationMultiplier,
+            });
+
+            return {
+              userId: user.id,
+              name: user.name,
+              publicId: user.publicId,
+              platform: user.platform,
+              lastActiveAt: lastActive,
+              offlineDays,
+              offlineHours: Math.round(offlineMs / 3600000),
+              balance: user.kakera,
+              waifus: entries.length,
+              valueRemainingWithDiscount: haremValueWithDiscount(entries, inflationMultiplier),
+              chargedSinceInactive: Math.abs(chargedResult._sum.amount ?? 0),
+              totalConfiscatedValue: confiscatedResult._sum.amount ?? 0,
+              totalConfiscatedCount: confiscatedResult._count.id ?? 0,
+              dailyFee: simulation.todayFee,
+              multiplier: simulation.todayMultiplier,
+              estimatedDays: simulation.estimatedDays,
+            };
+          }));
+
+          setAttrs({ 'waifu.inactivity.users_projected': results.length });
+          return results;
+        }
+      );
+
+      // Mais críticos primeiro (estimativa menor sobe); indeterminados por último
+      enriched.sort((a, b) => {
+        if (a.estimatedDays === null && b.estimatedDays === null) return 0;
+        if (a.estimatedDays === null) return 1;
+        if (b.estimatedDays === null) return -1;
+        return a.estimatedDays - b.estimatedDays;
+      });
+
+      const total = enriched.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const items = enriched.slice((page - 1) * limit, page * limit);
+
+      return reply.send({
+        success: true,
+        data: {
+          items,
+          pagination: { page, limit, total, totalPages },
+          config: {
+            graceHours: config.HOSTING_GRACE_HOURS,
+            confiscoPermille: config.HOSTING_CONFISCO_PERMILLE ?? 3000,
+            maxSimulationDays: DEFAULT_MAX_SIMULATION_DAYS,
           },
         },
       });

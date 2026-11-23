@@ -112,6 +112,7 @@ status HTTP (ou o `statusCode` do erro, no `handler`) é < 500, e remove `http.r
 | `ai_advisor` | `gen_ai.operation.name=chat`, `gen_ai.provider.name=vllm`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens/output_tokens`, `waifu.ai.llm_calls`, `waifu.ai.tool_calls`, `waifu.ai.retry`, `waifu.ai.finish_reason` | — |
 | `ai_advisor lookup` | `waifu.ai.cache` (hit/miss), `waifu.ai.refresh` | — |
 | `hosting_fee run` | `waifu.hosting.dry_run`, `force`, `users_evaluated`, `users_charged`, `already_charged`, `failed_users`, `waifus_confiscated` | — |
+| `inactivity projection` | `waifu.inactivity.users_evaluated`, `waifu.inactivity.users_projected` | — |
 | `economy summary` | `GET /internal/economy/summary` (resumo da economia para o painel da Ravena): `waifu.economy.window_ms`, `waifu.economy.full_history` (from=0), `waifu.economy.received`, `waifu.economy.balances`, `waifu.economy.flow_rows`, `waifu.economy.soulmate_divorces`, `waifu.economy.holders`. Sem ID de jogador; janela inválida = rejeição `INVALID_WINDOW` | — |
 | `economy players` | `GET /internal/economy/players` (recorte por jogador, janela de até 8 dias): `waifu.economy.window_ms`, `waifu.economy.players`, `waifu.economy.flow_rows`. Sem ID de jogador no span | — |
 | `economy params` | `GET /internal/economy/params` (parâmetros de balanceamento para o painel da Ravena): `waifu.economy.params` (quantos parâmetros a rota devolveu). Sem ID de jogador | — |
