@@ -388,6 +388,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
         },
         keys: item.keys,
         isFavorite: item.isFavorite,
+        isSoulmate: Boolean(item.isSoulmate),
         claimedAt: item.claimedAt,
         collectionId: item.collectionId,
         collection: item.collection,
