@@ -313,6 +313,19 @@ function setupEventListeners() {
     navigateToHash(window.location.hash);
   });
 
+  // Busca em tempo real na aba de Rankings
+  const rankingSearchInput = document.getElementById('ranking-search-input');
+  if (rankingSearchInput) {
+    let rankingSearchTimer = null;
+    rankingSearchInput.addEventListener('input', (e) => {
+      clearTimeout(rankingSearchTimer);
+      const val = e.target.value;
+      rankingSearchTimer = setTimeout(() => {
+        loadRankings(val);
+      }, 300);
+    });
+  }
+
   // Ajuste dinâmico de cards nos classificados em caso de resize da tela
   let marketResizeTimer = null;
   window.addEventListener('resize', () => {
@@ -4847,7 +4860,7 @@ function switchTab(tabId, subtabId = null) {
     activateSubTab('harem-subtabs', targetSub, true);
     if (targetSub === 'subtab-harem-mythics') loadUserMythics();
   } else if (tabId === 'tab-rankings') {
-    loadRankings();
+    loadRankings(document.getElementById('ranking-search-input')?.value || '');
   } else if (tabId === 'tab-market') {
     const targetSub = subtabId || document.querySelector('#market-subtabs .retro-subtab.active')?.dataset.subtab || 'subtab-market-browse';
     activateSubTab('market-subtabs', targetSub, true);
@@ -4884,7 +4897,7 @@ function navigateToHash(hash) {
     loadUserSuggestions();
   } else if (mainPart === 'rankings' || mainPart === 'ranking') {
     activateMainTab('tab-rankings', false);
-    loadRankings();
+    loadRankings(document.getElementById('ranking-search-input')?.value || '');
   } else if (mainPart === 'harem') {
     activateMainTab('tab-harem', false);
     if (subPart === 'miticos' || subPart === 'mythics') {
@@ -6844,30 +6857,44 @@ async function confirmInvest() {
 // RANKINGS GLOBAIS NO PAINEL DO USUÁRIO
 // ========================================================
 let userRankingsLoaded = false;
-async function loadRankings() {
+let userRankingsSearchTerm = '';
+
+async function loadRankings(searchTerm = '') {
   const tbodyZinthos = document.getElementById('tbody-ranking-zinthos');
   const tbodyWaifus = document.getElementById('tbody-ranking-waifus');
   if (!tbodyZinthos || !tbodyWaifus) return;
 
-  if (userRankingsLoaded) return;
+  const cleanTerm = (searchTerm || '').trim();
+  if (userRankingsLoaded && cleanTerm === userRankingsSearchTerm) return;
+  userRankingsSearchTerm = cleanTerm;
 
   try {
+    const searchParam = cleanTerm ? `&search=${encodeURIComponent(cleanTerm)}` : '';
     const [resUsers, resHarem] = await Promise.all([
-      Api.get('/leaderboard/users?limit=25'),
-      Api.get('/leaderboard/harem?limit=25'),
+      Api.get(`/leaderboard/users?limit=25${searchParam}`),
+      Api.get(`/leaderboard/harem?limit=25${searchParam}`),
     ]);
+
+    const isAuthenticated = Boolean(
+      userSessionToken ||
+      getCookie('waifu_session') ||
+      localStorage.getItem('waifu_session') ||
+      userSessionData
+    );
 
     // 1. Ranking por Zinthos
     const topRich = resUsers?.data?.topRich || [];
     if (topRich.length === 0) {
-      tbodyZinthos.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 20px;">Nenhum registro ainda.</td></tr>`;
+      tbodyZinthos.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 20px;">${cleanTerm ? 'Nenhum jogador encontrado.' : 'Nenhum registro ainda.'}</td></tr>`;
     } else {
       tbodyZinthos.innerHTML = topRich
         .map((u, i) => {
           const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`;
-          const nameHtml = u.publicId
-            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(u.name)}</a>`
-            : `<strong>${escapeHtml(u.name)}</strong>`;
+          const displayName = u.name;
+          const isLinkable = isAuthenticated && !u.haremPrivate && Boolean(u.publicId);
+          const nameHtml = isLinkable
+            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(displayName)}</a>`
+            : `<strong>${escapeHtml(displayName)}</strong>${u.haremPrivate ? ' <i class="fas fa-lock" style="font-size:10px; opacity:0.6; margin-left:3px;" title="Harém Privado"></i>' : ''}`;
           const zinthos = Number(u.kakera || 0).toLocaleString('pt-BR');
           const haremCount = u._count?.harem || 0;
 
@@ -6885,14 +6912,18 @@ async function loadRankings() {
     // 2. Ranking por Waifus (Harém)
     const topHarem = resHarem?.data?.topHarem || [];
     if (topHarem.length === 0) {
-      tbodyWaifus.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 20px;">Nenhum registro ainda.</td></tr>`;
+      tbodyWaifus.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 20px;">${cleanTerm ? 'Nenhum harém encontrado.' : 'Nenhum registro ainda.'}</td></tr>`;
     } else {
       tbodyWaifus.innerHTML = topHarem
         .map((u, i) => {
           const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`;
-          const nameHtml = u.publicId
-            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(u.name)}</a>`
-            : `<strong>${escapeHtml(u.name)}</strong>`;
+          const haremCustomName = u.haremName && String(u.haremName).trim();
+          const displayName = haremCustomName ? haremCustomName : u.name;
+          const titleAttr = haremCustomName ? ` title="Jogador: ${escapeHtml(u.name)}"` : '';
+          const isLinkable = isAuthenticated && !u.haremPrivate && Boolean(u.publicId);
+          const nameHtml = isLinkable
+            ? `<a href="/user/${u.publicId}" target="_blank"${titleAttr} style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(displayName)}</a>`
+            : `<strong${titleAttr}>${escapeHtml(displayName)}</strong>${u.haremPrivate ? ' <i class="fas fa-lock" style="font-size:10px; opacity:0.6; margin-left:3px;" title="Harém Privado"></i>' : ''}`;
           const totalMarriages = Number(u.totalMarriages || 0).toLocaleString('pt-BR');
           const points = Number(u.collectionPoints || 0).toLocaleString('pt-BR');
 

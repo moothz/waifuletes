@@ -90,11 +90,23 @@ function bindHomeEvents() {
       const activeContent = document.getElementById(targetId);
       if (activeContent) activeContent.classList.remove('hidden');
 
-      if (targetId === 'tab-rankings' && !state.rankingsLoaded) {
-        loadRankings();
+      if (targetId === 'tab-rankings') {
+        loadRankings(document.getElementById('ranking-search-input')?.value || '');
       }
     });
   });
+
+  const rankingSearchInput = document.getElementById('ranking-search-input');
+  if (rankingSearchInput) {
+    let rankingSearchTimer = null;
+    rankingSearchInput.addEventListener('input', (e) => {
+      clearTimeout(rankingSearchTimer);
+      const val = e.target.value;
+      rankingSearchTimer = setTimeout(() => {
+        loadRankings(val);
+      }, 300);
+    });
+  }
 
   const searchInput = document.getElementById('search-input');
   const genderPills = document.querySelectorAll('#gender-pills .retro-pill');
@@ -360,27 +372,39 @@ function createWaifuCard(char) {
 // ========================================================
 // RANKINGS EM 2 COLUNAS (ZINTHOS & WAIFUS)
 // ========================================================
-async function loadRankings() {
+let homeRankingsSearchTerm = '';
+async function loadRankings(searchTerm = '') {
   const tbodyZinthos = document.getElementById('tbody-ranking-zinthos');
   const tbodyWaifus = document.getElementById('tbody-ranking-waifus');
+  if (!tbodyZinthos || !tbodyWaifus) return;
+
+  const cleanTerm = (searchTerm || '').trim();
+  homeRankingsSearchTerm = cleanTerm;
 
   try {
+    const searchParam = cleanTerm ? `&search=${encodeURIComponent(cleanTerm)}` : '';
     const [resUsers, resHarem] = await Promise.all([
-      Api.get('/leaderboard/users?limit=25'),
-      Api.get('/leaderboard/harem?limit=25'),
+      Api.get(`/leaderboard/users?limit=25${searchParam}`),
+      Api.get(`/leaderboard/harem?limit=25${searchParam}`),
     ]);
+
+    const token = getCookie('waifu_session') || localStorage.getItem('waifu_session');
+    const userPubId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id');
+    const isAuthenticated = Boolean(token && userPubId);
 
     // 1. Ranking por Zinthos
     const topRich = resUsers?.data?.topRich || [];
     if (topRich.length === 0) {
-      tbodyZinthos.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 20px;">Nenhum registro ainda.</td></tr>`;
+      tbodyZinthos.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 20px;">${cleanTerm ? 'Nenhum jogador encontrado.' : 'Nenhum registro ainda.'}</td></tr>`;
     } else {
       tbodyZinthos.innerHTML = topRich
         .map((u, i) => {
           const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`;
-          const nameHtml = u.publicId
-            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(u.name)}</a>`
-            : `<strong>${escapeHtml(u.name)}</strong>`;
+          const displayName = u.name;
+          const isLinkable = isAuthenticated && !u.haremPrivate && Boolean(u.publicId);
+          const nameHtml = isLinkable
+            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(displayName)}</a>`
+            : `<strong>${escapeHtml(displayName)}</strong>${u.haremPrivate ? ' <i class="fas fa-lock" style="font-size:10px; opacity:0.6; margin-left:3px;" title="Harém Privado"></i>' : ''}`;
           const zinthos = Number(u.kakera || 0).toLocaleString('pt-BR');
           const haremCount = u._count?.harem || 0;
 
@@ -399,14 +423,18 @@ async function loadRankings() {
     // 2. Ranking por Waifus (Harém)
     const topHarem = resHarem?.data?.topHarem || [];
     if (topHarem.length === 0) {
-      tbodyWaifus.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 20px;">Nenhum registro ainda.</td></tr>`;
+      tbodyWaifus.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 20px;">${cleanTerm ? 'Nenhum harém encontrado.' : 'Nenhum registro ainda.'}</td></tr>`;
     } else {
       tbodyWaifus.innerHTML = topHarem
         .map((u, i) => {
           const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`;
-          const nameHtml = u.publicId
-            ? `<a href="/user/${u.publicId}" target="_blank" style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(u.name)}</a>`
-            : `<strong>${escapeHtml(u.name)}</strong>`;
+          const haremCustomName = u.haremName && String(u.haremName).trim();
+          const displayName = haremCustomName ? haremCustomName : u.name;
+          const titleAttr = haremCustomName ? ` title="Jogador: ${escapeHtml(u.name)}"` : '';
+          const isLinkable = isAuthenticated && !u.haremPrivate && Boolean(u.publicId);
+          const nameHtml = isLinkable
+            ? `<a href="/user/${u.publicId}" target="_blank"${titleAttr} style="text-decoration:none; color:inherit; font-weight:800;">${escapeHtml(displayName)}</a>`
+            : `<strong${titleAttr}>${escapeHtml(displayName)}</strong>${u.haremPrivate ? ' <i class="fas fa-lock" style="font-size:10px; opacity:0.6; margin-left:3px;" title="Harém Privado"></i>' : ''}`;
           const totalMarriages = Number(u.totalMarriages || 0).toLocaleString('pt-BR');
           const points = Number(u.collectionPoints || 0).toLocaleString('pt-BR');
 

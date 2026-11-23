@@ -216,6 +216,14 @@
 
       <!-- Aba 2: Rankings Globais em 2 Colunas (Zinthos e Waifus) -->
       <div class="tab-content hidden" id="tab-rankings">
+        <!-- Busca de Usuários no Ranking -->
+        <div class="search-panel" id="ranking-search-panel" style="margin-bottom: 20px; max-width: 650px; margin-left: auto; margin-right: auto;">
+          <div class="search-input-group">
+            <i class="fas fa-search"></i>
+            <input type="text" id="ranking-search-input" class="retro-input" placeholder="Buscar no ranking por jogador ou harém...">
+          </div>
+        </div>
+
         <div class="rankings-grid">
           <!-- Coluna 1: Ranking por Zinthos -->
           <div class="ranking-column">
@@ -249,7 +257,7 @@
               <table class="retro-table" id="table-ranking-waifus">
                 <thead>
                   <tr style="background: var(--bg-retro-accent);">
-                    <th style="text-align: left;">Jogador</th>
+                    <th style="text-align: left;">Harém / Jogador</th>
                     <th style="text-align: center;">Casadas</th>
                     <th style="text-align: right;">Pontos</th>
                   </tr>
