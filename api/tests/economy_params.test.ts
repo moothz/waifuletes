@@ -204,6 +204,8 @@ describe('📐 GET /internal/economy/params — parâmetros de balanceamento (Zi
       'market.MARKET_SELLER_NET_RATE': marketplace.MARKET_SELLER_NET_RATE,
       'hosting.HOSTING_CONFISCO_PERMILLE': config.HOSTING_CONFISCO_PERMILLE,
       'hosting.HOSTING_GRACE_HOURS': config.HOSTING_GRACE_HOURS,
+      'hosting.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT': config.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT,
+      'hosting.HOSTING_INACTIVE_MAX_MULTIPLIER': config.HOSTING_INACTIVE_MAX_MULTIPLIER,
       ...flat('hosting.HOSTING_TAXAS_ATIVAS', activeHostingRates),
       ...flat('hosting.HOSTING_TAXAS_INATIVAS', inactiveHostingRates),
     };

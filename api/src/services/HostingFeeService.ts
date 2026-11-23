@@ -36,6 +36,8 @@ interface UserFeeResult {
   costs: Record<string, number>;
   waifusCount: number;
   confiscated: Array<{ id: string; name: string; rarity: string; recoveredValue: number }>;
+  multiplier?: number;
+  extraDays?: number;
 }
 
 const RARITY_PRIORITY: Record<Rarity, number> = {
@@ -57,6 +59,24 @@ const RARITY_LABEL: Record<Rarity, string> = {
 const RUN_LOCK_TTL_SECONDS = 60 * 60; // trava de execução em andamento
 const DONE_LOCK_TTL_SECONDS = 23 * 3600; // marca de "já executado hoje"
 const TX_TIMEOUT_MS = 30_000;
+
+/**
+ * Calcula o multiplicador progressivo da taxa de inatividade com base no tempo offline além da carência.
+ * A cada 24h extras após a carência (72h), adiciona dailySurchargePercent% (padrão 10%) ao multiplicador base de 1.0.
+ * Possui teto configurável por maxMultiplier (padrão 5.0).
+ */
+export function calculateInactiveMultiplier(
+  offlineMs: number,
+  graceMs: number,
+  dailySurchargePercent: number = config.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT ?? 10,
+  maxMultiplier: number = config.HOSTING_INACTIVE_MAX_MULTIPLIER ?? 5
+): number {
+  if (offlineMs <= graceMs) return 1.0;
+  const extraMs = offlineMs - graceMs;
+  const extraDays = Math.floor(extraMs / (24 * 3600 * 1000));
+  const multiplier = 1.0 + (extraDays * dailySurchargePercent) / 100;
+  return Math.min(maxMultiplier, multiplier);
+}
 
 export class HostingFeeService {
   constructor(
@@ -249,8 +269,28 @@ export class HostingFeeService {
       if (harem.length === 0) return empty;
 
       const lastActive = userRow.last_active_at ?? userRow.updatedAt;
-      const isInactive = ctx.now.getTime() - new Date(lastActive).getTime() > ctx.graceMs;
-      const rates = isInactive ? inactiveHostingRates : activeHostingRates;
+      const offlineMs = Math.max(0, ctx.now.getTime() - new Date(lastActive).getTime());
+      const isInactive = offlineMs > ctx.graceMs;
+      let multiplier = 1.0;
+      let extraDays = 0;
+      let rates = activeHostingRates;
+
+      if (isInactive) {
+        extraDays = Math.floor((offlineMs - ctx.graceMs) / (24 * 3600 * 1000));
+        multiplier = calculateInactiveMultiplier(
+          offlineMs,
+          ctx.graceMs,
+          config.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT,
+          config.HOSTING_INACTIVE_MAX_MULTIPLIER
+        );
+        rates = {
+          COMMON: Math.round(inactiveHostingRates.COMMON * multiplier),
+          UNCOMMON: Math.round(inactiveHostingRates.UNCOMMON * multiplier),
+          RARE: Math.round(inactiveHostingRates.RARE * multiplier),
+          EPIC: Math.round(inactiveHostingRates.EPIC * multiplier),
+          LEGENDARY: Math.round(inactiveHostingRates.LEGENDARY * multiplier),
+        };
+      }
 
       const counts: CountByRarity = { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 };
       for (const entry of harem) counts[entry.character.baseRarity]++;
@@ -273,6 +313,8 @@ export class HostingFeeService {
         counts,
         costs,
         waifusCount: harem.length,
+        multiplier,
+        extraDays,
       };
 
       if (ctx.dryRun) {
@@ -282,6 +324,8 @@ export class HostingFeeService {
       const feeMeta = {
         feeDate: ctx.dateStr,
         isInactive,
+        multiplier,
+        extraDays,
         ratesUsed: rates,
         counts,
         costs,
@@ -432,7 +476,9 @@ export class HostingFeeService {
       ? `⚠️ Taxa de Inatividade: -${r.debited} Zinthos`
       : `🏠 Taxa de Hospedagem: -${r.debited} Zinthos`;
     const statusMsg = r.isInactive
-      ? `Você está inativo há mais de ${config.HOSTING_GRACE_HOURS}h.`
+      ? (r.extraDays && r.extraDays > 0
+          ? `Você está inativo há mais de ${config.HOSTING_GRACE_HOURS}h (+${r.extraDays}d extras: taxa com acréscimo progressivo de +${r.extraDays * (config.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT ?? 10)}%).`
+          : `Você está inativo há mais de ${config.HOSTING_GRACE_HOURS}h.`)
       : `Hospedagem diária do seu harém (${r.waifusCount} waifus).`;
 
     let message = `${statusMsg} Taxa do dia: ${r.totalFee} Zinthos. Debitado do saldo: ${r.debited} Zinthos.\nDemonstrativo: ${breakdownLines}`;

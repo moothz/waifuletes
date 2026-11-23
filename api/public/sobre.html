@@ -149,7 +149,7 @@
       <!-- Seção 3: Taxa de Hospedagem & Inatividade -->
       <section class="about-section">
         <h2 class="about-title"><i class="fas fa-hotel" style="color: #9333ea;"></i> Taxa de hospedagem e inatividade</h2>
-        <p>Todo dia às <strong>04:00 BRT</strong> o sistema desconta a taxa de manutenção diária com base na quantidade e na raridade dos personagens no harém. Jogadores inativos por mais de 72 horas pagam tarifas maiores:</p>
+        <p>Todo dia às <strong>04:00 BRT</strong> o sistema desconta a taxa de manutenção diária com base na quantidade e na raridade dos personagens no harém. Jogadores inativos por mais de 72 horas pagam tarifas maiores, com acréscimo progressivo diário para acelerar a liberação de haréns abandonados:</p>
 
         <div style="overflow-x: auto;">
           <table class="fee-table">
@@ -157,38 +157,48 @@
               <tr>
                 <th>Raridade</th>
                 <th>Jogador ativo (por dia)</th>
-                <th>Jogador inativo (&gt; 72h)</th>
+                <th>Jogador inativo base (&gt; 72h)</th>
+                <th>Acréscimo diário extra</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>⚪ Comum</td>
                 <td><strong>1 Zinthos</strong></td>
-                <td><strong>10 Zinthos</strong></td>
+                <td><strong>20 Zinthos</strong></td>
+                <td>+2 Zinthos/dia</td>
               </tr>
               <tr>
                 <td>🟢 Incomum</td>
                 <td><strong>3 Zinthos</strong></td>
-                <td><strong>60 Zinthos</strong></td>
+                <td><strong>120 Zinthos</strong></td>
+                <td>+12 Zinthos/dia</td>
               </tr>
               <tr>
                 <td>🔵 Raro</td>
                 <td><strong>8 Zinthos</strong></td>
-                <td><strong>200 Zinthos</strong></td>
+                <td><strong>400 Zinthos</strong></td>
+                <td>+40 Zinthos/dia</td>
               </tr>
               <tr>
                 <td>🟣 Épico</td>
                 <td><strong>15 Zinthos</strong></td>
-                <td><strong>350 Zinthos</strong></td>
+                <td><strong>700 Zinthos</strong></td>
+                <td>+70 Zinthos/dia</td>
               </tr>
               <tr>
                 <td>⭐ Lendário</td>
                 <td><strong>40 Zinthos</strong></td>
-                <td><strong>1.000 Zinthos</strong></td>
+                <td><strong>2.000 Zinthos</strong></td>
+                <td>+200 Zinthos/dia</td>
               </tr>
             </tbody>
           </table>
         </div>
+
+        <p style="margin-top: 10px; font-size: 0.95rem; color: var(--text-muted);">
+          * <strong>Progressão de inatividade:</strong> a cada 24 horas adicionais de inatividade após as 72h iniciais de tolerância, a taxa de inatividade recebe um acréscimo de +10% da taxa base (ex.: 4º dia offline = +10%, 5º dia = +20%, até o teto de 5x), reduzindo pela metade o tempo de liquidação de contas inativas.
+        </p>
 
         <div style="background: var(--bg-card-subtle); border-left: 4px solid #e11d48; padding: 12px; margin-top: 12px;">
           <strong>Saldo insuficiente para quitar a hospedagem:</strong>

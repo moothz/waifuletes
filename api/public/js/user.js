@@ -7442,7 +7442,7 @@ function renderHostingCostBadge(hostingCost, isPublic = false) {
       <span style="color: #9333ea;">${totalCost} zinthos/dia</span>
     </div>
     <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px; font-style: italic;">
-      ${hostingCost.isInactive ? '⚠️ Taxa de inatividade aplicada (mais de 72h offline).' : '✨ Cobrado no reset diário (04:00 BRT).'}
+      ${hostingCost.isInactive ? `⚠️ Taxa de inatividade aplicada (> 72h offline${hostingCost.extraDays > 0 ? `, +${hostingCost.extraDays}d extras: +${hostingCost.extraDays * 10}%` : ''}).` : '✨ Cobrado no reset diário (04:00 BRT).'}
     </div>
   `;
 
