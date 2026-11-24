@@ -1582,6 +1582,11 @@ function formatZinthosValue(val) {
   return Number(val || 0).toLocaleString('pt-BR') + 'z';
 }
 
+function getRarityDailyDivorceInfo(rarity) {
+  if (!haremSummaryData?.divorces?.rarities) return null;
+  return haremSummaryData.divorces.rarities[rarity] || null;
+}
+
 async function loadLockedDivorcePreview(characterId, btnElement) {
   if (divorcePreviewCache.has(characterId)) {
     const val = divorcePreviewCache.get(characterId);
@@ -1705,11 +1710,17 @@ function openCardOptionsModal(charId) {
       <button id="btn-card-options-locked-divorce" class="btn-retro btn-sm" style="width: 100%; opacity: 0.5; cursor: not-allowed;" title="Personagem ou coleção bloqueada" disabled>
         <i class="fas fa-lock"></i> 🔒 Divórcio Bloqueado ${divorcePreviewCache.has(char.id) ? `(${formatZinthosValue(divorcePreviewCache.get(char.id))})` : '(...)'}
       </button>
-    ` : `
-      <button class="btn-retro btn-sm btn-danger" style="width: 100%;" data-action="divorce">
-        <i class="fas fa-heart-crack"></i> Divorciar
-      </button>
-    `}
+    ` : (() => {
+      const divInfo = getRarityDailyDivorceInfo(char.baseRarity);
+      const drText = divInfo
+        ? (divInfo.count > 0 ? ` (${divInfo.count} hoje • DR ${Math.round(divInfo.nextRate * 100)}%)` : ' (100% líq.)')
+        : '';
+      return `
+        <button class="btn-retro btn-sm btn-danger" style="width: 100%;" data-action="divorce" data-rarity="${char.baseRarity}">
+          <i class="fas fa-heart-crack"></i> Divorciar${drText}
+        </button>
+      `;
+    })()}
     <!-- 7. Sugerir Mudança -->
     <button class="btn-retro btn-sm" style="width: 100%;" data-action="suggest">
       <i class="fas fa-lightbulb"></i> Sugerir Alterações
@@ -3782,11 +3793,24 @@ async function openDivorceModal(charId, charName) {
   pendingDivorceTarget = { id: charId, name: charName };
   const textEl = document.getElementById('divorce-modal-text');
   const amountEl = document.getElementById('divorce-modal-refund-amount');
+  const confirmBtn = document.getElementById('btn-confirm-divorce');
+  const drBox = document.getElementById('divorce-modal-dr-box');
+  const drRarityTitle = document.getElementById('divorce-modal-dr-rarity-title');
+  const drCountBadge = document.getElementById('divorce-modal-dr-count-badge');
+  const drRateTag = document.getElementById('divorce-modal-dr-rate-tag');
+  const drPenaltyDesc = document.getElementById('divorce-modal-dr-penalty-desc');
+
   if (textEl) {
     textEl.innerHTML = `Tem certeza que deseja divorciar de <strong>${escapeHtml(charName)}</strong>?`;
   }
   if (amountEl) {
     amountEl.textContent = 'Calculando...';
+  }
+  if (confirmBtn) {
+    confirmBtn.innerHTML = '<i class="fas fa-heart-crack"></i> Divorciar Agora';
+  }
+  if (drBox) {
+    drBox.classList.add('hidden');
   }
   openModal('modal-divorce');
 
@@ -3805,6 +3829,57 @@ async function openDivorceModal(charId, charName) {
           ? '<span style="color: #ec4899; font-size: 11px; margin-left: 4px;">(💖 Dourado)</span>'
           : '';
         amountEl.innerHTML = `+${formatted} Zinthos ${bonusTag} ${soulmateTag}`;
+      }
+
+      // Painel informativo de Diminishing Returns (DR)
+      if (drBox) {
+        const rarity = data.character?.rarity || entry?.character?.baseRarity || 'COMMON';
+        const rarityLabels = {
+          COMMON: { label: 'Comum', color: '#9ca3af' },
+          UNCOMMON: { label: 'Incomum', color: '#22c55e' },
+          RARE: { label: 'Raro', color: '#3b82f6' },
+          EPIC: { label: 'Épico', color: '#a855f7' },
+          LEGENDARY: { label: 'Lendário', color: '#f59e0b' },
+        };
+        const rMeta = rarityLabels[rarity] || { label: rarity, color: 'var(--text-main)' };
+        const countToday = Number(data.dailyDivorceCount || 0);
+        const tier = Number(data.divorceTier || (countToday + 1));
+        const rate = typeof data.refundRate === 'number' ? data.refundRate : 1.0;
+        const ratePct = Math.round(rate * 100);
+
+        if (drRarityTitle) {
+          drRarityTitle.innerHTML = `<span style="color: ${rMeta.color}; font-weight: 800;">${rMeta.label}</span> • Divórcio #${tier} do dia`;
+        }
+        if (drCountBadge) {
+          drCountBadge.textContent = countToday === 0 ? 'Nenhum hoje' : `${countToday} já divorciado(s) hoje`;
+          drCountBadge.style.background = countToday === 0 ? '#16a34a' : countToday < 4 ? '#d97706' : '#dc2626';
+          drCountBadge.style.color = '#fff';
+        }
+        if (drRateTag) {
+          if (rate >= 1.0) {
+            drRateTag.innerHTML = `<span style="color: #16a34a; font-weight: 800;">100% líquido (Sem penalidade)</span>`;
+          } else {
+            const lossPct = 100 - ratePct;
+            drRateTag.innerHTML = `<span style="color: #ea580c; font-weight: 800;">${ratePct}% líquido (-${lossPct}% penalidade)</span>`;
+          }
+        }
+        if (drPenaltyDesc) {
+          if (rate >= 1.0) {
+            drPenaltyDesc.textContent = 'Este é seu 1º divórcio desta raridade hoje: valor integral!';
+          } else {
+            const fullVal = Number(data.fullRefundKakera || 0).toLocaleString('pt-BR');
+            drPenaltyDesc.textContent = `Penalidade de DR aplicada: o valor base seria +${fullVal} Zinthos, reduzido para ${ratePct}%. O limite diário reseta às 04:00 BRT.`;
+          }
+        }
+        drBox.classList.remove('hidden');
+      }
+
+      // Atualiza o botão de confirmação com a indicação do DR e valor
+      if (confirmBtn) {
+        const rate = typeof data.refundRate === 'number' ? data.refundRate : 1.0;
+        const ratePct = Math.round(rate * 100);
+        const drSuffix = rate < 1.0 ? ` (DR ${ratePct}%)` : '';
+        confirmBtn.innerHTML = `<i class="fas fa-heart-crack"></i> Divorciar Agora (+${formatted}z${drSuffix})`;
       }
     } else if (amountEl) {
       amountEl.textContent = 'Indisponível no momento';
@@ -3852,6 +3927,10 @@ async function executeDivorce() {
     if (haremCountSub) haremCountSub.textContent = newCount;
     const subEl = document.getElementById('user-subtitle');
     if (subEl) subEl.textContent = `${newCount} personagens colecionados no harém`;
+
+    // Invalida cache de resumo e recarrega para atualizar os contadores diários de divórcio (DR)
+    haremSummaryData = null;
+    loadHaremSummary(true).catch(() => {});
   } catch (err) {
     Api.showToast('Erro de comunicação ao divorciar.', '❌');
   } finally {
@@ -4760,7 +4839,11 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
             loadLockedDivorcePreview(charId, divBtn);
           }
         } else {
-          divBtn.innerHTML = '<i class="fas fa-heart-crack"></i> Divorciar';
+          const divInfo = getRarityDailyDivorceInfo(cRarity);
+          const drText = divInfo
+            ? (divInfo.count > 0 ? ` (${divInfo.count} hoje • DR ${Math.round(divInfo.nextRate * 100)}%)` : ' (100% líq.)')
+            : '';
+          divBtn.innerHTML = `<i class="fas fa-heart-crack"></i> Divorciar${drText}`;
           divBtn.onclick = () => { closeModal('modal-waifu-preview'); openDivorceModal(charId, cName); };
         }
         actionsEl.appendChild(divBtn);
