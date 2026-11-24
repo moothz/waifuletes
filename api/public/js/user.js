@@ -1582,6 +1582,38 @@ function formatZinthosValue(val) {
   return Number(val || 0).toLocaleString('pt-BR') + 'z';
 }
 
+function formatListingAge(createdAt) {
+  if (!createdAt) return null;
+  const postDate = new Date(createdAt);
+  if (isNaN(postDate.getTime())) return null;
+
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - postDate.getTime());
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const dateFormatted = postDate.toLocaleDateString('pt-BR');
+
+  let daysText = '';
+  if (diffDays <= 0) {
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    daysText = diffHours <= 0 ? 'hoje' : `hoje (há ${diffHours}h)`;
+  } else if (diffDays === 1) {
+    daysText = 'há 1 dia';
+  } else {
+    daysText = `há ${diffDays} dias`;
+  }
+
+  const timeFormatted = postDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  return {
+    dateFormatted,
+    timeFormatted,
+    daysText,
+    diffDays,
+    html: `<div style="font-size: 11.5px; color: var(--text-muted); margin-top: 3px;" title="Postado em ${dateFormatted} às ${timeFormatted}"><i class="fas fa-clock"></i> Anunciado em <strong>${dateFormatted}</strong> • <strong>${daysText}</strong></div>`
+  };
+}
+window.formatListingAge = formatListingAge;
+
 function getRarityDailyDivorceInfo(rarity) {
   if (!haremSummaryData?.divorces?.rarities) return null;
   return haremSummaryData.divorces.rarities[rarity] || null;
@@ -3499,6 +3531,9 @@ function renderPublicMarketListings(listings) {
       ? `<div class="badge-keys" style="background: #ec4899; color: white; border-color: #f472b6;" title="💖 Soulmate (${keys} chaves)"><span>💖</span> <span>${keys}</span></div>`
       : `<div class="badge-keys" title="🔑 ${keys} chave(s)"><span>🔑</span> <span>${keys}</span></div>`;
 
+    const listingAge = formatListingAge(listing.createdAt);
+    const ageHtml = listingAge ? listingAge.html : '';
+
     card.innerHTML = `
       <div class="card-img-wrapper">
         <img loading="lazy" decoding="async" src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
@@ -3510,6 +3545,7 @@ function renderPublicMarketListings(listings) {
       <div class="card-info">
         <div class="card-name">${escapeHtml(char.name)}</div>
         <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        ${ageHtml}
         <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 8px 0; border: var(--border-retro); word-break: break-word;">
           <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
         </div>
@@ -5211,8 +5247,48 @@ function openSellModal(characterId, characterName, imageUrl, series) {
   document.getElementById('sell-modal-char-name').textContent = characterName;
   document.getElementById('sell-modal-char-series').textContent = series || 'Sem série';
   document.getElementById('sell-modal-char-img').src = getCharImg(imageUrl);
-  document.getElementById('sell-modal-interest').value = '';
+  const interestInput = document.getElementById('sell-modal-interest');
+
+  const auth = typeof getActiveAuthUser === 'function' ? getActiveAuthUser() : { isOwner: true, token: userSessionData?.token, publicId: userPublicId };
+  const token = auth?.token || userSessionToken;
+  const pId = auth?.publicId || userPublicId || 'token-session';
+
+  if (divorcePreviewCache.has(characterId)) {
+    const cachedVal = divorcePreviewCache.get(characterId);
+    interestInput.value = cachedVal != null && cachedVal > 0
+      ? `Valor mínimo: ${Number(cachedVal).toLocaleString('pt-BR')}z`
+      : '';
+  } else {
+    interestInput.value = 'Valor mínimo: calculando...';
+    if (token) {
+      Api.get(`/api/web/user/${encodeURIComponent(pId)}/divorce/preview/${encodeURIComponent(characterId)}?token=${encodeURIComponent(token)}`)
+        .then(res => {
+          if (res && res.success && res.data) {
+            const val = res.data.refundedKakera ?? res.data.fullRefundKakera ?? 0;
+            divorcePreviewCache.set(characterId, val);
+            if (interestInput.value === 'Valor mínimo: calculando...' || interestInput.value === '') {
+              interestInput.value = val > 0 ? `Valor mínimo: ${Number(val).toLocaleString('pt-BR')}z` : '';
+              if (interestInput.value) interestInput.select();
+            }
+          } else if (interestInput.value === 'Valor mínimo: calculando...') {
+            interestInput.value = '';
+          }
+        })
+        .catch(() => {
+          if (interestInput.value === 'Valor mínimo: calculando...') {
+            interestInput.value = '';
+          }
+        });
+    } else {
+      interestInput.value = '';
+    }
+  }
+
   openModal('modal-market-sell');
+  requestAnimationFrame(() => {
+    interestInput.focus();
+    if (interestInput.value) interestInput.select();
+  });
 }
 
 async function confirmPublishListing() {
@@ -5220,7 +5296,7 @@ async function confirmPublishListing() {
   const interestInput = document.getElementById('sell-modal-interest');
   const interest = interestInput.value.trim();
 
-  if (!interest) {
+  if (!interest || interest === 'Valor mínimo: calculando...') {
     Api.showToast('Por favor, informe o que você busca em troca.', '⚠️');
     interestInput.focus();
     return;
@@ -5306,6 +5382,9 @@ function createMyListingCard(listing) {
     ? `<div class="badge-keys" style="background: #ec4899; color: white; border-color: #f472b6;" title="💖 Soulmate (${keys} chaves)"><span>💖</span> <span>${keys}</span></div>`
     : `<div class="badge-keys" title="🔑 ${keys} chave(s)"><span>🔑</span> <span>${keys}</span></div>`;
 
+  const listingAge = formatListingAge(listing.createdAt);
+  const ageHtml = listingAge ? listingAge.html : '';
+
   card.innerHTML = `
     <div class="card-img-wrapper">
       <img loading="lazy" decoding="async" src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
@@ -5318,6 +5397,7 @@ function createMyListingCard(listing) {
     <div class="card-info">
       <div class="card-name">${escapeHtml(char.name)}</div>
       <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+      ${ageHtml}
       <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 6px 0; border: var(--border-retro);">
         <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
       </div>
@@ -5758,6 +5838,9 @@ function createMarketListingCard(listing) {
     ? `<div class="badge-keys" style="background: #ec4899; color: white; border-color: #f472b6;" title="💖 Soulmate (${keys} chaves)"><span>💖</span> <span>${keys}</span></div>`
     : `<div class="badge-keys" title="🔑 ${keys} chave(s)"><span>🔑</span> <span>${keys}</span></div>`;
 
+  const listingAge = formatListingAge(listing.createdAt);
+  const ageHtml = listingAge ? listingAge.html : '';
+
   card.innerHTML = `
     <div class="card-img-wrapper" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="Clique para ver detalhes">
       <img loading="lazy" decoding="async" src="${getCharImg(char)}" alt="${escapeHtml(char.name)}" onerror="handleImgError(this)">
@@ -5773,6 +5856,7 @@ function createMarketListingCard(listing) {
       <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
         <i class="fas fa-user-tag"></i> Vendedor: <strong>${escapeHtml(sellerName)}</strong>
       </div>
+      ${ageHtml}
       <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 8px 0; border: var(--border-retro); word-break: break-word;">
         <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
       </div>

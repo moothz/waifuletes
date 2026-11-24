@@ -33,7 +33,7 @@
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label class="retro-label" for="quick-sell-interest">O que você tem interesse em troca?</label>
-              <textarea id="quick-sell-interest" class="retro-textarea" rows="3" maxlength="500" placeholder="Ex: Outras waifus, peixes raros ou itens da fazenda..."></textarea>
+              <textarea id="quick-sell-interest" class="retro-textarea" rows="3" maxlength="500" placeholder="Ex: Valor mínimo: 123.456z, outras waifus ou itens da fazenda..."></textarea>
               <small style="color: var(--text-muted); font-size: 11.5px; display: block; margin-top: 5px; line-height: 1.35;">
                 Este texto será exibido nos classificados para orientar outros jogadores.
               </small>
@@ -156,7 +156,29 @@
         imgEl.src = this._resolveImg(char);
         imgEl.alt = char.name || 'Personagem';
       }
-      if (inputEl) inputEl.value = '';
+      if (inputEl) {
+        inputEl.value = 'Valor mínimo: calculando...';
+        const pId = encodeURIComponent(this._publicId || 'token-session');
+        const token = encodeURIComponent(this._token);
+        fetch(`/api/web/user/${pId}/divorce/preview/${encodeURIComponent(char.id)}?token=${token}`)
+          .then(r => r.json())
+          .then(res => {
+            if (res && res.success && res.data) {
+              const val = res.data.refundedKakera ?? res.data.fullRefundKakera ?? 0;
+              if (inputEl.value === 'Valor mínimo: calculando...' || inputEl.value === '') {
+                inputEl.value = val > 0 ? `Valor mínimo: ${Number(val).toLocaleString('pt-BR')}z` : '';
+                if (inputEl.value) inputEl.select();
+              }
+            } else if (inputEl.value === 'Valor mínimo: calculando...') {
+              inputEl.value = '';
+            }
+          })
+          .catch(() => {
+            if (inputEl.value === 'Valor mínimo: calculando...') {
+              inputEl.value = '';
+            }
+          });
+      }
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'Publicar Anúncio ✨';
@@ -167,6 +189,7 @@
 
       requestAnimationFrame(() => {
         inputEl?.focus();
+        if (inputEl?.value) inputEl.select();
       });
     },
 
@@ -185,7 +208,7 @@
       const submitBtn = document.getElementById('btn-quick-sell-submit');
       const interest = (inputEl?.value || '').trim();
 
-      if (!interest) {
+      if (!interest || interest === 'Valor mínimo: calculando...') {
         this._toast('Por favor, informe o que você busca em troca.', '⚠️');
         inputEl?.focus();
         return;
