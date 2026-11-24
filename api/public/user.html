@@ -824,7 +824,10 @@
               Avisos de alterações nas suas waifus, wishlist, classificados e ofertas em tempo real.
             </p>
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button type="button" class="btn-retro btn-sm" id="btn-toggle-device-notifs" onclick="toggleDeviceNotifs()" title="Ativar ou desativar notificações no dispositivo">
+              <i class="fas fa-bell-slash" id="device-notif-icon"></i> <span id="device-notif-label">Notificações no Dispositivo: Off</span>
+            </button>
             <button class="btn-retro btn-sm" id="btn-notifications-filter-unread">
               <i class="fas fa-filter"></i> Apenas Não Lidas
             </button>

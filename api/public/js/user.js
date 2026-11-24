@@ -962,6 +962,21 @@ function setupEventListeners() {
     }
     renderNotificationsList();
   });
+  document.getElementById('btn-toggle-device-notifs')?.addEventListener('click', toggleDeviceNotifs);
+  updateDeviceNotifButtonUI();
+
+  // Registra Service Worker e monitora notificações do dispositivo
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && isDeviceNotifsEnabled()) {
+      checkNewDeviceNotifications();
+    }
+  });
+  if (isDeviceNotifsEnabled()) {
+    initDeviceNotifPolling();
+  }
 
   // Fechar modais ao clicar fora (fundo overlay escuro)
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -4426,12 +4441,201 @@ async function loadUserSuggestions() {
 }
 
 // ========================================================
-// ABA 6: NOTIFICAÇÕES DO USUÁRIO
+// ABA 6: NOTIFICAÇÕES DO USUÁRIO & WEB PUSH NO DISPOSITIVO
 // ========================================================
 let notificationsFilterUnreadOnly = false;
 let userNotificationsCache = [];
+let deviceNotifCheckInterval = null;
+
+function isDeviceNotifsEnabled() {
+  return localStorage.getItem('waifuletes_device_notifs_enabled') === 'true';
+}
+
+function updateDeviceNotifButtonUI() {
+  const btn = document.getElementById('btn-toggle-device-notifs');
+  const icon = document.getElementById('device-notif-icon');
+  const label = document.getElementById('device-notif-label');
+  if (!btn) return;
+
+  if (!('Notification' in window)) {
+    btn.style.display = 'none';
+    return;
+  }
+
+  if (Notification.permission === 'granted' && isDeviceNotifsEnabled()) {
+    btn.classList.add('btn-gold');
+    btn.style.borderColor = '#16a34a';
+    if (icon) {
+      icon.className = 'fas fa-bell';
+      icon.style.color = '#16a34a';
+    }
+    if (label) label.textContent = 'Notificações no Dispositivo: On';
+    btn.title = 'Notificações no dispositivo ativadas! Clique para desativar.';
+  } else {
+    btn.classList.remove('btn-gold');
+    btn.style.borderColor = '';
+    if (icon) {
+      icon.className = 'fas fa-bell-slash';
+      icon.style.color = 'inherit';
+    }
+    if (label) label.textContent = 'Notificações no Dispositivo: Off';
+    btn.title = 'Clique para ativar notificações no seu dispositivo.';
+  }
+}
+
+async function toggleDeviceNotifs() {
+  if (!('Notification' in window)) {
+    Api.showToast('Seu navegador não suporta notificações de dispositivo.', '⚠️');
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    Api.showToast('Notificações bloqueadas nas configurações do seu navegador.', '🚫');
+    return;
+  }
+
+  if (Notification.permission === 'default') {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        localStorage.setItem('waifuletes_device_notifs_enabled', 'true');
+        Api.showToast('🔔 Notificações no dispositivo ativadas com sucesso!', '✨');
+        sendDeviceAlert(
+          '🔔 Waifuletes',
+          'Notificações ativadas! Você será avisado sobre novidades no seu harém, propostas e classificados.',
+          'waifu-welcome',
+          window.location.origin + `/user/${encodeURIComponent(userPublicId)}#notificacoes`
+        );
+        initDeviceNotifPolling();
+      } else {
+        localStorage.setItem('waifuletes_device_notifs_enabled', 'false');
+        Api.showToast('Permissão de notificação não concedida.', '⚠️');
+      }
+    } catch (e) {
+      Api.showToast('Erro ao solicitar permissão de notificação.', '❌');
+    }
+  } else if (Notification.permission === 'granted') {
+    const currentlyOn = isDeviceNotifsEnabled();
+    const newState = !currentlyOn;
+    localStorage.setItem('waifuletes_device_notifs_enabled', newState.toString());
+    Api.showToast(newState ? '🔔 Notificações no dispositivo ativadas!' : '🔕 Notificações no dispositivo desativadas.', newState ? '✨' : 'ℹ️');
+    if (newState) {
+      initDeviceNotifPolling();
+    }
+  }
+
+  updateDeviceNotifButtonUI();
+}
+
+function sendDeviceAlert(title, body, tag = 'waifu-alert', dataUrl = window.location.href) {
+  if (!('Notification' in window) || Notification.permission !== 'granted' || !isDeviceNotifsEnabled()) return;
+  const options = {
+    body,
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    tag,
+    renotify: true,
+    data: { url: dataUrl },
+  };
+
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(title, options))
+        .catch(() => {
+          try {
+            const notif = new Notification(title, options);
+            notif.onclick = () => {
+              window.focus();
+              if (dataUrl) window.location.href = dataUrl;
+            };
+          } catch (_) {}
+        });
+    } else {
+      const notif = new Notification(title, options);
+      notif.onclick = () => {
+        window.focus();
+        if (dataUrl) window.location.href = dataUrl;
+      };
+    }
+  } catch (e) {
+    console.warn('Erro ao disparar notificação no dispositivo:', e);
+  }
+}
+
+function getAlertedNotifIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('waifuletes_alerted_notif_ids') || '[]'));
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function saveAlertedNotifId(id) {
+  try {
+    const set = getAlertedNotifIds();
+    set.add(id);
+    const arr = Array.from(set).slice(-200);
+    localStorage.setItem('waifuletes_alerted_notif_ids', JSON.stringify(arr));
+  } catch (_) {}
+}
+
+async function checkNewDeviceNotifications() {
+  if (!userSessionToken || !userPublicId) return;
+  if (!isDeviceNotifsEnabled() || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+  try {
+    const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/notifications?token=${encodeURIComponent(userSessionToken)}&unreadOnly=true&limit=10`);
+    if (!res?.success || !res.data) return;
+
+    const unreads = res.data.notifications || [];
+    const unreadCount = Number(res.data.unreadCount ?? unreads.length);
+    const badge = document.getElementById('notifications-count-badge');
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    const alertedSet = getAlertedNotifIds();
+    let hasNew = false;
+    for (const notif of unreads) {
+      if (!alertedSet.has(notif.id)) {
+        hasNew = true;
+        saveAlertedNotifId(notif.id);
+        sendDeviceAlert(
+          notif.title || '🔔 Waifuletes',
+          notif.message || 'Nova notificação no seu harém!',
+          'notif-' + notif.id,
+          window.location.origin + `/user/${encodeURIComponent(userPublicId)}#notificacoes`
+        );
+      }
+    }
+
+    const activeTab = document.querySelector('.retro-tab.active')?.dataset.tab;
+    if (hasNew && activeTab === 'tab-notifications') {
+      loadUserNotifications();
+    }
+  } catch (_) {}
+}
+
+function initDeviceNotifPolling() {
+  if (deviceNotifCheckInterval) return;
+  checkNewDeviceNotifications();
+  deviceNotifCheckInterval = setInterval(checkNewDeviceNotifications, 60000);
+}
+
+window.isDeviceNotifsEnabled = isDeviceNotifsEnabled;
+window.updateDeviceNotifButtonUI = updateDeviceNotifButtonUI;
+window.toggleDeviceNotifs = toggleDeviceNotifs;
+window.sendDeviceAlert = sendDeviceAlert;
+window.checkNewDeviceNotifications = checkNewDeviceNotifications;
 
 async function loadUserNotifications() {
+  updateDeviceNotifButtonUI();
   const loadingEl = document.getElementById('notifications-loading');
   const listEl = document.getElementById('notifications-list');
   if (!listEl) return;
