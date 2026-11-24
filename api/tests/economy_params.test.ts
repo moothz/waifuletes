@@ -42,6 +42,7 @@ const SOURCE_FILES = [
 
 const IGNORED_CONSTANTS: Record<string, string> = {
   ALL_RARITIES: 'lista das raridades (enum), não é valor de balanceamento',
+  SOULMATE_RANKING_SCORES: 'pontuação de ranking de soulmates por raridade',
   UNLISTED_OFFER_REJECTION_REASON: 'texto do motivo de recusa de oferta',
   UNLISTED_OFFER_REJECTION_DATA: 'campos gravados na oferta recusada, sem valor de moeda',
   RUN_LOCK_TTL_SECONDS: 'trava de execução da taxa de hospedagem (infraestrutura)',
