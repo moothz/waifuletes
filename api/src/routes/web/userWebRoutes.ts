@@ -23,6 +23,7 @@ import { DomainError } from '../../errors/DomainError.js';
 import { optimizeImageUnder1Mb, MAX_IMAGE_UPLOAD_BYTES } from '../../utils/imageOptimizer.js';
 import { config, activeHostingRates, inactiveHostingRates, ravenaMarketHeaders } from '../../config.js';
 import { calculateInactiveMultiplier } from '../../services/HostingFeeService.js';
+import { getDailyDivorceRate, calculateWeeklyLegendaryMultiplier } from '../../utils/rarityCalculator.js';
 import { toPublicListing, toPublicOffer } from '../../utils/marketPublic.js';
 import {
   fetchRavenaRollContext,
@@ -1772,6 +1773,238 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send({
         success: true,
         data: { message: 'Notificações marcadas como lidas.' },
+      });
+    },
+  });
+
+  /**
+   * Resumo diário e semanal do usuário autenticado (estatísticas, DR e contadores)
+   */
+  fastify.get('/api/web/user/:publicId/summary', {
+    schema: {
+      description: 'Retorna estatísticas consolidadas do usuário: divórcios diários com DR, casamentos, custos de hospedagem, classificados e DR de lendários',
+      tags: ['Usuário (Web)'],
+      params: {
+        type: 'object',
+        required: ['publicId'],
+        properties: {
+          publicId: { type: 'string' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: {
+          token: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { publicId } = request.params as { publicId: string };
+      const { token } = request.query as { token: string };
+
+      const session = publicId === 'token-session'
+        ? await webSessionService.validateTokenOnly(token)
+        : await webSessionService.validateUserSession(publicId, token);
+      if (!session.valid || !session.userId) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Sessão web expirada ou inválida.' },
+        });
+      }
+
+      const userId = session.userId;
+      const user = await fastify.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          kakera: true,
+          lastActiveAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (!user) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' },
+        });
+      }
+
+      const dailyCycle = divorceService.getDailyCycleInfo();
+      const weeklyCycle = cooldownService.getWeeklyCycleInfo();
+
+      // Divórcios diários por raridade
+      const rarities: Rarity[] = ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'];
+      const dailyDivorceCounts = await Promise.all(
+        rarities.map(async (r) => {
+          const count = await divorceService.getDailyDivorceCount(userId, r);
+          const currentRate = getDailyDivorceRate(count === 0 ? 1 : count);
+          const nextRate = getDailyDivorceRate(count + 1);
+          return {
+            rarity: r,
+            count,
+            currentRate,
+            nextRate,
+          };
+        })
+      );
+      const divorceSummary: Record<string, { count: number; currentRate: number; nextRate: number }> = {};
+      let totalDailyDivorces = 0;
+      for (const item of dailyDivorceCounts) {
+        divorceSummary[item.rarity] = {
+          count: item.count,
+          currentRate: item.currentRate,
+          nextRate: item.nextRate,
+        };
+        totalDailyDivorces += item.count;
+      }
+
+      // Casamentos hoje, na semana e total
+      const [todayMarriages, weekMarriages, totalHaremEntries] = await Promise.all([
+        fastify.prisma.haremEntry.count({
+          where: {
+            userId,
+            claimedAt: { gte: dailyCycle.currentCycleStart },
+          },
+        }),
+        fastify.prisma.haremEntry.count({
+          where: {
+            userId,
+            claimedAt: { gte: weeklyCycle.currentCycleStart },
+          },
+        }),
+        fastify.prisma.haremEntry.findMany({
+          where: { userId },
+          select: {
+            character: {
+              select: {
+                baseRarity: true,
+                isMythic: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+      // Classificados & Ofertas
+      const [activeListings, soldListings, pendingOffersReceived, pendingOffersSent] = await Promise.all([
+        fastify.prisma.marketListing.count({
+          where: { userId, status: 'ACTIVE' },
+        }),
+        fastify.prisma.marketListing.count({
+          where: { userId, status: 'COMPLETED' },
+        }),
+        fastify.prisma.marketOffer.count({
+          where: { sellerId: userId, status: 'PENDING' },
+        }),
+        fastify.prisma.marketOffer.count({
+          where: { buyerId: userId, status: 'PENDING' },
+        }),
+      ]);
+
+      // DR de Lendários na semana
+      const weeklyLegCount = await rollService.getWeeklyLegendaryCount(userId);
+      const weeklyHardCap = config.WEEKLY_LEGENDARY_HARD_CAP ?? 8;
+      const weeklyLegMultiplier = calculateWeeklyLegendaryMultiplier(weeklyLegCount, weeklyHardCap);
+      const isLegBlocked = weeklyLegMultiplier <= 0;
+
+      // Custos de Hospedagem
+      const now = Date.now();
+      const lastActiveTime = user.lastActiveAt
+        ? new Date(user.lastActiveAt).getTime()
+        : new Date(user.updatedAt).getTime();
+      const graceMs = config.HOSTING_GRACE_HOURS * 3600 * 1000;
+      const offlineMs = Math.max(0, now - lastActiveTime);
+      const isInactive = offlineMs > graceMs;
+      let multiplier = 1.0;
+      let extraDays = 0;
+      let rates = activeHostingRates;
+
+      if (isInactive) {
+        extraDays = Math.floor((offlineMs - graceMs) / (24 * 3600 * 1000));
+        multiplier = calculateInactiveMultiplier(
+          offlineMs,
+          graceMs,
+          config.HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT,
+          config.HOSTING_INACTIVE_MAX_MULTIPLIER
+        );
+        rates = {
+          COMMON: Math.round(inactiveHostingRates.COMMON * multiplier),
+          UNCOMMON: Math.round(inactiveHostingRates.UNCOMMON * multiplier),
+          RARE: Math.round(inactiveHostingRates.RARE * multiplier),
+          EPIC: Math.round(inactiveHostingRates.EPIC * multiplier),
+          LEGENDARY: Math.round(inactiveHostingRates.LEGENDARY * multiplier),
+        };
+      }
+
+      const rarityCounts: Record<string, number> = { COMMON: 0, UNCOMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 };
+      let countedWaifus = 0;
+      for (const entry of totalHaremEntries) {
+        if (entry.character?.isMythic) continue;
+        const r = (entry.character?.baseRarity || 'COMMON').toUpperCase();
+        if (rarityCounts[r] !== undefined) {
+          rarityCounts[r]++;
+          countedWaifus++;
+        }
+      }
+      const rarityCosts: Record<string, number> = {
+        COMMON: rarityCounts.COMMON * rates.COMMON,
+        UNCOMMON: rarityCounts.UNCOMMON * rates.UNCOMMON,
+        RARE: rarityCounts.RARE * rates.RARE,
+        EPIC: rarityCounts.EPIC * rates.EPIC,
+        LEGENDARY: rarityCounts.LEGENDARY * rates.LEGENDARY,
+      };
+      const totalDailyCost = Object.values(rarityCosts).reduce((acc, c) => acc + c, 0);
+
+      return reply.send({
+        success: true,
+        data: {
+          userName: user.name,
+          kakera: user.kakera,
+          dailyCycle: {
+            currentCycleStart: dailyCycle.currentCycleStart.toISOString(),
+            nextReset: dailyCycle.nextReset.toISOString(),
+            secondsUntilReset: dailyCycle.secondsUntilReset,
+          },
+          weeklyCycle: {
+            currentCycleStart: weeklyCycle.currentCycleStart.toISOString(),
+            nextReset: weeklyCycle.nextReset.toISOString(),
+            secondsUntilReset: weeklyCycle.secondsUntilReset,
+          },
+          divorces: {
+            totalToday: totalDailyDivorces,
+            rarities: divorceSummary,
+          },
+          marriages: {
+            today: todayMarriages,
+            thisWeek: weekMarriages,
+            total: totalHaremEntries.length,
+          },
+          market: {
+            activeListings,
+            soldListings,
+            pendingOffersReceived,
+            pendingOffersSent,
+          },
+          weeklyLegendaryDR: {
+            weeklyCount: weeklyLegCount,
+            hardCap: weeklyHardCap,
+            multiplier: weeklyLegMultiplier,
+            isBlocked: isLegBlocked,
+          },
+          hostingCost: {
+            isInactive,
+            multiplier,
+            extraDays,
+            totalCost: totalDailyCost,
+            rates,
+            counts: rarityCounts,
+            costs: rarityCosts,
+            totalWaifus: countedWaifus,
+          },
+        },
       });
     },
   });

@@ -302,6 +302,8 @@ function setupEventListeners() {
         loadCatalogCharacters();
       } else if (targetId === 'subtab-catalog-suggestions') {
         loadUserSuggestions();
+      } else if (targetId === 'subtab-harem-summary') {
+        loadHaremSummary();
       } else if (targetId === 'subtab-harem-mythics') {
         loadUserMythics();
       } else if (targetId === 'subtab-market-browse') {
@@ -4890,7 +4892,8 @@ function activateMainTab(tabId, updateHash = true) {
       updateUrlHash('rankings');
     } else if (tabId === 'tab-harem') {
       const activeSub = document.querySelector('#harem-subtabs .retro-subtab.active')?.dataset.subtab || 'subtab-harem-married';
-      if (activeSub === 'subtab-harem-mythics') updateUrlHash('harem', 'miticos');
+      if (activeSub === 'subtab-harem-summary') updateUrlHash('harem', 'resumo');
+      else if (activeSub === 'subtab-harem-mythics') updateUrlHash('harem', 'miticos');
       else if (activeSub === 'subtab-harem-wishlist') updateUrlHash('harem', 'wishlist');
       else if (activeSub === 'subtab-harem-settings') updateUrlHash('harem', 'configuracoes');
       else updateUrlHash('harem', 'casados');
@@ -4935,6 +4938,7 @@ function activateSubTab(subtabsContainerId, subtabId, updateHash = true) {
   if (updateHash) {
     if (subtabId === 'subtab-catalog-characters') updateUrlHash('catalogo', 'personagens');
     else if (subtabId === 'subtab-catalog-suggestions') updateUrlHash('catalogo', 'sugestoes');
+    else if (subtabId === 'subtab-harem-summary') updateUrlHash('harem', 'resumo');
     else if (subtabId === 'subtab-harem-married') updateUrlHash('harem', 'casados');
     else if (subtabId === 'subtab-harem-mythics') updateUrlHash('harem', 'miticos');
     else if (subtabId === 'subtab-harem-wishlist') updateUrlHash('harem', 'wishlist');
@@ -4950,6 +4954,12 @@ function activateSubTab(subtabsContainerId, subtabId, updateHash = true) {
  */
 function switchTab(tabId, subtabId = null) {
   // Compatibilidade com chamadas legadas
+  if (tabId === 'tab-harem-summary' || tabId === 'tab-summary') {
+    activateMainTab('tab-harem', false);
+    activateSubTab('harem-subtabs', 'subtab-harem-summary', true);
+    loadHaremSummary();
+    return;
+  }
   if (tabId === 'tab-mythics') {
     activateMainTab('tab-harem', false);
     activateSubTab('harem-subtabs', 'subtab-harem-mythics', true);
@@ -4983,7 +4993,8 @@ function switchTab(tabId, subtabId = null) {
   } else if (tabId === 'tab-harem') {
     const targetSub = subtabId || document.querySelector('#harem-subtabs .retro-subtab.active')?.dataset.subtab || 'subtab-harem-married';
     activateSubTab('harem-subtabs', targetSub, true);
-    if (targetSub === 'subtab-harem-mythics') loadUserMythics();
+    if (targetSub === 'subtab-harem-summary') loadHaremSummary();
+    else if (targetSub === 'subtab-harem-mythics') loadUserMythics();
   } else if (tabId === 'tab-rankings') {
     loadRankings();
   } else if (tabId === 'tab-market') {
@@ -5025,7 +5036,10 @@ function navigateToHash(hash) {
     loadRankings();
   } else if (mainPart === 'harem') {
     activateMainTab('tab-harem', false);
-    if (subPart === 'miticos' || subPart === 'mythics') {
+    if (subPart === 'resumo' || subPart === 'summary' || subPart === 'diario') {
+      activateSubTab('harem-subtabs', 'subtab-harem-summary', false);
+      loadHaremSummary();
+    } else if (subPart === 'miticos' || subPart === 'mythics') {
       activateSubTab('harem-subtabs', 'subtab-harem-mythics', false);
       loadUserMythics();
     } else if (subPart === 'wishlist' || subPart === 'desejos') {
@@ -5035,6 +5049,10 @@ function navigateToHash(hash) {
     } else {
       activateSubTab('harem-subtabs', 'subtab-harem-married', false);
     }
+  } else if (mainPart === 'resumo' || mainPart === 'summary' || mainPart === 'diario') {
+    activateMainTab('tab-harem', false);
+    activateSubTab('harem-subtabs', 'subtab-harem-summary', false);
+    loadHaremSummary();
   } else if (mainPart === 'miticos' || mainPart === 'mythics') {
     activateMainTab('tab-harem', false);
     activateSubTab('harem-subtabs', 'subtab-harem-mythics', false);
@@ -7051,6 +7069,262 @@ async function loadRankings() {
     tbodyZinthos.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #ef4444; padding: 20px;">Erro ao carregar dados.</td></tr>`;
     tbodyWaifus.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #ef4444; padding: 20px;">Erro ao carregar dados.</td></tr>`;
   }
+}
+
+// ========================================================
+// ABA: RESUMO DO HARÉM (DIÁRIO, DR, CUSTOS E ESTATÍSTICAS)
+// ========================================================
+
+let haremSummaryData = null;
+let summaryCountdownInterval = null;
+
+async function loadHaremSummary(forceRefresh = false) {
+  if (haremSummaryData && !forceRefresh) {
+    renderHaremSummary(haremSummaryData);
+    return;
+  }
+
+  const loadingEl = document.getElementById('summary-loading');
+  const contentEl = document.getElementById('summary-content');
+  if (loadingEl) loadingEl.classList.remove('hidden');
+  if (contentEl) contentEl.classList.add('hidden');
+
+  try {
+    const url = `/api/web/user/${encodeURIComponent(userPublicId)}/summary${userSessionToken ? `?token=${encodeURIComponent(userSessionToken)}` : ''}`;
+    const res = await Api.get(url);
+    if (!res.success) {
+      if (loadingEl) {
+        loadingEl.innerHTML = `
+          <div style="color: #ef4444; font-weight: 800; padding: 20px;">
+            <i class="fas fa-exclamation-triangle"></i> Falha ao carregar resumo: ${escapeHtml(res.error?.message || 'Erro desconhecido')}
+          </div>
+        `;
+      }
+      return;
+    }
+
+    haremSummaryData = res.data;
+    renderHaremSummary(haremSummaryData);
+  } catch (err) {
+    if (loadingEl) {
+      loadingEl.innerHTML = `
+        <div style="color: #ef4444; font-weight: 800; padding: 20px;">
+          <i class="fas fa-exclamation-triangle"></i> Erro ao buscar resumo. Tente novamente mais tarde.
+        </div>
+      `;
+    }
+  } finally {
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (contentEl) contentEl.classList.remove('hidden');
+  }
+}
+
+function renderHaremSummary(data) {
+  if (!data) return;
+
+  // 1. Timers de Reset
+  startSummaryCountdowns(data.dailyCycle?.secondsUntilReset, data.weeklyCycle?.secondsUntilReset);
+
+  // 2. Divórcios Diários e Diminishing Returns
+  const divBadge = document.getElementById('summary-divorces-today-badge');
+  if (divBadge) {
+    const totalDiv = data.divorces?.totalToday || 0;
+    divBadge.textContent = `${totalDiv} hoje`;
+    divBadge.style.background = totalDiv > 0 ? '#ef4444' : '#6b7280';
+  }
+
+  const raritiesListEl = document.getElementById('summary-divorce-rarities-list');
+  if (raritiesListEl && data.divorces?.rarities) {
+    const rarityLabels = {
+      COMMON: { label: 'Comum', color: '#9ca3af', bg: 'rgba(156, 163, 175, 0.15)', border: '#4b5563' },
+      UNCOMMON: { label: 'Incomum', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.15)', border: '#16a34a' },
+      RARE: { label: 'Raro', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)', border: '#2563eb' },
+      EPIC: { label: 'Épico', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)', border: '#9333ea' },
+      LEGENDARY: { label: 'Lendário', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', border: '#d97706' },
+    };
+
+    let html = '';
+    for (const [key, meta] of Object.entries(rarityLabels)) {
+      const info = data.divorces.rarities[key] || { count: 0, currentRate: 1, nextRate: 1 };
+      const nextRatePct = Math.round(info.nextRate * 100);
+
+      let statusBadge = '';
+      if (info.count === 0) {
+        statusBadge = `<span class="badge-tag" style="background: #22c55e; color: #fff; font-weight: 700; font-size: 11px;">100% (Sem penalidade)</span>`;
+      } else if (info.count < 4) {
+        statusBadge = `<span class="badge-tag" style="background: #f59e0b; color: #000; font-weight: 700; font-size: 11px;">DR Ativo (${nextRatePct}% próx.)</span>`;
+      } else {
+        statusBadge = `<span class="badge-tag" style="background: #ef4444; color: #fff; font-weight: 700; font-size: 11px;">Penalidade Máxima (5%)</span>`;
+      }
+
+      html += `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: ${meta.bg}; border: 1px solid ${meta.border}; border-radius: 6px; flex-wrap: wrap; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 800; font-size: 12px; color: ${meta.color};">${meta.label}</span>
+            <span style="font-size: 12px; color: var(--text-muted); font-weight: 600;">• ${info.count} divórcio(s) hoje</span>
+          </div>
+          <div>${statusBadge}</div>
+        </div>
+      `;
+    }
+    raritiesListEl.innerHTML = html;
+  }
+
+  // 3. Rolls da Semana & DR de Lendários
+  const legDR = data.weeklyLegendaryDR || {};
+  const legCount = legDR.weeklyCount || 0;
+  const legCap = legDR.hardCap || 8;
+  const legMult = legDR.multiplier !== undefined ? legDR.multiplier : 1;
+  const isBlocked = Boolean(legDR.isBlocked);
+
+  const legCountText = document.getElementById('summary-legendary-count-text');
+  if (legCountText) legCountText.textContent = `${legCount} / ${legCap}`;
+
+  const legBar = document.getElementById('summary-legendary-progress-bar');
+  if (legBar) {
+    const pct = Math.min(100, Math.round((legCount / legCap) * 100));
+    legBar.style.width = `${pct}%`;
+    legBar.style.background = isBlocked ? '#ef4444' : legCount > 0 ? '#f59e0b' : '#22c55e';
+  }
+
+  const legMultText = document.getElementById('summary-legendary-mult-text');
+  if (legMultText) {
+    const multPct = Math.round(legMult * 100);
+    legMultText.textContent = isBlocked ? '0% (Bloqueado)' : `${multPct}%`;
+    legMultText.style.color = isBlocked ? '#ef4444' : legCount > 0 ? '#f59e0b' : '#22c55e';
+  }
+
+  const legBadge = document.getElementById('summary-legendary-status-badge');
+  if (legBadge) {
+    if (isBlocked) {
+      legBadge.textContent = 'Hard Cap Atingido';
+      legBadge.style.background = '#ef4444';
+    } else if (legCount > 0) {
+      legBadge.textContent = 'DR Ativo';
+      legBadge.style.background = '#f59e0b';
+    } else {
+      legBadge.textContent = '100% Normal';
+      legBadge.style.background = '#22c55e';
+    }
+  }
+
+  const legWarning = document.getElementById('summary-legendary-warning');
+  if (legWarning) {
+    if (isBlocked) legWarning.classList.remove('hidden');
+    else legWarning.classList.add('hidden');
+  }
+
+  // 4. Casamentos
+  const marriages = data.marriages || {};
+  const mToday = document.getElementById('summary-marriages-today');
+  if (mToday) mToday.textContent = marriages.today ?? 0;
+  const mWeek = document.getElementById('summary-marriages-week');
+  if (mWeek) mWeek.textContent = marriages.thisWeek ?? 0;
+  const mTotal = document.getElementById('summary-marriages-total');
+  if (mTotal) mTotal.textContent = marriages.total ?? (userSessionData?.totalHarem || 0);
+
+  // 5. Custos de Hospedagem
+  const hCost = data.hostingCost || {};
+  const hTotal = document.getElementById('summary-hosting-total-cost');
+  if (hTotal) hTotal.textContent = Number(hCost.totalCost || 0).toLocaleString('pt-BR');
+
+  const hBadge = document.getElementById('summary-hosting-status-badge');
+  if (hBadge) {
+    if (hCost.isInactive) {
+      hBadge.textContent = `Inativo (${hCost.multiplier}x)`;
+      hBadge.style.background = '#ef4444';
+    } else {
+      hBadge.textContent = 'Conta Ativa';
+      hBadge.style.background = '#10b981';
+    }
+  }
+
+  const hAutonomy = document.getElementById('summary-hosting-autonomy');
+  if (hAutonomy) {
+    const userKakera = Number(data.kakera || userSessionData?.kakera || 0);
+    const dailyCost = Number(hCost.totalCost || 0);
+    if (dailyCost <= 0) {
+      hAutonomy.textContent = 'Sem custos';
+      hAutonomy.style.color = '#10b981';
+    } else {
+      const days = Math.floor(userKakera / dailyCost);
+      hAutonomy.textContent = `${days} dia(s)`;
+      hAutonomy.style.color = days < 3 ? '#ef4444' : days < 7 ? '#f59e0b' : '#10b981';
+    }
+  }
+
+  const hBreakdown = document.getElementById('summary-hosting-rarities-breakdown');
+  if (hBreakdown && hCost.counts && hCost.costs) {
+    const labels = {
+      COMMON: 'Comum',
+      UNCOMMON: 'Incomum',
+      RARE: 'Raro',
+      EPIC: 'Épico',
+      LEGENDARY: 'Lendário',
+    };
+    let bHtml = '';
+    for (const [r, label] of Object.entries(labels)) {
+      const c = hCost.counts[r] || 0;
+      const cost = hCost.costs[r] || 0;
+      const rate = hCost.rates?.[r] || 0;
+      if (c > 0) {
+        bHtml += `
+          <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--border-color, #374151);">
+            <span>${label} (${c}x ${rate}z):</span>
+            <span style="font-weight: 700; color: #f59e0b;">${Number(cost).toLocaleString('pt-BR')} z</span>
+          </div>
+        `;
+      }
+    }
+    if (!bHtml) {
+      bHtml = '<div style="color: var(--text-muted); font-style: italic;">Nenhuma waifu sujeita à taxa diária.</div>';
+    }
+    hBreakdown.innerHTML = bHtml;
+  }
+
+  // 6. Classificados & Mercado
+  const market = data.market || {};
+  const mActive = document.getElementById('summary-market-active');
+  if (mActive) mActive.textContent = market.activeListings || 0;
+  const mSold = document.getElementById('summary-market-sold');
+  if (mSold) mSold.textContent = market.soldListings || 0;
+  const mRec = document.getElementById('summary-market-offers-received');
+  if (mRec) mRec.textContent = market.pendingOffersReceived || 0;
+  const mSent = document.getElementById('summary-market-offers-sent');
+  if (mSent) mSent.textContent = market.pendingOffersSent || 0;
+}
+
+function startSummaryCountdowns(dailySeconds, weeklySeconds) {
+  if (summaryCountdownInterval) {
+    clearInterval(summaryCountdownInterval);
+  }
+
+  let dSec = Math.max(0, parseInt(dailySeconds, 10) || 0);
+  let wSec = Math.max(0, parseInt(weeklySeconds, 10) || 0);
+
+  const updateDisplays = () => {
+    const dailyEl = document.getElementById('summary-daily-reset-time');
+    if (dailyEl) {
+      const h = Math.floor(dSec / 3600);
+      const m = Math.floor((dSec % 3600) / 60);
+      const s = dSec % 60;
+      dailyEl.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    const weeklyEl = document.getElementById('summary-weekly-reset-time');
+    if (weeklyEl) {
+      const days = Math.floor(wSec / 86400);
+      const hours = Math.floor((wSec % 86400) / 3600);
+      const minutes = Math.floor((wSec % 3600) / 60);
+      weeklyEl.textContent = `${days}d ${hours}h ${minutes}m`;
+    }
+
+    if (dSec > 0) dSec--;
+    if (wSec > 0) wSec--;
+  };
+
+  updateDisplays();
+  summaryCountdownInterval = setInterval(updateDisplays, 1000);
 }
 
 // ========================================================
