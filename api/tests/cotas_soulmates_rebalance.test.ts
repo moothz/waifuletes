@@ -12,6 +12,7 @@ import {
 } from '../src/services/MarketInvestmentService.js';
 import {
   SOULMATE_DIVORCE_VALUES,
+  SOULMATE_RANKING_SCORES,
   MARRIED_KEY_PROGRESSION_WEIGHTS,
   calculateCharacterSharePricing,
 } from '../src/utils/rarityCalculator.js';
@@ -128,5 +129,13 @@ describe('💎 Cotas, Escalonamento de Preços e Rebalanceamento de Soulmates', 
   it('deve ter SOULMATE_RANKING_SCORE configurado como 2100 (redução de 30% em relação a 3000)', () => {
     expect(config.SOULMATE_RANKING_SCORE).toBe(2100);
     expect(3000 * 0.70).toBe(2100);
+  });
+
+  it('deve ter SOULMATE_RANKING_SCORES escalonados por raridade', () => {
+    expect(SOULMATE_RANKING_SCORES.LEGENDARY).toBe(2200);
+    expect(SOULMATE_RANKING_SCORES.EPIC).toBe(1300);
+    expect(SOULMATE_RANKING_SCORES.RARE).toBe(800);
+    expect(SOULMATE_RANKING_SCORES.UNCOMMON).toBe(500);
+    expect(SOULMATE_RANKING_SCORES.COMMON).toBe(200);
   });
 });

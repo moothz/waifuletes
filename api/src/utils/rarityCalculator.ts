@@ -50,6 +50,15 @@ export const SOULMATE_DIVORCE_VALUES: Record<Rarity, number> = {
 
 export const SOULMATE_KEY_KAKERA_BONUS = 21000; // 21.000 Zinthos de bônus por chave para soulmates
 export const KEY_KAKERA_BONUS = 15; // Legado mantido para compatibilidade
+
+// Pontuação de ranking de coleção concedida por Soulmate conforme a raridade base
+export const SOULMATE_RANKING_SCORES: Record<Rarity, number> = {
+  LEGENDARY: 2200,
+  EPIC: 1300,
+  RARE: 800,
+  UNCOMMON: 500,
+  COMMON: 200,
+};
 export const DIVORCE_PENALTY_RATE = 0.05; // 5% de taxa de divórcio
 
 // Escalonamento do Soft Limite diário de divórcio por raridade
