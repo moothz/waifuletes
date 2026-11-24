@@ -563,8 +563,14 @@ const CharacterPage = {
       }
     };
 
+    const myHaremEntry = (this.userSessionData?.harem || []).find(
+      (h) => (h.character?.id || h.characterId) === this.charId
+    );
+
     window.MarketSellModal.open({
       character: this.charData,
+      keys: myHaremEntry?.keys ?? this.charData?.keys ?? 1,
+      isSoulmate: Boolean(myHaremEntry?.isSoulmate || this.charData?.isSoulmate),
       token: this.userToken,
       publicId: this.userPublicId || 'token-session',
       onSuccess: () => markListed(),

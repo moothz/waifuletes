@@ -31,6 +31,7 @@
               <h4 id="quick-sell-char-name" style="font-weight: 800; font-size: 16px; margin: 8px 0 2px 0;">Nome</h4>
               <span id="quick-sell-char-series" style="font-size: 12.5px; color: var(--text-muted); font-weight: 600;">Série</span>
             </div>
+            <div id="quick-sell-keys-warning" class="sell-keys-warning-badge hidden"></div>
             <div class="form-group" style="margin-bottom: 0;">
               <label class="retro-label" for="quick-sell-interest">O que você tem interesse em troca?</label>
               <textarea id="quick-sell-interest" class="retro-textarea" rows="3" maxlength="500" placeholder="Ex: Valor mínimo: 123.456z, outras waifus ou itens da fazenda..."></textarea>
@@ -123,6 +124,25 @@
       }
     },
 
+    _updateKeysWarning(keys, isSoulmate = false) {
+      const warnEl = document.getElementById('quick-sell-keys-warning');
+      if (!warnEl) return;
+      const count = Number(keys || 0);
+      if (count > 1) {
+        const soulmateNote = (isSoulmate || count >= 10)
+          ? ' e o vínculo de Soulmate serão perdidos'
+          : ' não são transferidas';
+        warnEl.innerHTML = `
+          <div class="sell-keys-warning-title">⚠️ ATENÇÃO! Você tem ${count} chaves deste personagem que está anunciando</div>
+          <div class="sell-keys-warning-desc">Se alguém comprar ou trocar por este anúncio, a pessoa receberá o personagem com apenas <strong>1 chave</strong> (suas chaves extras${soulmateNote}).</div>
+        `;
+        warnEl.classList.remove('hidden');
+      } else {
+        warnEl.innerHTML = '';
+        warnEl.classList.add('hidden');
+      }
+    },
+
     open(options = {}) {
       const char = options.character;
       if (!char || !char.id) return;
@@ -150,6 +170,10 @@
       const inputEl = document.getElementById('quick-sell-interest');
       const submitBtn = document.getElementById('btn-quick-sell-submit');
 
+      const initialKeys = Number(options.keys ?? char.keys ?? 1);
+      const initialSoulmate = Boolean(options.isSoulmate ?? char.isSoulmate ?? initialKeys >= 10);
+      this._updateKeysWarning(initialKeys, initialSoulmate);
+
       if (nameEl) nameEl.textContent = char.name || 'Personagem';
       if (seriesEl) seriesEl.textContent = char.series || 'Sem série';
       if (imgEl) {
@@ -164,6 +188,9 @@
           .then(r => r.json())
           .then(res => {
             if (res && res.success && res.data) {
+              const currentKeys = Number(res.data.currentKeys ?? initialKeys);
+              const isSoulmate = Boolean(res.data.isSoulmate || initialSoulmate || currentKeys >= 10);
+              this._updateKeysWarning(currentKeys, isSoulmate);
               const val = res.data.refundedKakera ?? res.data.fullRefundKakera ?? 0;
               if (inputEl.value === 'Valor mínimo: calculando...' || inputEl.value === '') {
                 inputEl.value = val > 0 ? `Valor mínimo: ${Number(val).toLocaleString('pt-BR')}z` : '';
