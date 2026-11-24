@@ -75,8 +75,15 @@ const envSchema = z.object({
   // Sem valor padrão: segredos nunca ficam no código. Configure HYPERION_LLM_KEY no .env.
   HYPERION_LLM_KEY: z.string().default(process.env.HYPERION_LLM_KEY || ''),
   HYPERION_LLM_MODEL: z.string().default(process.env.HYPERION_LLM_MODEL || 'gemma4:12b-uncensored'),
+  HYPERION_LLM_FALLBACK_URL: z.string().default(process.env.HYPERION_LLM_FALLBACK_URL || 'https://lucia.ctg.ufsm.br/v1'),
+  HYPERION_LLM_FALLBACK_KEY: z.string().default(process.env.HYPERION_LLM_FALLBACK_KEY || 'ic6YUME9beTBTVQZDRoHPbCXqWr2lT'),
+  HYPERION_LLM_FALLBACK_MODEL: z.string().default(process.env.HYPERION_LLM_FALLBACK_MODEL || 'gemma4'),
   HYPERION_LLM_TIMEOUT_MS: z.coerce.number().int().min(5000).max(180000).default(60000),
   HYPERION_LLM_MAX_TOKENS: z.coerce.number().int().min(512).max(16384).default(4096),
+
+  OMDB_API_KEY: z.string().default(process.env.OMDB_API_KEY || ''),
+  TWITCH_CLIENT_ID: z.string().default(process.env.TWITCH_CLIENT_ID || ''),
+  TWITCH_CLIENT_SECRET: z.string().default(process.env.TWITCH_CLIENT_SECRET || ''),
 
   MEDIA_DIR: z.string().default(
     process.env.MEDIA_DIR ||

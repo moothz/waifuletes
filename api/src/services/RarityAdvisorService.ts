@@ -3,14 +3,33 @@ import type { SuggestionNotifyData } from './TelegramNotificationService.js';
 import type { Redis } from 'ioredis';
 import { withBusinessSpan, setAttrs, setOutcome, recordError, activeSpan } from '../telemetry.js';
 
+export type RarityAdvisorVerdict =
+  | 'PROCEDENTE'
+  | 'PARCIALMENTE_PROCEDENTE'
+  | 'EXAGERO'
+  | 'FALSO_MENTIRA';
+
+export interface RarityAdvisorStructuredResult {
+  verdict: RarityAdvisorVerdict;
+  recommendedRarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+  balizadorMudae?: string;
+  popCultureStatus?: string;
+  factsChecked?: string;
+  claimAnalysis?: string;
+  justification: string;
+  agreesWithUser: boolean;
+}
+
 export interface RarityAdvisorEvaluation {
   response: string;
+  structured?: RarityAdvisorStructuredResult | null;
   systemPrompt: string;
   userPrompt: string;
   searchedQueries: string[];
   evaluatedAt: string;
   mudaeRank?: number | null;
   model?: string;
+  usedFallback?: boolean;
 }
 
 export type RarityAdvisorFailureCode =
@@ -31,19 +50,38 @@ export interface RarityAdvisorResult {
   error?: RarityAdvisorError;
 }
 
+interface LlmProviderConfig {
+  url: string;
+  apiKey: string;
+  model: string;
+}
+
 export class RarityAdvisorService {
   private url: string;
   private apiKey: string;
   private model: string;
+  private fallbackUrl: string;
+  private fallbackApiKey: string;
+  private fallbackModel: string;
   private timeoutMs: number;
   private maxTokens: number;
+  private omdbApiKey: string;
+  private twitchClientId: string;
+  private twitchClientSecret: string;
+  private igdbTokenCache: { token: string; expiresAt: number } | null = null;
 
   constructor() {
     this.url = config.HYPERION_LLM_URL;
     this.apiKey = config.HYPERION_LLM_KEY;
     this.model = config.HYPERION_LLM_MODEL;
+    this.fallbackUrl = config.HYPERION_LLM_FALLBACK_URL;
+    this.fallbackApiKey = config.HYPERION_LLM_FALLBACK_KEY;
+    this.fallbackModel = config.HYPERION_LLM_FALLBACK_MODEL;
     this.timeoutMs = config.HYPERION_LLM_TIMEOUT_MS;
     this.maxTokens = config.HYPERION_LLM_MAX_TOKENS;
+    this.omdbApiKey = config.OMDB_API_KEY;
+    this.twitchClientId = config.TWITCH_CLIENT_ID;
+    this.twitchClientSecret = config.TWITCH_CLIENT_SECRET;
   }
 
   /**
@@ -94,7 +132,7 @@ export class RarityAdvisorService {
       console.warn(`[RarityAdvisor] Busca DuckDuckGo falhou (${err?.message || err}). Tentando Wikipedia...`);
     }
 
-    // Fallback: Wikipedia OpenSearch API (PT e EN, removendo termos específicos do bot Mudae que poluem a busca enciclopédica)
+    // Fallback: Wikipedia OpenSearch API
     const wikiQuery = cleanQuery.replace(/\b(mudae|rank|kakera|waifuletes)\b/gi, '').replace(/\s+/g, ' ').trim() || cleanQuery;
     for (const lang of ['pt', 'en'] as const) {
       try {
@@ -119,7 +157,7 @@ export class RarityAdvisorService {
   private cleanAniListDescription(raw?: string | null, maxLen = 420): string {
     if (!raw) return 'Sem descrição disponível.';
     const cleaned = raw
-      .replace(/~!([\s\S]*?)!~/g, '') // remove blocos de spoiler do AniList
+      .replace(/~!([\s\S]*?)!~/g, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/__|\*\*|~~/g, '')
       .replace(/\s+/g, ' ')
@@ -129,7 +167,7 @@ export class RarityAdvisorService {
   }
 
   /**
-   * Consulta informações de anime/mangá (nota, popularidade, favoritos, estúdio, ano e sinopse) na API GraphQL do AniList.
+   * Consulta informações de anime/mangá na API GraphQL do AniList.
    */
   async searchAnimeInfo(query: string): Promise<string> {
     if (!query || typeof query !== 'string' || !query.trim()) {
@@ -198,7 +236,7 @@ export class RarityAdvisorService {
   }
 
   /**
-   * Consulta informações do personagem (favoritos no AniList, obras em que aparece, papel MAIN/SUPPORTING/BACKGROUND e bio).
+   * Consulta informações do personagem no AniList.
    */
   async searchCharacterInfo(name: string, series?: string): Promise<string> {
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -287,8 +325,126 @@ export class RarityAdvisorService {
   }
 
   /**
-   * Avalia a sugestão de raridade usando o modelo LLM configurado com ferramenta de busca web
-   * e regras oficiais de Rank do Mudae (1-4466 = Lendário [2%], 4467-20701 = Épico [10%], 20702-62128 = Raro [20%], 62129-76135 = Incomum [28%], Acima de 76135 = Comum [40%])
+   * Consulta dados de filme/série/obra audiovisual no IMDb via OMDb API.
+   */
+  async searchImdbInfo(title: string): Promise<string> {
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return 'Nenhum título de filme/série fornecido.';
+    }
+    const cleanTitle = title.trim();
+    if (!this.omdbApiKey) {
+      return this.searchWeb(`IMDb ${cleanTitle}`);
+    }
+
+    try {
+      const res = await fetch(
+        `http://www.omdbapi.com/?apikey=${encodeURIComponent(this.omdbApiKey)}&t=${encodeURIComponent(cleanTitle)}&plot=full`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) {
+        throw new Error(`OMDb retornou HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as any;
+      if (data.Response === 'False' || !data.Title) {
+        return `Nenhuma obra encontrada no IMDb para "${cleanTitle}". Use web_search para pesquisar na web.`;
+      }
+
+      const rating = data.imdbRating && data.imdbRating !== 'N/A' ? `${data.imdbRating}/10 (${data.imdbVotes || '0'} votos)` : 'N/A';
+      const awards = data.Awards && data.Awards !== 'N/A' ? ` | Prêmios: ${data.Awards}` : '';
+      const plot = data.Plot && data.Plot !== 'N/A' ? (data.Plot.length > 350 ? `${data.Plot.slice(0, 350)}...` : data.Plot) : 'Sem sinopse';
+
+      return `[IMDb] ${data.Title} (${data.Year || 'N/A'}, ${data.Type || 'movie'})\nGênero: ${data.Genre || 'N/A'} | Diretor: ${data.Director || 'N/A'} | Elenco: ${data.Actors || 'N/A'}\nAvaliação IMDb: ${rating}${awards}\nSinopse: ${plot}`;
+    } catch (err: any) {
+      console.warn(`[RarityAdvisor] Consulta IMDb falhou (${err?.message || err}). Tentando web_search...`);
+      return this.searchWeb(`IMDb ${cleanTitle}`);
+    }
+  }
+
+  private async getIgdbAccessToken(): Promise<string | null> {
+    if (!this.twitchClientId || !this.twitchClientSecret) return null;
+    const now = Date.now();
+    if (this.igdbTokenCache && this.igdbTokenCache.expiresAt > now + 60000) {
+      return this.igdbTokenCache.token;
+    }
+
+    try {
+      const res = await fetch('https://id.twitch.tv/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: this.twitchClientId,
+          client_secret: this.twitchClientSecret,
+          grant_type: 'client_credentials',
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!res.ok) throw new Error(`Twitch OAuth HTTP ${res.status}`);
+      const data = (await res.json()) as any;
+      if (data.access_token) {
+        this.igdbTokenCache = {
+          token: data.access_token,
+          expiresAt: now + (Number(data.expires_in) || 3600) * 1000,
+        };
+        return data.access_token;
+      }
+    } catch (err: any) {
+      console.warn(`[RarityAdvisor] Falha ao obter token IGDB/Twitch: ${err?.message || err}`);
+    }
+    return null;
+  }
+
+  /**
+   * Consulta dados de jogos eletrônicos na API do IGDB.
+   */
+  async searchGameInfo(query: string): Promise<string> {
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return 'Nenhum nome de jogo fornecido.';
+    }
+    const cleanQuery = query.trim();
+    const token = await this.getIgdbAccessToken();
+    if (!token) {
+      return this.searchWeb(`video game ${cleanQuery}`);
+    }
+
+    try {
+      const escaped = cleanQuery.replace(/"/g, '\\"');
+      const body = `search "${escaped}"; fields name,summary,total_rating,total_rating_count,first_release_date,genres.name,platforms.name; limit 2;`;
+      const res = await fetch('https://api.igdb.com/v4/games', {
+        method: 'POST',
+        headers: {
+          'Client-ID': this.twitchClientId,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'text/plain',
+        },
+        body,
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!res.ok) throw new Error(`IGDB HTTP ${res.status}`);
+      const games = (await res.json()) as any[];
+      if (!games || games.length === 0) {
+        return `Nenhum jogo encontrado no IGDB para "${cleanQuery}". Use web_search para pesquisar na web.`;
+      }
+
+      return games
+        .map((g, idx) => {
+          const year = g.first_release_date ? new Date(g.first_release_date * 1000).getFullYear() : 'N/A';
+          const rating = g.total_rating != null ? `${Math.round(g.total_rating)}/100 (${g.total_rating_count || 0} avaliações)` : 'Sem avaliação agregada';
+          const genres = (g.genres || []).map((x: any) => x.name).filter(Boolean).slice(0, 4).join(', ') || 'N/A';
+          const platforms = (g.platforms || []).map((x: any) => x.name).filter(Boolean).slice(0, 4).join(', ') || 'N/A';
+          const summary = g.summary ? (g.summary.length > 280 ? `${g.summary.slice(0, 280)}...` : g.summary) : 'Sem sinopse';
+          return `[${idx + 1}] ${g.name} (${year})\nPlataformas: ${platforms} | Gêneros: ${genres}\nAvaliação IGDB: ${rating}\nSinopse: ${summary}`;
+        })
+        .join('\n\n');
+    } catch (err: any) {
+      console.warn(`[RarityAdvisor] Consulta IGDB falhou (${err?.message || err}). Tentando web_search...`);
+      return this.searchWeb(`video game ${cleanQuery}`);
+    }
+  }
+
+  /**
+   * Avalia a sugestão de raridade usando o modelo LLM configurado
    */
   async evaluateRaritySuggestion(data: SuggestionNotifyData, redis?: Redis): Promise<RarityAdvisorEvaluation | null> {
     const result = await this.evaluateRaritySuggestionDetailed(data, redis);
@@ -299,28 +455,28 @@ export class RarityAdvisorService {
    * Mesmo fluxo de evaluateRaritySuggestion, retornando também erro estruturado quando o modelo falha ou expira.
    */
   async evaluateRaritySuggestionDetailed(data: SuggestionNotifyData, redis?: Redis): Promise<RarityAdvisorResult> {
-    if (!this.url || !this.model) {
+    if (!this.url && !this.fallbackUrl) {
       return {
         evaluation: null,
         error: {
           code: 'AI_ADVISOR_NOT_CONFIGURED',
-          message: 'Serviço de IA não configurado no servidor (HYPERION_LLM_URL / HYPERION_LLM_MODEL).',
+          message: 'Serviço de IA não configurado no servidor (HYPERION_LLM_URL / HYPERION_LLM_FALLBACK_URL).',
           statusCode: 503,
         },
       };
     }
-    // Span GenAI: só metadados (modelo, tokens, nº de chamadas). Prompt/resposta NUNCA.
+
     const usage = { input: 0, output: 0, calls: 0, toolCalls: 0, retried: false, finishReason: undefined as string | undefined };
     return withBusinessSpan(
       'ai_advisor',
       {
         'gen_ai.operation.name': 'chat',
         'gen_ai.provider.name': 'vllm',
-        'gen_ai.request.model': this.model,
+        'gen_ai.request.model': this.model || this.fallbackModel,
         'waifu.suggestion.type': data.type,
       },
       async (span) => {
-        const result = await this.evaluateRaritySuggestionImpl(data, usage, redis);
+        const result = await this.evaluateRaritySuggestionWithFallback(data, usage, redis);
         setAttrs(
           {
             'gen_ai.usage.input_tokens': usage.calls ? usage.input : undefined,
@@ -364,12 +520,70 @@ export class RarityAdvisorService {
     return name === 'TimeoutError' || name === 'AbortError' || err.code === 23 || msg.includes('timeout') || msg.includes('aborted');
   }
 
-  private async evaluateRaritySuggestionImpl(
+  /**
+   * Executa a avaliação tentando o provedor primário e, em caso de erro 502/5xx/timeout/rede, aciona o provedor de fallback.
+   */
+  private async evaluateRaritySuggestionWithFallback(
     data: SuggestionNotifyData,
     usage: { input: number; output: number; calls: number; toolCalls: number; retried: boolean; finishReason?: string },
     redis?: Redis
   ): Promise<RarityAdvisorResult> {
+    const primaryProvider: LlmProviderConfig = {
+      url: this.url,
+      apiKey: this.apiKey,
+      model: this.model,
+    };
 
+    const hasFallback = Boolean(this.fallbackUrl && this.fallbackUrl !== this.url);
+    const fallbackProvider: LlmProviderConfig = {
+      url: this.fallbackUrl,
+      apiKey: this.fallbackApiKey,
+      model: this.fallbackModel || this.model,
+    };
+
+    if (primaryProvider.url) {
+      const primaryResult = await this.evaluateWithSingleProvider(primaryProvider, data, usage, false, redis);
+      if (primaryResult.evaluation) {
+        return primaryResult;
+      }
+
+      // Se falhou e existe fallback configurado, tenta o fallback
+      if (hasFallback) {
+        console.warn(
+          `[RarityAdvisor] Provedor primário (${primaryProvider.url}) falhou [${primaryResult.error?.code}: ${primaryResult.error?.message}]. Tentando provedor de fallback (${fallbackProvider.url})...`
+        );
+        const fallbackResult = await this.evaluateWithSingleProvider(fallbackProvider, data, usage, true, redis);
+        if (fallbackResult.evaluation) {
+          fallbackResult.evaluation.usedFallback = true;
+          return fallbackResult;
+        }
+        return fallbackResult;
+      }
+
+      return primaryResult;
+    }
+
+    if (hasFallback) {
+      return this.evaluateWithSingleProvider(fallbackProvider, data, usage, true, redis);
+    }
+
+    return {
+      evaluation: null,
+      error: {
+        code: 'AI_ADVISOR_NOT_CONFIGURED',
+        message: 'Nenhum provedor de IA disponível.',
+        statusCode: 503,
+      },
+    };
+  }
+
+  private async evaluateWithSingleProvider(
+    provider: LlmProviderConfig,
+    data: SuggestionNotifyData,
+    usage: { input: number; output: number; calls: number; toolCalls: number; retried: boolean; finishReason?: string },
+    isFallback: boolean,
+    redis?: Redis
+  ): Promise<RarityAdvisorResult> {
     const charName = data.character?.name || data.characterName || 'Desconhecido';
     const series = data.character?.series || data.series || 'Desconhecida';
     const currentRarity = data.currentRarity || data.character?.baseRarity || 'COMMON';
@@ -410,29 +624,28 @@ TABELA DE RARIDADES DO WAIFULETES E BALIZADOR DE RANK MUDAE:
 
 CRITÉRIOS DE AVALIAÇÃO (PONDERE OS 3 PILARES EM CONJUNTO):
 1. BALIZADOR DO RANK MUDAE (Popularidade Geral no Gacha):
-   - O Rank do Mudae serve como um **balizador inicial** de popularidade geral, mas **NÃO é uma regra rígida nem absoluta**.
+   - O Rank do Mudae serve como um balizador inicial de popularidade geral, mas NÃO é uma regra rígida nem absoluta.
    - Faixas de referência: 1 a 4466 (LEGENDARY), 4467 a 20701 (EPIC), 20702 a 62128 (RARE), 62129 a 76135 (UNCOMMON), acima de 76135 (COMMON).
-   - Esteja atento a distorções do Mudae (ex.: ícones clássicos da cultura pop/geek ocidental, games ou animes antigos com rank modesto/ausente; ou personagens de hype temporário com rank inflado).
 2. STATUS DO PERSONAGEM NA CULTURA POP E GEEK:
-   - Avalie o peso cultural real do personagem: é um ícone reconhecível até fora do seu fandom? Tem papel principal (MAIN), secundário relevante (SUPPORTING) ou figurante (BACKGROUND)? Possui grande base de fãs (ex.: favoritos no AniList/MAL), memes marcantes, longevidade ou impacto geracional?
+   - Avalie o peso cultural real do personagem: é um ícone reconhecível até fora do seu fandom? Tem papel principal (MAIN), secundário relevante (SUPPORTING) ou figurante (BACKGROUND)?
 3. RELEVÂNCIA E IMPACTO DA OBRA (ANIME / GAME / SÉRIE / HQ):
-   - Avalie a estatura da obra de origem: fenômeno global / clássico histórico (ex.: Dragon Ball, Naruto, One Piece, Frieren, Attack on Titan, Pokémon, Zelda, Star Wars), obra popular bem avaliada, obra de nicho médio ou título obscuro?
-   - Use as ferramentas disponíveis (search_character_info, search_anime_info e web_search) sempre que precisar confirmar métricas da obra (popularidade, nota, favoritos), o papel real do personagem (MAIN vs SUPPORTING) ou checar se o usuário está falando a verdade.
+   - Avalie a estatura da obra de origem: fenômeno global / clássico histórico, obra popular, nicho médio ou título obscuro.
+   - Use as ferramentas disponíveis (search_character_info, search_anime_info, search_imdb_info, search_game_info e web_search) para confirmar métricas e fatos.
 4. CHECAGEM FACTUAL DE ALEGAÇÕES (FATO VS EXAGERO/MENTIRA):
-   - Verifique se o motivo alegado pelo usuário é FATO comprovado ou se há EXAGERO/MENTIRA (ex.: fingir que um figurante é protagonista, exagerar a fama de uma obra de nicho, ou subestimar um ícone).
-   - Quando o Rank Mudae divergir do peso pop/geek ou da relevância da obra, justifique claramente o peso dado a cada fator na raridade recomendada.
+   - Verifique se o motivo alegado pelo usuário confere ou se há distorção.
 ${isMarried ? '5. ⚠️ ATENÇÃO CRÍTICA: O usuário que fez o pedido é CASADO com esse personagem no jogo! Verifique com rigor redobrado se há viés de interesse próprio para valorizar sua própria waifu.' : ''}
 
 FORMATO OBRIGATÓRIO DA RESPOSTA:
-Emita seu parecer técnico objetivo em formato HTML para o Telegram e Painel Admin, seguindo RIGOROSAMENTE esta estrutura:
-🤖 <b>Parecer da IA</b>:
-
-🎯 <b>Veredito:</b> [PROCEDENTE | PARCIALMENTE PROCEDENTE | EXAGERO | FALSO/MENTIRA]
-🏆 <b>Balizador Mudae:</b> [Ex: #842 (faixa de referência: Lendário) | Não informado no banco]
-🌟 <b>Cultura Pop/Geek & Obra:</b> (relevância do anime/obra, papel do personagem e status na cultura pop/geek)
-🔍 <b>Fatos Apurados:</b> (1 a 2 frases factuais sobre quem realmente é o personagem e seu papel na obra)
-⚖️ <b>Checagem da Alegação:</b> (Análise se o motivo do usuário confere ou se está distorcido/falso)
-💡 <b>Raridade Recomendada:</b> [COMMON | UNCOMMON | RARE | EPIC | LEGENDARY] (justificativa equilibrando Rank Mudae, status pop/geek e relevância da obra)`;
+Sua resposta final DEVE ser estritamente um objeto JSON válido (sem markdown em volta e sem blocos adicionais), estruturado exatamente com estas chaves:
+{
+  "verdict": "PROCEDENTE" | "PARCIALMENTE_PROCEDENTE" | "EXAGERO" | "FALSO_MENTIRA",
+  "recommendedRarity": "COMMON" | "UNCOMMON" | "RARE" | "EPIC" | "LEGENDARY",
+  "balizadorMudae": "string com resumo do balizador",
+  "popCultureStatus": "relevância da obra, papel do personagem e status pop/geek",
+  "factsChecked": "1 a 2 frases factuais sobre quem realmente é o personagem",
+  "claimAnalysis": "análise se o motivo do usuário confere ou se está distorcido",
+  "justification": "justificativa técnica equilibrando balizador e relevância"
+}`;
 
     const userPrompt = `Personagem: ${charName}
 Série/Origem: ${series}
@@ -454,17 +667,17 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
         function: {
           name: 'search_character_info',
           description:
-            'Consulta no AniList dados do personagem de anime/mangá: favoritos, obras em que aparece, papel real (MAIN, SUPPORTING ou BACKGROUND), popularidade da obra e biografia.',
+            'Consulta no AniList dados do personagem de anime/mangá: favoritos, obras em que aparece, papel real (MAIN, SUPPORTING ou BACKGROUND) e biografia.',
           parameters: {
             type: 'object',
             properties: {
               name: {
                 type: 'string',
-                description: 'Nome do personagem (ex: "Frieren", "Rem", "Gojo Satoru", "Levi Ackerman")',
+                description: 'Nome do personagem (ex: "Frieren", "Rem", "Gojo Satoru")',
               },
               series: {
                 type: 'string',
-                description: 'Nome opcional do anime/mangá para desambiguar personagens homônimos (ex: "Re:Zero")',
+                description: 'Nome opcional do anime/mangá para desambiguação',
               },
             },
             required: ['name'],
@@ -476,13 +689,49 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
         function: {
           name: 'search_anime_info',
           description:
-            'Consulta no AniList métricas de relevância de um anime ou mangá: nota média, número de usuários/popularidade, favoritos, estúdio, ano, episódios e sinopse.',
+            'Consulta no AniList métricas de um anime ou mangá: nota média, popularidade, favoritos, estúdio e ano.',
           parameters: {
             type: 'object',
             properties: {
               query: {
                 type: 'string',
-                description: 'Nome do anime ou mangá (ex: "Sousou no Frieren", "Naruto", "Bocchi the Rock")',
+                description: 'Nome do anime ou mangá (ex: "Sousou no Frieren", "Naruto")',
+              },
+            },
+            required: ['query'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'search_imdb_info',
+          description:
+            'Consulta no IMDb dados de filmes, séries de TV, animações ocidentais e atores (ano, nota IMDb, votos, sinopse, diretor, elenco e prêmios).',
+          parameters: {
+            type: 'object',
+            properties: {
+              title: {
+                type: 'string',
+                description: 'Título do filme ou série no IMDb (ex: "Arcane", "Breaking Bad", "The Matrix")',
+              },
+            },
+            required: ['title'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'search_game_info',
+          description:
+            'Consulta no IGDB métricas de relevância de jogos eletrônicos (avaliação agregada, nota, ano de lançamento, plataformas e resumo).',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Nome do jogo ou franquia no IGDB (ex: "The Witcher 3", "Final Fantasy VII", "Elden Ring")',
               },
             },
             required: ['query'],
@@ -494,13 +743,13 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
         function: {
           name: 'web_search',
           description:
-            'Pesquisa na web/Wikipedia por informações biográficas, relevância na cultura pop/geek e popularidade (ideal para games, filmes, séries ocidentais, HQs ou quando não encontrado no AniList).',
+            'Pesquisa na web e Wikipedia por biografias, relevância na cultura pop e notícias quando outras ferramentas não tiverem o resultado.',
           parameters: {
             type: 'object',
             properties: {
               query: {
                 type: 'string',
-                description: 'Termo de pesquisa (ex: "Link Legend of Zelda", "Darth Vader Star Wars", "2B NieR Automata")',
+                description: 'Termo de pesquisa na web',
               },
             },
             required: ['query'],
@@ -511,15 +760,21 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
 
     const searchedQueries: string[] = [];
 
-    const buildAndCacheEvaluation = async (cleaned: string, resolvedModel?: string): Promise<RarityAdvisorResult> => {
+    const buildAndCacheEvaluation = async (
+      rawResponse: string,
+      resolvedModel?: string
+    ): Promise<RarityAdvisorResult> => {
+      const { structured, html } = this.parseEvaluationOutput(rawResponse, data.suggestedRarity);
       const evaluation: RarityAdvisorEvaluation = {
-        response: cleaned,
+        response: html,
+        structured,
         systemPrompt,
         userPrompt,
         searchedQueries,
         evaluatedAt: new Date().toISOString(),
         mudaeRank: mudaeRank || null,
-        model: resolvedModel || this.model,
+        model: resolvedModel || provider.model,
+        usedFallback: isFallback,
       };
 
       if (redis && data.id) {
@@ -535,12 +790,12 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (this.apiKey) {
-        headers.Authorization = `Bearer ${this.apiKey}`;
+      if (provider.apiKey) {
+        headers.Authorization = `Bearer ${provider.apiKey}`;
       }
 
       const callLlm = async (payload: Record<string, unknown>) => {
-        return fetch(`${this.url}/chat/completions`, {
+        return fetch(`${provider.url}/chat/completions`, {
           method: 'POST',
           headers,
           body: JSON.stringify(payload),
@@ -548,26 +803,26 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
         });
       };
 
-      // Chamada inicial (permite tool call de busca web)
+      // Chamada 1: permite tool calls
       const res1 = await callLlm({
-        model: this.model,
+        model: provider.model,
         messages,
         tools,
         tool_choice: 'auto',
         max_tokens: this.maxTokens,
-        temperature: 0.6,
+        temperature: 0.5,
       });
 
       if (!res1.ok) {
         const errText = await res1.text().catch(() => '');
-        console.warn(`[RarityAdvisor] vLLM retornou HTTP ${res1.status} na chamada 1: ${errText.slice(0, 300)}`);
+        console.warn(`[RarityAdvisor] LLM (${provider.url}) retornou HTTP ${res1.status} na chamada 1: ${errText.slice(0, 300)}`);
         recordError(activeSpan(), new Error(`HTTP ${res1.status}`), `http_${res1.status}`);
         return {
           evaluation: null,
           error: {
             code: 'AI_ADVISOR_HTTP_ERROR',
-            message: `O serviço de IA retornou erro HTTP ${res1.status}. Tente novamente em instantes.`,
-            statusCode: 502,
+            message: `O serviço de IA retornou erro HTTP ${res1.status}.`,
+            statusCode: res1.status === 504 ? 504 : 502,
           },
         };
       }
@@ -580,7 +835,7 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
           evaluation: null,
           error: {
             code: 'AI_ADVISOR_EMPTY_RESPONSE',
-            message: 'O modelo de IA retornou uma resposta vazia. Tente novamente.',
+            message: 'O modelo de IA retornou uma resposta vazia.',
             statusCode: 502,
           },
         };
@@ -588,7 +843,7 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
 
       let finalChoice = choice1;
 
-      // Se o modelo invocou ferramentas de busca, executa em paralelo e força resposta final sem novas tool calls
+      // Executa ferramentas se o modelo chamou
       if (choice1.message.tool_calls && choice1.message.tool_calls.length > 0) {
         usage.toolCalls += choice1.message.tool_calls.length;
         messages.push({
@@ -621,6 +876,20 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
               return { tc, content };
             }
 
+            if (fnName === 'search_imdb_info') {
+              const targetTitle = String(args.title || args.query || series !== 'Desconhecida' ? series : charName);
+              searchedQueries.push(`[IMDb] ${targetTitle}`);
+              const content = await this.searchImdbInfo(targetTitle);
+              return { tc, content };
+            }
+
+            if (fnName === 'search_game_info') {
+              const targetQuery = String(args.query || args.name || series !== 'Desconhecida' ? series : charName);
+              searchedQueries.push(`[IGDB Game] ${targetQuery}`);
+              const content = await this.searchGameInfo(targetQuery);
+              return { tc, content };
+            }
+
             const query = String(args.query || `${charName} ${series}`);
             searchedQueries.push(`[Web] ${query}`);
             const content = await this.searchWeb(query);
@@ -637,33 +906,32 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
           });
         }
 
-        // Instrução explícita + tool_choice: 'none' evita que modelos com reasoning/tool-parser (ex: Qwen3/vLLM)
-        // tentem emitir nova tool call quando não há mais rodadas de busca, o que fazia o vLLM devolver content: null.
         messages.push({
           role: 'user',
           content:
-            'Com base nas informações acima e no seu conhecimento, emita agora o parecer final seguindo exatamente a estrutura HTML solicitada, sem chamar novas ferramentas.',
+            'Com base nas informações levantadas e nas diretrizes, emita agora o parecer final estritamente no formato JSON estruturado solicitado, sem chamar novas ferramentas.',
         });
 
         const res2 = await callLlm({
-          model: this.model,
+          model: provider.model,
           messages,
           tools,
           tool_choice: 'none',
+          response_format: { type: 'json_object' },
           max_tokens: this.maxTokens,
-          temperature: 0.6,
+          temperature: 0.4,
         });
 
         if (!res2.ok) {
           const errText = await res2.text().catch(() => '');
-          console.warn(`[RarityAdvisor] vLLM retornou HTTP ${res2.status} na chamada 2: ${errText.slice(0, 300)}`);
+          console.warn(`[RarityAdvisor] LLM (${provider.url}) retornou HTTP ${res2.status} na chamada 2: ${errText.slice(0, 300)}`);
           recordError(activeSpan(), new Error(`HTTP ${res2.status}`), `http_${res2.status}`);
           return {
             evaluation: null,
             error: {
               code: 'AI_ADVISOR_HTTP_ERROR',
-              message: `O serviço de IA retornou erro HTTP ${res2.status} ao finalizar o parecer. Tente novamente.`,
-              statusCode: 502,
+              message: `O serviço de IA retornou erro HTTP ${res2.status} ao finalizar o parecer.`,
+              statusCode: res2.status === 504 ? 504 : 502,
             },
           };
         }
@@ -676,11 +944,10 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
       const rawContent = finalChoice?.message?.content?.trim() || null;
       let cleaned = rawContent ? this.cleanModelResponse(rawContent) : null;
 
-      // Fallback defensivo: se o modelo ainda devolveu conteúdo vazio (ex: esgotou reasoning tokens ou tentou tool call bloqueada),
-      // tenta mais uma vez de forma direta e concisa sem ferramentas.
+      // Retry defensivo caso retorno esteja vazio
       if (!cleaned) {
         console.warn(
-          `[RarityAdvisor] Resposta vazia do modelo (${resolvedModel || this.model}, finish_reason=${finalChoice?.finish_reason || 'unknown'}, calls=${usage.calls}, out_tokens=${usage.output}). Tentando retry direto...`
+          `[RarityAdvisor] Resposta vazia (${resolvedModel || provider.model}). Tentando retry conciso...`
         );
         usage.retried = true;
         const retryMessages = [
@@ -688,16 +955,17 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
           {
             role: 'user',
             content:
-              'Responda de forma direta e concisa agora mesmo usando apenas o bloco HTML do parecer final (sem chamar ferramentas e sem raciocínio longo).',
+              'Responda agora mesmo em formato JSON estruturado com as chaves verdict, recommendedRarity e justification.',
           },
         ];
         const resRetry = await callLlm({
-          model: this.model,
+          model: provider.model,
           messages: retryMessages,
           tools,
           tool_choice: 'none',
+          response_format: { type: 'json_object' },
           max_tokens: this.maxTokens,
-          temperature: 0.4,
+          temperature: 0.3,
         });
 
         if (resRetry.ok) {
@@ -705,9 +973,6 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
           resolvedModel = this.trackUsage(usage, dataRetry) || resolvedModel;
           const retryRaw = dataRetry.choices?.[0]?.message?.content?.trim() || null;
           cleaned = retryRaw ? this.cleanModelResponse(retryRaw) : null;
-        } else {
-          const errText = await resRetry.text().catch(() => '');
-          console.warn(`[RarityAdvisor] vLLM retornou HTTP ${resRetry.status} no retry: ${errText.slice(0, 300)}`);
         }
       }
 
@@ -716,7 +981,7 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
           evaluation: null,
           error: {
             code: 'AI_ADVISOR_EMPTY_RESPONSE',
-            message: 'O modelo de IA retornou uma resposta vazia. Tente consultar novamente.',
+            message: 'O modelo de IA retornou uma resposta vazia.',
             statusCode: 502,
           },
         };
@@ -725,14 +990,14 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
       return buildAndCacheEvaluation(cleaned, resolvedModel);
     } catch (err: any) {
       const isTimeout = this.isTimeoutError(err);
-      console.error('[RarityAdvisor] Erro na análise de raridade por LLM:', err?.message || err);
+      console.error(`[RarityAdvisor] Erro na análise por LLM (${provider.url}):`, err?.message || err);
       recordError(activeSpan(), err, isTimeout ? 'timeout' : undefined);
       if (isTimeout) {
         return {
           evaluation: null,
           error: {
             code: 'AI_ADVISOR_TIMEOUT',
-            message: `Tempo limite esgotado (${Math.round(this.timeoutMs / 1000)}s) ao aguardar resposta do modelo de IA. Tente novamente.`,
+            message: `Tempo limite esgotado (${Math.round(this.timeoutMs / 1000)}s) ao aguardar resposta do modelo de IA.`,
             statusCode: 504,
           },
         };
@@ -741,7 +1006,7 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
         evaluation: null,
         error: {
           code: 'AI_ADVISOR_NETWORK_ERROR',
-          message: 'Falha de comunicação com o serviço de IA. Tente novamente em instantes.',
+          message: `Falha de comunicação com o serviço de IA (${provider.url}).`,
           statusCode: 502,
         },
       };
@@ -749,7 +1014,110 @@ Usuário é casado com o personagem?: ${isMarried ? 'SIM (Possível conflito de 
   }
 
   /**
-   * Remove tokens residuais de thought/think e tags internas de canais do modelo
+   * Converte a resposta do modelo (JSON estruturado ou texto legado) em dados estruturados e HTML padronizado.
+   */
+  public parseEvaluationOutput(
+    raw: string,
+    suggestedRarity?: string | null
+  ): { structured: RarityAdvisorStructuredResult | null; html: string } {
+    const cleaned = this.cleanModelResponse(raw);
+    let parsedJson: any = null;
+
+    // Procura JSON isolado ou dentro de bloco ```json
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        parsedJson = JSON.parse(jsonMatch[0]);
+      } catch (_) {}
+    }
+
+    const normalizeRarity = (val?: any): 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' => {
+      const str = String(val || '').toUpperCase().trim();
+      if (str.includes('LEGEND')) return 'LEGENDARY';
+      if (str.includes('EPIC')) return 'EPIC';
+      if (str.includes('RARE') || str.includes('RARO')) return 'RARE';
+      if (str.includes('UNCOMMON') || str.includes('INCOMUM')) return 'UNCOMMON';
+      return 'COMMON';
+    };
+
+    const normalizeVerdict = (val?: any): RarityAdvisorVerdict => {
+      const str = String(val || '').toUpperCase().trim();
+      if (str.includes('FALSO') || str.includes('MENTIRA')) return 'FALSO_MENTIRA';
+      if (str.includes('EXAGERO')) return 'EXAGERO';
+      if (str.includes('PARCIAL')) return 'PARCIALMENTE_PROCEDENTE';
+      return 'PROCEDENTE';
+    };
+
+    if (parsedJson && (parsedJson.recommendedRarity || parsedJson.verdict || parsedJson.justification)) {
+      const recommendedRarity = normalizeRarity(parsedJson.recommendedRarity || parsedJson.rarity);
+      const verdict = normalizeVerdict(parsedJson.verdict);
+      const balizadorMudae = String(parsedJson.balizadorMudae || parsedJson.mudaeRank || '').trim();
+      const popCultureStatus = String(parsedJson.popCultureStatus || parsedJson.culturaPop || '').trim();
+      const factsChecked = String(parsedJson.factsChecked || parsedJson.fatosApurados || '').trim();
+      const claimAnalysis = String(parsedJson.claimAnalysis || parsedJson.checagemAlegacao || '').trim();
+      const justification = String(parsedJson.justification || parsedJson.justificativa || '').trim();
+
+      const agreesWithUser = Boolean(
+        suggestedRarity &&
+        recommendedRarity === normalizeRarity(suggestedRarity)
+      );
+
+      const structured: RarityAdvisorStructuredResult = {
+        verdict,
+        recommendedRarity,
+        balizadorMudae: balizadorMudae || undefined,
+        popCultureStatus: popCultureStatus || undefined,
+        factsChecked: factsChecked || undefined,
+        claimAnalysis: claimAnalysis || undefined,
+        justification: justification || 'Avaliação técnica baseada em métricas e popularidade.',
+        agreesWithUser,
+      };
+
+      const verdictLabels: Record<RarityAdvisorVerdict, string> = {
+        PROCEDENTE: 'PROCEDENTE',
+        PARCIALMENTE_PROCEDENTE: 'PARCIALMENTE PROCEDENTE',
+        EXAGERO: 'EXAGERO',
+        FALSO_MENTIRA: 'FALSO/MENTIRA',
+      };
+
+      const html = `🤖 <b>Parecer da IA</b>:
+
+🎯 <b>Veredito:</b> ${verdictLabels[verdict]}
+🏆 <b>Balizador Mudae:</b> ${balizadorMudae || 'Não informado'}
+${popCultureStatus ? `🌟 <b>Cultura Pop/Geek & Obra:</b> ${popCultureStatus}\n` : ''}${factsChecked ? `🔍 <b>Fatos Apurados:</b> ${factsChecked}\n` : ''}${claimAnalysis ? `⚖️ <b>Checagem da Alegação:</b> ${claimAnalysis}\n` : ''}💡 <b>Raridade Recomendada:</b> ${recommendedRarity} (${justification})${agreesWithUser ? '\n\n✨ <b>Consenso com o usuário:</b> Aprovado automaticamente!' : ''}`;
+
+      return { structured, html };
+    }
+
+    // Parsing defensivo para formatos textuais legados
+    const verdictMatch = cleaned.match(/<b>Veredito:?<\/b>\s*([^<\n]+)/i) || cleaned.match(/Veredito:?\s*([^\n]+)/i);
+    const rarityMatch = cleaned.match(/<b>Raridade Recomendada:?<\/b>\s*([A-Za-z]+)/i) || cleaned.match(/Raridade Recomendada:?\s*([A-Za-z]+)/i);
+    const mudaeMatch = cleaned.match(/<b>Balizador Mudae:?<\/b>\s*([^<\n]+)/i) || cleaned.match(/Balizador Mudae:?\s*([^\n]+)/i);
+    const factsMatch = cleaned.match(/<b>Fatos Apurados:?<\/b>\s*([^<\n]+)/i);
+    const claimMatch = cleaned.match(/<b>Checagem da Alega[çc][ãa]o:?<\/b>\s*([^<\n]+)/i);
+
+    const recommendedRarity = normalizeRarity(rarityMatch?.[1]);
+    const verdict = normalizeVerdict(verdictMatch?.[1]);
+    const agreesWithUser = Boolean(
+      suggestedRarity &&
+      recommendedRarity === normalizeRarity(suggestedRarity)
+    );
+
+    const structured: RarityAdvisorStructuredResult = {
+      verdict,
+      recommendedRarity,
+      balizadorMudae: mudaeMatch?.[1]?.trim() || undefined,
+      factsChecked: factsMatch?.[1]?.trim() || undefined,
+      claimAnalysis: claimMatch?.[1]?.trim() || undefined,
+      justification: 'Avaliação processada a partir do parecer textual da IA.',
+      agreesWithUser,
+    };
+
+    return { structured, html: cleaned };
+  }
+
+  /**
+   * Remove tokens residuais de thought/think e canais internos do modelo
    */
   private cleanModelResponse(raw: string): string {
     return raw

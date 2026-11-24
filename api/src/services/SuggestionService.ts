@@ -336,6 +336,9 @@ export class SuggestionService {
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
+      // Dispara parecer da IA em background (sem travar a interface do usuário)
+      this.triggerBackgroundAiEvaluation(suggestion.id);
+
       return suggestion;
     });
   }
@@ -478,6 +481,9 @@ export class SuggestionService {
         marriedUser: marriageInfo.marriedUser,
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
+
+      // Dispara parecer da IA em background (sem travar a interface do usuário)
+      this.triggerBackgroundAiEvaluation(suggestion.id);
 
       return suggestion;
     });
@@ -649,6 +655,9 @@ export class SuggestionService {
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
+      // Dispara parecer da IA em background (sem travar a interface do usuário)
+      this.triggerBackgroundAiEvaluation(suggestion.id);
+
       return suggestion;
     });
   }
@@ -790,6 +799,9 @@ export class SuggestionService {
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
 
+      // Dispara parecer da IA em background (sem travar a interface do usuário)
+      this.triggerBackgroundAiEvaluation(suggestion.id);
+
       return suggestion;
     });
   }
@@ -877,6 +889,9 @@ export class SuggestionService {
         marriedUser: marriageInfo.marriedUser,
         isMarriedToSuggester: marriageInfo.isMarriedToSuggester,
       }).catch((err) => console.error('Telegram notification error:', err));
+
+      // Dispara parecer da IA em background (sem travar a interface do usuário)
+      this.triggerBackgroundAiEvaluation(suggestion.id);
 
       return suggestion;
     });
@@ -1889,7 +1904,20 @@ export class SuggestionService {
         const cached = await this.redis.get(`suggestion:ai:${suggestionId}`);
         if (cached) {
           setAttrs({ 'waifu.ai.cache': 'hit' });
-          return JSON.parse(cached);
+          const parsed = JSON.parse(cached);
+          if (parsed?.structured?.agreesWithUser) {
+            const current = await this.prisma.characterSuggestion.findUnique({
+              where: { id: suggestionId },
+              select: { status: true },
+            });
+            if (current?.status === 'PENDING') {
+              try {
+                const approved = await this.maybeAutoApproveSuggestion(suggestionId, parsed);
+                if (approved) parsed.autoApproved = true;
+              } catch (_) {}
+            }
+          }
+          return parsed;
         }
       } catch (_) {}
     }
@@ -1961,6 +1989,89 @@ export class SuggestionService {
         result.error?.statusCode || 502
       );
     }
-    return result.evaluation;
+
+    let autoApproved = false;
+    // Se a sugestão ainda está pendente e a IA concorda com a raridade proposta pelo usuário, auto-aprova
+    if (suggestion.status === 'PENDING' && result.evaluation.structured?.agreesWithUser) {
+      try {
+        const approved = await this.maybeAutoApproveSuggestion(suggestion.id, result.evaluation);
+        if (approved) {
+          autoApproved = true;
+        }
+      } catch (err: any) {
+        console.warn(`[SuggestionService] Falha ao tentar auto-aprovar sugestão ${suggestion.id}:`, err?.message || err);
+      }
+    }
+
+    return {
+      ...result.evaluation,
+      autoApproved,
+    };
+  }
+
+  /**
+   * Auto-aprova uma sugestão se a IA concordar com o usuário e as regras de negócio permitirem.
+   */
+  async maybeAutoApproveSuggestion(suggestionId: string, evaluation: any): Promise<boolean> {
+    const suggestion = await this.prisma.characterSuggestion.findUnique({
+      where: { id: suggestionId },
+      include: { character: true },
+    });
+
+    if (!suggestion || suggestion.status !== 'PENDING') {
+      return false;
+    }
+
+    // Auto-aprovação é restrita a alterações de raridade
+    if (suggestion.type !== 'RARITY' && !(suggestion.type === 'EDIT' && suggestion.suggestedRarity)) {
+      return false;
+    }
+
+    const targetRarity = evaluation?.structured?.recommendedRarity || suggestion.suggestedRarity;
+    if (!targetRarity || !evaluation?.structured?.agreesWithUser) {
+      return false;
+    }
+
+    // Trava de segurança: se o personagem já foi casado, não pode virar Lendário
+    if (targetRarity === 'LEGENDARY' && suggestion.character?.baseRarity !== 'LEGENDARY') {
+      const wasMarried = await this.wasCharacterEverMarried(suggestion.character?.id || '');
+      if (wasMarried) {
+        console.warn(
+          `[SuggestionService] Auto-aprovação para LEGENDARY ignorada para ${suggestion.character?.name}: personagem já foi casado.`
+        );
+        return false;
+      }
+    }
+
+    await this.approveSuggestion(suggestion.id, 'ia-auto-approval', targetRarity);
+    console.log(
+      `[SuggestionService] Sugestão ${suggestion.id} (${suggestion.character?.name || suggestion.characterId}) auto-aprovada com sucesso pela IA (${targetRarity}).`
+    );
+    return true;
+  }
+
+  /**
+   * Dispara em background a consulta do parecer da IA e tenta auto-aprovação se houver consenso.
+   */
+  triggerBackgroundAiEvaluation(suggestionId: string): void {
+    setImmediate(async () => {
+      try {
+        if (typeof this.prisma?.characterSuggestion?.findUnique !== 'function') return;
+        const suggestion = await this.prisma.characterSuggestion.findUnique({
+          where: { id: suggestionId },
+          select: { id: true, type: true, suggestedRarity: true, status: true },
+        });
+        if (!suggestion || suggestion.status !== 'PENDING') return;
+
+        // Avalia em background apenas sugestões que envolvem raridade
+        if (suggestion.type !== 'RARITY' && !(suggestion.type === 'EDIT' && suggestion.suggestedRarity)) {
+          return;
+        }
+
+        await this.getOrEvaluateAiAdvisor(suggestionId, false);
+      } catch (err: any) {
+        console.warn(`[SuggestionService] Erro no parecer de IA em background para ${suggestionId}:`, err?.message || err);
+      }
+    });
   }
 }

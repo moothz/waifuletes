@@ -1189,43 +1189,9 @@ function createSuggestionItem(s) {
 
   let aiAdvisorHtml = '';
   if (s.aiAdvisor) {
-    const aiModelLabel = s.aiAdvisor.model ? ` (${escapeHtml(s.aiAdvisor.model)})` : '';
     aiAdvisorHtml = `
       <div style="margin: 10px 0;" id="ai-advisor-container-${s.id}">
-        <div style="background: #fdf4ff; border: 1.5px solid #d946ef; border-radius: 6px; padding: 10px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleAiAdvisor('${s.id}')">
-            <div style="font-weight: 800; font-size: 13px; color: #86198f; display: flex; align-items: center; gap: 6px;">
-              <i class="fas fa-robot"></i> 🤖 Parecer da IA${aiModelLabel}
-              <span style="font-size: 11px; background: #fae8ff; color: #a21caf; border: 1px solid #e879f9; padding: 1px 6px; border-radius: 4px; font-weight: 700;">Mudae + Cultura Pop & AniList</span>
-            </div>
-            <div style="display: flex; gap: 6px;">
-              <button class="btn-retro btn-sm" id="btn-ai-refresh-${s.id}" style="font-size: 11px; padding: 2px 6px;" onclick="event.stopPropagation(); fetchAiAdvisor('${s.id}', true)" title="Reconsultar IA">
-                <i class="fas fa-sync-alt"></i>
-              </button>
-              <button class="btn-retro btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="event.stopPropagation(); toggleAiAdvisor('${s.id}')">
-                <i class="fas fa-chevron-down" id="ai-arrow-${s.id}"></i> Ver Parecer & Prompt
-              </button>
-            </div>
-          </div>
-          <div id="ai-advisor-content-${s.id}" class="hidden" style="margin-top: 10px; border-top: 1px dashed #e879f9; padding-top: 8px;">
-            <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 4px; padding: 10px; font-size: 13px; line-height: 1.5;">
-              ${Api.sanitizeBasicHtml(s.aiAdvisor.response)}
-            </div>
-            <details style="margin-top: 8px; font-size: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 6px 8px;">
-              <summary style="font-weight: 700; color: #7e22ce; cursor: pointer;">
-                📜 Ver Prompt de IA Enviado ao Modelo
-              </summary>
-              <div style="margin-top: 6px; font-family: monospace; font-size: 11px; white-space: pre-wrap; background: #f3e8ff; padding: 8px; border-radius: 4px; color: #3b0764; max-height: 250px; overflow-y: auto;">
-<strong>--- SYSTEM PROMPT ---</strong>
-${escapeHtml(s.aiAdvisor.systemPrompt || '')}
-
-<strong>--- USER PROMPT ---</strong>
-${escapeHtml(s.aiAdvisor.userPrompt || '')}
-${s.aiAdvisor.searchedQueries?.length ? `\n<strong>--- CONSULTAS / FERRAMENTAS EXECUTADAS ---</strong>\n${escapeHtml(s.aiAdvisor.searchedQueries.join('\n'))}` : ''}
-              </div>
-            </details>
-          </div>
-        </div>
+        ${formatAiAdvisorCard(s.aiAdvisor, s.id, true)}
       </div>
     `;
   } else if (s.type === 'RARITY' || s.suggestedRarity || s.type === 'EDIT' || s.type === 'NEW_CHARACTER') {
@@ -1310,9 +1276,12 @@ ${s.aiAdvisor.searchedQueries?.length ? `\n<strong>--- CONSULTAS / FERRAMENTAS E
       }
     }
   } else {
+    const isAiAutoApproved = s.reviewedBy && s.reviewedBy.includes('ia-auto-approval');
+    const reviewerText = isAiAutoApproved ? '🤖 Consenso com IA' : (s.reviewedBy ? `por ${escapeHtml(s.reviewedBy)}` : '');
     actionButtonsHtml = `
-      <div style="display: flex; justify-content: flex-end; font-size: 12px; font-weight: 800; color: ${s.status === 'APPROVED' ? '#16a34a' : '#dc2626'};">
-        Status: ${s.status === 'APPROVED' ? 'APROVADA E APLICADA ✅' : 'RECUSADA ❌'}
+      <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; color: ${s.status === 'APPROVED' ? '#16a34a' : '#dc2626'};">
+        ${isAiAutoApproved ? '<span style="background: #fdf4ff; border: 1.5px solid #d946ef; color: #86198f; padding: 2px 8px; border-radius: 4px; font-size: 11px;">🤖 AUTO-APROVADO POR IA</span>' : ''}
+        <span>Status: ${s.status === 'APPROVED' ? 'APROVADA E APLICADA ✅' : 'RECUSADA ❌'} ${reviewerText ? `(${reviewerText})` : ''}</span>
       </div>
     `;
   }
@@ -1553,6 +1522,108 @@ async function approveSuggestion(suggestionId, options = {}) {
   }
 }
 
+function formatAiAdvisorCard(adv, id, isHidden = false) {
+  if (!adv) return '';
+  const aiModelLabel = adv.model ? ` (${escapeHtml(adv.model)})` : '';
+  const hasStructured = Boolean(adv.structured);
+  const st = adv.structured || {};
+  const isAgreed = Boolean(st.agreesWithUser);
+  const usedFallbackBadge = adv.usedFallback
+    ? '<span style="font-size: 10px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; padding: 1px 6px; border-radius: 4px; font-weight: 700;">Fallback</span>'
+    : '';
+
+  const verdictStyles = {
+    PROCEDENTE: { bg: '#dcfce7', text: '#15803d', border: '#86efac', icon: '🎯', label: 'Procedente' },
+    PARCIALMENTE_PROCEDENTE: { bg: '#dbeafe', text: '#1d4ed8', border: '#93c5fd', icon: '🎯', label: 'Parcialmente Procedente' },
+    EXAGERO: { bg: '#fef3c7', text: '#b45309', border: '#fde68a', icon: '⚠️', label: 'Exagero' },
+    FALSO_MENTIRA: { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5', icon: '❌', label: 'Falso / Mentira' },
+  };
+
+  const rarityBadges = {
+    LEGENDARY: { bg: '#fef08a', text: '#854d0e', border: '#facc15', label: '🟡 LENDÁRIO' },
+    EPIC: { bg: '#f5d0fe', text: '#86198f', border: '#e879f9', label: '🟣 ÉPICO' },
+    RARE: { bg: '#e0f2fe', text: '#0369a1', border: '#7dd3fc', label: '🔵 RARO' },
+    UNCOMMON: { bg: '#dcfce7', text: '#15803d', border: '#86efac', label: '🟢 INCOMUM' },
+    COMMON: { bg: '#f3f4f6', text: '#374151', border: '#d1d5db', label: '⚪ COMUM' },
+  };
+
+  const vInfo = verdictStyles[st.verdict] || verdictStyles.PROCEDENTE;
+  const rInfo = rarityBadges[st.recommendedRarity] || rarityBadges.COMMON;
+
+  let structuredBodyHtml = '';
+  if (hasStructured) {
+    structuredBodyHtml = `
+      <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; border-bottom: 1px solid #fae8ff; padding-bottom: 8px;">
+          <span style="font-size: 11px; font-weight: 800; color: #701a75;">VEREDITO DA IA:</span>
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 12px; background: ${vInfo.bg}; color: ${vInfo.text}; border: 1px solid ${vInfo.border};">
+            ${vInfo.icon} ${vInfo.label}
+          </span>
+          <span style="font-size: 11px; font-weight: 800; color: #701a75; margin-left: 6px;">RECOMENDAÇÃO:</span>
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 12px; background: ${rInfo.bg}; color: ${rInfo.text}; border: 1px solid ${rInfo.border};">
+            ${rInfo.label}
+          </span>
+          ${isAgreed ? `
+            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 11px; background: #dcfce7; color: #166534; border: 1px solid #86efac;">
+              ✨ Concorda com o usuário (Auto-Aprovado)
+            </span>
+          ` : ''}
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr; gap: 6px; font-size: 12.5px; line-height: 1.45; color: #1e293b;">
+          ${st.balizadorMudae ? `<div><strong>🏆 Balizador Mudae:</strong> ${escapeHtml(st.balizadorMudae)}</div>` : ''}
+          ${st.popCultureStatus ? `<div><strong>🌟 Cultura Pop/Geek & Obra:</strong> ${escapeHtml(st.popCultureStatus)}</div>` : ''}
+          ${st.factsChecked ? `<div><strong>🔍 Fatos Apurados:</strong> ${escapeHtml(st.factsChecked)}</div>` : ''}
+          ${st.claimAnalysis ? `<div><strong>⚖️ Checagem da Alegação:</strong> ${escapeHtml(st.claimAnalysis)}</div>` : ''}
+          ${st.justification ? `<div><strong>💡 Justificativa:</strong> ${escapeHtml(st.justification)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  } else {
+    structuredBodyHtml = `
+      <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 4px; padding: 10px; font-size: 13px; line-height: 1.5;">
+        ${Api.sanitizeBasicHtml(adv.response || '')}
+      </div>
+    `;
+  }
+
+  return `
+    <div style="background: #fdf4ff; border: 1.5px solid #d946ef; border-radius: 6px; padding: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleAiAdvisor('${id}')">
+        <div style="font-weight: 800; font-size: 13px; color: #86198f; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <i class="fas fa-robot"></i> 🤖 Parecer da IA${aiModelLabel}
+          <span style="font-size: 11px; background: #fae8ff; color: #a21caf; border: 1px solid #e879f9; padding: 1px 6px; border-radius: 4px; font-weight: 700;">Mudae + Pop & AniList/IMDb/IGDB</span>
+          ${usedFallbackBadge}
+          ${isAgreed ? '<span style="font-size: 11px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 1px 6px; border-radius: 4px; font-weight: 800;">✨ Auto-Aprovado</span>' : ''}
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn-retro btn-sm" id="btn-ai-refresh-${id}" style="font-size: 11px; padding: 2px 6px;" onclick="event.stopPropagation(); fetchAiAdvisor('${id}', true)" title="Reconsultar IA">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+          <button class="btn-retro btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="event.stopPropagation(); toggleAiAdvisor('${id}')">
+            <i class="fas fa-chevron-${isHidden ? 'down' : 'up'}" id="ai-arrow-${id}"></i> ${isHidden ? 'Ver Parecer & Prompt' : 'Ocultar'}
+          </button>
+        </div>
+      </div>
+      <div id="ai-advisor-content-${id}" class="${isHidden ? 'hidden' : ''}" style="margin-top: 10px; border-top: 1px dashed #e879f9; padding-top: 8px;">
+        ${structuredBodyHtml}
+        <details style="margin-top: 8px; font-size: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 6px 8px;">
+          <summary style="font-weight: 700; color: #7e22ce; cursor: pointer;">
+            📜 Ver Prompt de IA Enviado ao Modelo
+          </summary>
+          <div style="margin-top: 6px; font-family: monospace; font-size: 11px; white-space: pre-wrap; background: #f3e8ff; padding: 8px; border-radius: 4px; color: #3b0764; max-height: 250px; overflow-y: auto;">
+<strong>--- SYSTEM PROMPT ---</strong>
+${escapeHtml(adv.systemPrompt || '')}
+
+<strong>--- USER PROMPT ---</strong>
+${escapeHtml(adv.userPrompt || '')}
+${adv.searchedQueries?.length ? `\n<strong>--- CONSULTAS / FERRAMENTAS EXECUTADAS ---</strong>\n${escapeHtml(adv.searchedQueries.join('\n'))}` : ''}
+          </div>
+        </details>
+      </div>
+    </div>
+  `;
+}
+
 function toggleAiAdvisor(id) {
   const content = document.getElementById(`ai-advisor-content-${id}`);
   const arrow = document.getElementById(`ai-arrow-${id}`);
@@ -1593,46 +1664,15 @@ async function fetchAiAdvisor(id, refresh = false) {
 
     if (res.success && res.data && res.data.response) {
       const adv = res.data;
-      const aiModelLabel = adv.model ? ` (${escapeHtml(adv.model)})` : '';
       if (container) {
-        container.innerHTML = `
-          <div style="background: #fdf4ff; border: 1.5px solid #d946ef; border-radius: 6px; padding: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleAiAdvisor('${id}')">
-              <div style="font-weight: 800; font-size: 13px; color: #86198f; display: flex; align-items: center; gap: 6px;">
-                <i class="fas fa-robot"></i> 🤖 Parecer da IA${aiModelLabel}
-                <span style="font-size: 11px; background: #fae8ff; color: #a21caf; border: 1px solid #e879f9; padding: 1px 6px; border-radius: 4px; font-weight: 700;">Mudae + Cultura Pop & AniList</span>
-              </div>
-              <div style="display: flex; gap: 6px;">
-                <button class="btn-retro btn-sm" id="btn-ai-refresh-${id}" style="font-size: 11px; padding: 2px 6px;" onclick="event.stopPropagation(); fetchAiAdvisor('${id}', true)" title="Reconsultar IA">
-                  <i class="fas fa-sync-alt"></i>
-                </button>
-                <button class="btn-retro btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="event.stopPropagation(); toggleAiAdvisor('${id}')">
-                  <i class="fas fa-chevron-up" id="ai-arrow-${id}"></i> Ocultar
-                </button>
-              </div>
-            </div>
-            <div id="ai-advisor-content-${id}" style="margin-top: 10px; border-top: 1px dashed #e879f9; padding-top: 8px;">
-              <div style="background: #ffffff; border: 1px solid #f0abfc; border-radius: 4px; padding: 10px; font-size: 13px; line-height: 1.5;">
-                ${Api.sanitizeBasicHtml(adv.response)}
-              </div>
-              <details style="margin-top: 8px; font-size: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 6px 8px;">
-                <summary style="font-weight: 700; color: #7e22ce; cursor: pointer;">
-                  📜 Ver Prompt de IA Enviado ao Modelo
-                </summary>
-                <div style="margin-top: 6px; font-family: monospace; font-size: 11px; white-space: pre-wrap; background: #f3e8ff; padding: 8px; border-radius: 4px; color: #3b0764; max-height: 250px; overflow-y: auto;">
-<strong>--- SYSTEM PROMPT ---</strong>
-${escapeHtml(adv.systemPrompt || '')}
-
-<strong>--- USER PROMPT ---</strong>
-${escapeHtml(adv.userPrompt || '')}
-${adv.searchedQueries?.length ? `\n<strong>--- CONSULTAS / FERRAMENTAS EXECUTADAS ---</strong>\n${escapeHtml(adv.searchedQueries.join('\n'))}` : ''}
-                </div>
-              </details>
-            </div>
-          </div>
-        `;
+        container.innerHTML = formatAiAdvisorCard(adv, id, false);
       }
-      Api.showToast('Parecer da IA obtido com sucesso!', '🤖');
+      if (adv.autoApproved) {
+        Api.showToast('🤖 Parecer obtido! A sugestão foi aprovada automaticamente pela IA!', '✨');
+        loadSuggestions();
+      } else {
+        Api.showToast('Parecer da IA obtido com sucesso!', '🤖');
+      }
     } else {
       Api.showToast(res.error?.message || 'Falha ao obter parecer da IA.', '❌');
       if (btn) {
