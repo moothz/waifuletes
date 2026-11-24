@@ -117,9 +117,9 @@ describe('🤖 RarityAdvisorService — Resiliência com tool_calls, modelos thi
 
     expect(llmRequests).toHaveLength(2);
     expect(llmRequests[0].tool_choice).toBe('auto');
-    expect(llmRequests[0].tools).toHaveLength(3);
+    expect(llmRequests[0].tools).toHaveLength(5);
     // 2ª chamada DEVE manter tools e travar tool_choice em 'none' para impedir tool call oculta no vLLM
-    expect(llmRequests[1].tools).toHaveLength(3);
+    expect(llmRequests[1].tools).toHaveLength(5);
     expect(llmRequests[1].tool_choice).toBe('none');
     expect(llmRequests[1].messages.at(-1)).toMatchObject({
       role: 'user',
@@ -525,5 +525,195 @@ describe('🌐 Rota HTTP GET /api/admin/suggestions/:id/ai-advisor — Tratament
     expect(body.success).toBe(true);
     expect(body.data?.response).toContain('PROCEDENTE');
     expect(body.data?.model).toBe('qwen3.8:27b-uncensored');
+  });
+});
+
+describe('📋 Parecer estruturado via JSON Schema e consenso com usuário', () => {
+  it('deve parsear JSON estruturado retornado pelo LLM e calcular agreesWithUser corretamente', () => {
+    const advisor = new RarityAdvisorService();
+
+    const jsonOutput = JSON.stringify({
+      verdict: 'PROCEDENTE',
+      recommendedRarity: 'RARE',
+      balizadorMudae: '#25000 (Faixa Raro)',
+      popCultureStatus: 'Protagonista de série cult com grande alcance',
+      factsChecked: 'Personagem principal da animação',
+      claimAnalysis: 'Motivo do usuário é totalmente condizente com a obra',
+      justification: 'A raridade RARE reflete perfeitamente a estatura da personagem.',
+    });
+
+    // Caso 1: usuário sugeriu RARE e IA recomenda RARE -> agreesWithUser = true
+    const parsedAgreed = advisor.parseEvaluationOutput(jsonOutput, 'RARE');
+    expect(parsedAgreed.structured).not.toBeNull();
+    expect(parsedAgreed.structured?.verdict).toBe('PROCEDENTE');
+    expect(parsedAgreed.structured?.recommendedRarity).toBe('RARE');
+    expect(parsedAgreed.structured?.agreesWithUser).toBe(true);
+    expect(parsedAgreed.html).toContain('Parecer da IA');
+    expect(parsedAgreed.html).toContain('Aprovado automaticamente');
+
+    // Caso 2: usuário sugeriu LEGENDARY e IA recomenda RARE -> agreesWithUser = false
+    const parsedDiverged = advisor.parseEvaluationOutput(jsonOutput, 'LEGENDARY');
+    expect(parsedDiverged.structured?.agreesWithUser).toBe(false);
+    expect(parsedDiverged.html).not.toContain('Aprovado automaticamente');
+  });
+});
+
+describe('🛡️ Fallback automático de LLM contra erro 502 / Bad Gateway', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('deve alternar para o provedor de fallback quando o provedor primário responder HTTP 502', async () => {
+    const advisor = new RarityAdvisorService();
+    // Força URLs distintas para teste de chaveamento de fallback
+    (advisor as any).url = 'https://ai.moothz.com/vllm/v1';
+    (advisor as any).fallbackUrl = 'https://lucia.ctg.ufsm.br/v1';
+
+    const calledUrls: string[] = [];
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      calledUrls.push(urlStr);
+
+      if (urlStr.startsWith('https://ai.moothz.com')) {
+        // Simula Cloudflare 502 Bad Gateway
+        return {
+          ok: false,
+          status: 502,
+          text: async () => '502 Bad Gateway (Cloudflare)',
+        };
+      }
+
+      if (urlStr.startsWith('https://lucia.ctg.ufsm.br')) {
+        // Fallback responde com sucesso
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            model: 'gemma4',
+            choices: [
+              {
+                finish_reason: 'stop',
+                message: {
+                  role: 'assistant',
+                  content: JSON.stringify({
+                    verdict: 'PROCEDENTE',
+                    recommendedRarity: 'EPIC',
+                    justification: 'Personagem muito popular e influente.',
+                  }),
+                },
+              },
+            ],
+          }),
+        };
+      }
+
+      return { ok: false, status: 404, text: async () => 'not found' };
+    });
+
+    const result = await advisor.evaluateRaritySuggestionDetailed({
+      id: 'sug_test_fallback_502',
+      type: 'RARITY',
+      characterName: 'Zoro',
+      series: 'One Piece',
+      currentRarity: 'RARE',
+      suggestedRarity: 'EPIC',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.evaluation).not.toBeNull();
+    expect(result.evaluation?.usedFallback).toBe(true);
+    expect(result.evaluation?.structured?.recommendedRarity).toBe('EPIC');
+    expect(result.evaluation?.structured?.agreesWithUser).toBe(true);
+
+    // Garante que tentou o primário primeiro e depois o fallback
+    expect(calledUrls.some((u) => u.startsWith('https://ai.moothz.com'))).toBe(true);
+    expect(calledUrls.some((u) => u.startsWith('https://lucia.ctg.ufsm.br'))).toBe(true);
+  });
+});
+
+describe('🎬 Ferramentas de contexto para mídias não-anime (IMDb e IGDB)', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('deve consultar e formatar informações de filmes/séries no IMDb via OMDb', async () => {
+    const advisor = new RarityAdvisorService();
+    (advisor as any).omdbApiKey = 'mock_omdb_key';
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes('omdbapi.com')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            Title: 'The Matrix',
+            Year: '1999',
+            Type: 'movie',
+            Genre: 'Action, Sci-Fi',
+            Director: 'Lana Wachowski, Lilly Wachowski',
+            Actors: 'Keanu Reeves, Laurence Fishburne',
+            imdbRating: '8.7',
+            imdbVotes: '2,000,000',
+            Plot: 'A computer programmer discovers a dystopian world.',
+            Response: 'True',
+          }),
+        };
+      }
+      return { ok: false, status: 404 };
+    });
+
+    const res = await advisor.searchImdbInfo('The Matrix');
+    expect(res).toContain('[IMDb] The Matrix (1999, movie)');
+    expect(res).toContain('8.7/10');
+    expect(res).toContain('Keanu Reeves');
+  });
+
+  it('deve consultar e formatar métricas de jogos eletrônicos no IGDB com token OAuth', async () => {
+    const advisor = new RarityAdvisorService();
+    (advisor as any).twitchClientId = 'mock_client_id';
+    (advisor as any).twitchClientSecret = 'mock_client_secret';
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes('id.twitch.tv/oauth2/token')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: 'mock_token_abc',
+            expires_in: 3600,
+          }),
+        };
+      }
+      if (urlStr.includes('api.igdb.com/v4/games')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              name: 'The Witcher 3: Wild Hunt',
+              first_release_date: 1431993600,
+              total_rating: 92.8,
+              total_rating_count: 5500,
+              genres: [{ name: 'Role-playing (RPG)' }],
+              platforms: [{ name: 'PC' }, { name: 'PlayStation 4' }],
+              summary: 'Open world action RPG with Geralt of Rivia.',
+            },
+          ],
+        };
+      }
+      return { ok: false, status: 404 };
+    });
+
+    const res = await advisor.searchGameInfo('The Witcher 3');
+    expect(res).toContain('The Witcher 3: Wild Hunt (2015)');
+    expect(res).toContain('93/100');
+    expect(res).toContain('Role-playing (RPG)');
   });
 });
