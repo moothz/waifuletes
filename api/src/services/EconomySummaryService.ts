@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import { DomainError } from '../errors/DomainError.js';
 
 /**
  * Economia de Zinthos (tabela `users.kakera` + extrato `kakera_transactions`) para o painel da economia
@@ -20,9 +21,9 @@ export const PLAYERS_MAX_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
 export const FUTURE_TOLERANCE_MS = 60_000;
 
 /**
- * Teto de cada consulta das rotas da economia (`SET LOCAL statement_timeout`), abaixo do timeout de 60 s da
- * ravena: uma consulta que passe disso é cancelada no Postgres em vez de seguir rodando depois que a ravena
- * desistiu. Não há teto de janela: a carga inicial da ravena pede [0, início do backfill) de uma vez.
+ * Teto de cada pedido das rotas da economia (soma das consultas, por `statement_timeout` decrescente), abaixo
+ * do timeout de 60 s da ravena: um pedido que passe disso é cancelado no Postgres em vez de seguir rodando depois
+ * que a ravena desistiu. Não há teto de janela: a carga inicial da ravena pede [0, início do backfill) de uma vez.
  */
 export const ECONOMY_STATEMENT_TIMEOUT_MS = 50_000;
 
@@ -193,21 +194,47 @@ const numOrNull = (v: unknown): number | null => (v === null || v === undefined 
 const tsFromMs = (ms: number) => Prisma.sql`(TIMESTAMP '1970-01-01 00:00:00' + (${BigInt(ms)}::bigint * INTERVAL '1 millisecond'))`;
 
 export class EconomySummaryService {
-  constructor(private prisma: PrismaClient) {}
+  private readonly running = new Set<'summary' | 'players'>();
+
+  constructor(
+    private prisma: PrismaClient,
+    private timeoutMs: number = ECONOMY_STATEMENT_TIMEOUT_MS
+  ) {}
 
   /**
-   * Roda as consultas num único retrato (REPEATABLE READ), em transação somente leitura e com
-   * statement_timeout de ECONOMY_STATEMENT_TIMEOUT_MS. Devolve só os resultados das consultas.
+   * Roda as consultas num único retrato (REPEATABLE READ), em transação somente leitura, uma transação por
+   * rota de cada vez (senão ECONOMY_BUSY) e com teto de `timeoutMs` para a soma das consultas. Devolve só os
+   * resultados das consultas.
    */
-  private async readOnlySnapshot(queries: any[]): Promise<any[][]> {
-    const setup = [
-      this.prisma.$executeRawUnsafe('SET TRANSACTION READ ONLY'),
-      this.prisma.$executeRawUnsafe(`SET LOCAL statement_timeout = ${Math.trunc(ECONOMY_STATEMENT_TIMEOUT_MS)}`),
-    ];
-    const results = (await this.prisma.$transaction([...setup, ...queries] as any, {
-      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-    })) as any[];
-    return results.slice(setup.length) as any[][];
+  private async readOnlySnapshot(route: 'summary' | 'players', queries: any[]): Promise<any[][]> {
+    if (this.running.has(route)) {
+      throw new DomainError('ECONOMY_BUSY', 'Já há um pedido desta rota em andamento. Tente de novo em instantes.', 429);
+    }
+    this.running.add(route);
+    try {
+      const setup = [
+        this.prisma.$executeRawUnsafe('SET TRANSACTION READ ONLY'),
+        this.prisma.$executeRawUnsafe(`SET LOCAL statement_timeout = ${Math.trunc(this.timeoutMs)}`),
+      ];
+      const steps = queries.flatMap((query, i) => (i === 0 ? [query] : [this.useRemainingTimeout(), query]));
+      const results = (await this.prisma.$transaction([...setup, ...steps] as any, {
+        isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+      })) as any[];
+      return results.slice(setup.length).filter((_, i) => i % 2 === 0) as any[][];
+    } finally {
+      this.running.delete(route);
+    }
+  }
+
+  private useRemainingTimeout() {
+    return this.prisma.$queryRaw`
+      SELECT set_config(
+        'statement_timeout',
+        GREATEST(1, ${Math.trunc(this.timeoutMs)}::int
+          - (EXTRACT(EPOCH FROM clock_timestamp() - transaction_timestamp()) * 1000)::int)::text,
+        true
+      )
+    `;
   }
 
   async getSummary(
@@ -362,7 +389,7 @@ export class EconomySummaryService {
     const queries: any[] = [flowsQuery, soulmateQuery];
     if (includeBalances) queries.push(totalsQuery, holdersQuery, quintilesQuery);
     if (includeReceived) queries.push(receivedQuery);
-    const results = await this.readOnlySnapshot(queries);
+    const results = await this.readOnlySnapshot('summary', queries);
     const [flowRows, soulmateRows, totalsRows = [], holdersRows = [], quintileRows = [], receivedRows = []] = results;
 
     const flows: EconomyFlow[] = flowRows.map((r) => ({
@@ -489,7 +516,7 @@ export class EconomySummaryService {
     `;
 
     // Um único retrato (REPEATABLE READ): todo jogador com fluxo na janela está em players.
-    const [playerRows, flowRows] = await this.readOnlySnapshot([playersQuery, flowsQuery]);
+    const [playerRows, flowRows] = await this.readOnlySnapshot('players', [playersQuery, flowsQuery]);
 
     return {
       currency: 'zinthos',

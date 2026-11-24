@@ -113,8 +113,8 @@ status HTTP (ou o `statusCode` do erro, no `handler`) é < 500, e remove `http.r
 | `ai_advisor lookup` | `waifu.ai.cache` (hit/miss), `waifu.ai.refresh` | — |
 | `hosting_fee run` | `waifu.hosting.dry_run`, `force`, `users_evaluated`, `users_charged`, `already_charged`, `failed_users`, `waifus_confiscated` | — |
 | `inactivity projection` | `waifu.inactivity.users_evaluated`, `waifu.inactivity.users_projected` | — |
-| `economy summary` | `GET /internal/economy/summary` (resumo da economia para o painel da Ravena): `waifu.economy.window_ms`, `waifu.economy.full_history` (from=0), `waifu.economy.received`, `waifu.economy.balances`, `waifu.economy.flow_rows`, `waifu.economy.soulmate_divorces`, `waifu.economy.holders`. Sem ID de jogador; janela inválida = rejeição `INVALID_WINDOW` | — |
-| `economy players` | `GET /internal/economy/players` (recorte por jogador, janela de até 8 dias): `waifu.economy.window_ms`, `waifu.economy.players`, `waifu.economy.flow_rows`. Sem ID de jogador no span | — |
+| `economy summary` | `GET /internal/economy/summary` (resumo da economia para o painel da Ravena): `waifu.economy.window_ms`, `waifu.economy.full_history` (from=0), `waifu.economy.received`, `waifu.economy.balances`, `waifu.economy.flow_rows`, `waifu.economy.soulmate_divorces`, `waifu.economy.holders`. Sem ID de jogador; janela inválida = rejeição `INVALID_WINDOW`; outro resumo em andamento = rejeição `ECONOMY_BUSY` | — |
+| `economy players` | `GET /internal/economy/players` (recorte por jogador, janela de até 8 dias): `waifu.economy.window_ms`, `waifu.economy.players`, `waifu.economy.flow_rows`. Sem ID de jogador no span; outro recorte em andamento = rejeição `ECONOMY_BUSY` | — |
 | `economy params` | `GET /internal/economy/params` (parâmetros de balanceamento para o painel da Ravena): `waifu.economy.params` (quantos parâmetros a rota devolveu). Sem ID de jogador | — |
 
 Falha da compensação do mercado (estorno externo não devolvido) sempre marca o span como ERROR

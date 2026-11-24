@@ -79,8 +79,8 @@ Ao enviar `userId` e `groupId` nas chamadas `/roll`, `/marry`, `/kakera/daily`, 
 | `GET` | `/kakera/:userId` | Consulta saldo de Kakera |
 | `POST` | `/kakera/daily` | Resgata a recompensa diária de Kakera |
 | `GET` | `/kakera/:userId/history` | Extrato histórico de transações |
-| `GET` | `/internal/economy/summary?from=&to=[&received=1][&balances=0]` | Resumo agregado da economia de Zinthos para o painel da Ravena: fluxos por hora e motivo, retrato dos saldos e quintos, ciclo da alma gêmea (`soulmateCycle`). Consultas em transação somente leitura com teto de 50 s |
-| `GET` | `/internal/economy/players?from=&to=` | Recorte por jogador para o painel da Ravena (saldo atual, saldo no fim da janela e fluxos por motivo), janela de até 8 dias |
+| `GET` | `/internal/economy/summary?from=&to=[&received=1][&balances=0]` | Resumo agregado da economia de Zinthos para o painel da Ravena: fluxos por hora e motivo, retrato dos saldos e quintos, ciclo da alma gêmea (`soulmateCycle`). Consultas em transação somente leitura com teto de 50 s por pedido. Um resumo por vez: enquanto um roda, outro recebe `429 ECONOMY_BUSY` (tentar de novo depois) |
+| `GET` | `/internal/economy/players?from=&to=` | Recorte por jogador para o painel da Ravena (saldo atual, saldo no fim da janela e fluxos por motivo), janela de até 8 dias. Mesmo teto de 50 s por pedido e mesma regra de um pedido por vez (`429 ECONOMY_BUSY`), com vaga separada da do resumo |
 
 ---
 
