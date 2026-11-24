@@ -16,11 +16,12 @@ export const privateEconomyRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/internal/economy/summary', {
     schema: {
       description:
-        'Resumo agregado da economia de Zinthos para o painel da Ravena (fluxos por hora e motivo, retrato dos saldos e quintos, ciclo da alma gêmea por hora). Sem dados por jogador.',
+        'Resumo agregado da economia de Zinthos para o painel da Ravena (fluxos por hora e motivo, retrato dos saldos e quintos, ciclo da alma gêmea por hora). Sem dados por jogador. Um pedido por vez: enquanto um roda, outro recebe 429 ECONOMY_BUSY.',
       tags: ['Kakera & Economia (Privado)'],
       querystring: {
         type: 'object',
         required: ['from', 'to'],
+        additionalProperties: false,
         properties: {
           from: { type: 'integer', minimum: 0, maximum: MAX_EPOCH_MS },
           to: { type: 'integer', minimum: 1, maximum: MAX_EPOCH_MS },
@@ -71,11 +72,12 @@ export const privateEconomyRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/internal/economy/players', {
     schema: {
       description:
-        'Recorte por jogador da economia de Zinthos para o painel da Ravena: saldo atual, saldo no fim da janela e fluxos por motivo em [from, to). Janela de até 8 dias.',
+        'Recorte por jogador da economia de Zinthos para o painel da Ravena: saldo atual, saldo no fim da janela e fluxos por motivo em [from, to). Janela de até 8 dias. Um pedido por vez: enquanto um roda, outro recebe 429 ECONOMY_BUSY.',
       tags: ['Kakera & Economia (Privado)'],
       querystring: {
         type: 'object',
         required: ['from', 'to'],
+        additionalProperties: false,
         properties: {
           from: { type: 'integer', minimum: 0, maximum: MAX_EPOCH_MS },
           to: { type: 'integer', minimum: 1, maximum: MAX_EPOCH_MS },

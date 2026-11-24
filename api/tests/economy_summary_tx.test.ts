@@ -33,9 +33,9 @@ describe('rotas da economia: transação somente leitura e com teto de tempo', (
   });
 
   it.each([
-    ['getSummary', (s: EconomySummaryService) => s.getSummary(0, 1000, 1000, { received: true }), 2 + 6],
-    ['getSummary balances=0', (s: EconomySummaryService) => s.getSummary(0, 1000, 1000, { balances: false }), 2 + 2],
-    ['getPlayers', (s: EconomySummaryService) => s.getPlayers(0, 1000, 1000), 2 + 2],
+    ['getSummary', (s: EconomySummaryService) => s.getSummary(0, 1000, 1000, { received: true }), 2 + 6 + 5],
+    ['getSummary balances=0', (s: EconomySummaryService) => s.getSummary(0, 1000, 1000, { balances: false }), 2 + 2 + 1],
+    ['getPlayers', (s: EconomySummaryService) => s.getPlayers(0, 1000, 1000), 2 + 2 + 1],
   ])('%s abre READ ONLY + statement_timeout antes das consultas, em REPEATABLE READ', async (_label, run, size) => {
     const { prisma, calls } = fakePrisma();
     await run(new EconomySummaryService(prisma));
