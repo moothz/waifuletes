@@ -86,6 +86,15 @@ const IGNORED_CONFIG_KEYS: Record<string, string> = {
   UPSTREAM_API_URL: 'URL',
   UPSTREAM_API_KEY: 'segredo',
   REMOTE_MEDIA_BASE_URL: 'URL',
+  COTA_BASE_DAILY_ZINTHOS: 'já exposto como market.BASE_DAILY_ZINTHOS',
+  COTA_RARITY_DAYS: 'já exposto como market.RARITY_DAYS',
+  COTA_DAYS_COMMON: 'já exposto como market.RARITY_DAYS.COMMON',
+  COTA_DAYS_UNCOMMON: 'já exposto como market.RARITY_DAYS.UNCOMMON',
+  COTA_DAYS_RARE: 'já exposto como market.RARITY_DAYS.RARE',
+  COTA_DAYS_EPIC: 'já exposto como market.RARITY_DAYS.EPIC',
+  COTA_DAYS_LEGENDARY: 'já exposto como market.RARITY_DAYS.LEGENDARY',
+  COTA_MARRIED_PROGRESSION_WEIGHTS: 'já exposto como market.MARRIED_KEY_PROGRESSION_WEIGHTS',
+  SOULMATE_RANKING_SCORE: 'pontuação de ranking de soulmates',
 };
 
 /** Achata como a rota: objetos viram NOME.CHAVE, arrays NOME.0, null vira "none". */

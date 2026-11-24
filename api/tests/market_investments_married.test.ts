@@ -8,13 +8,18 @@ import { calculateDivorceRefund, SOULMATE_DIVORCE_VALUES, MARRIED_KEY_PROGRESSIO
 import { DomainError } from '../src/errors/DomainError.js';
 
 describe('💍 Reformulação de Cotas, Casamento e Soulmate', () => {
-  it('deve ter BASE_DAILY_ZINTHOS reduzido em 30% (21.000 Zinthos)', () => {
+  it('deve ter BASE_DAILY_ZINTHOS e RARITY_DAYS com novos valores escalonados', () => {
     expect(BASE_DAILY_ZINTHOS).toBe(21000);
-    expect(RARITY_DAYS.COMMON * BASE_DAILY_ZINTHOS).toBe(315000); // 15 * 21k
+    expect(RARITY_DAYS.COMMON).toBe(50);
+    expect(RARITY_DAYS.UNCOMMON).toBe(65);
+    expect(RARITY_DAYS.RARE).toBe(80);
+    expect(RARITY_DAYS.EPIC).toBe(100);
+    expect(RARITY_DAYS.LEGENDARY).toBe(210);
+    expect(RARITY_DAYS.COMMON * BASE_DAILY_ZINTHOS).toBe(1050000); // 50 * 21k
     expect(RARITY_DAYS.LEGENDARY * BASE_DAILY_ZINTHOS).toBe(4410000); // 210 * 21k
   });
 
-  it('deve aplicar 80% de desconto na cotação para o usuário cônjuge', async () => {
+  it('deve aplicar desconto progressivo na cotação para o usuário cônjuge (peso 0.40 / 60% OFF para chave 2->3)', async () => {
     const mockCharacter = {
       id: 'makima',
       name: 'Makima',
@@ -60,12 +65,12 @@ describe('💍 Reformulação de Cotas, Casamento e Soulmate', () => {
 
     const service = new MarketInvestmentService(mockPrisma, mockCharacterService);
 
-    // Cotação para o próprio cônjuge (keys = 2 -> peso 0.08, 92% OFF)
+    // Cotação para o próprio cônjuge (keys = 2 -> peso 0.40, 60% OFF)
     const quoteSpouse = await service.getCharacterQuote('makima', 'user-spouse');
     expect(quoteSpouse.character.isOwner).toBe(true);
     expect(quoteSpouse.character.isSoulmate).toBe(false);
-    expect(quoteSpouse.pricing.discountPercent).toBe(92);
-    expect(quoteSpouse.pricing.cotaPrice).toBe(Math.ceil(Math.round(quoteSpouse.pricing.baseCotaPrice * 4 * 0.08) / 4));
+    expect(quoteSpouse.pricing.discountPercent).toBe(60);
+    expect(quoteSpouse.pricing.cotaPrice).toBe(Math.ceil(Math.round(quoteSpouse.pricing.baseCotaPrice * 4 * 0.40) / 4));
 
     // Cotação para terceiro
     const quoteOther = await service.getCharacterQuote('makima', 'user-stranger');
@@ -178,9 +183,14 @@ describe('💍 Reformulação de Cotas, Casamento e Soulmate', () => {
     ).rejects.toThrow('Apenas o cônjuge pode investir em personagens casados.');
   });
 
-  it('deve garantir que a soma dos pesos de evolução (36 cotas / 9 chaves) seja 1.20x e que o divórcio nunca gere lucro', () => {
+  it('deve garantir que a última cota para Soulmate tenha 5x o valor anterior (peso 1.00) e soma total 6.00x', () => {
+    expect(MARRIED_KEY_PROGRESSION_WEIGHTS[8]).toBe(1.00); // 5x o peso anterior de 0.20
+    expect(MARRIED_KEY_PROGRESSION_WEIGHTS).toEqual([
+      0.35, 0.40, 0.50, 0.55, 0.65, 0.75, 0.85, 0.95, 1.00,
+    ]);
+
     const totalWeights = MARRIED_KEY_PROGRESSION_WEIGHTS.reduce((acc, w) => acc + w, 0);
-    expect(Number(totalWeights.toFixed(2))).toBe(1.20);
+    expect(Number(totalWeights.toFixed(2))).toBe(6.00);
 
     // Valida para todas as raridades que o custo total investido supera o reembolso líquido de divórcio Soulmate
     const rarities: ('COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY')[] = [
@@ -214,10 +224,10 @@ describe('💍 Reformulação de Cotas, Casamento e Soulmate', () => {
         // O custo total investido deve ser MAIOR que o reembolso líquido de divórcio (garantia anti-lucro)
         expect(totalCostInvested).toBeGreaterThan(soulmateDivorce.netKakera);
 
-        // O retorno de divórcio recupera até 80% do valor investido
+        // O retorno de divórcio recupera uma fração menor do investimento após o rebalanceamento
         const recoveryRatio = soulmateDivorce.netKakera / totalCostInvested;
-        expect(recoveryRatio).toBeLessThan(0.80);
-        expect(recoveryRatio).toBeGreaterThan(0.70);
+        expect(recoveryRatio).toBeLessThan(0.25);
+        expect(recoveryRatio).toBeGreaterThan(0.10);
       }
     }
   });

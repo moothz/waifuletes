@@ -2,18 +2,12 @@ import { PrismaClient, Rarity, KakeraReason, OfferStatus } from '@prisma/client'
 import { Redis } from 'ioredis';
 import { DomainError } from '../errors/DomainError.js';
 import { CharacterService } from './CharacterService.js';
-import { config, ravenaMarketHeaders } from '../config.js';
+import { config, ravenaMarketHeaders, cotaRarityDays } from '../config.js';
 import { calculateRankMultiplier, calculateCharacterSharePricing } from '../utils/rarityCalculator.js';
 
-export const BASE_DAILY_ZINTHOS = 21000;
+export const BASE_DAILY_ZINTHOS = config.COTA_BASE_DAILY_ZINTHOS ?? 21000;
 
-export const RARITY_DAYS: Record<Rarity, number> = {
-  COMMON: 15,
-  UNCOMMON: 30,
-  RARE: 60,
-  EPIC: 100,
-  LEGENDARY: 210,
-};
+export const RARITY_DAYS: Record<Rarity, number> = cotaRarityDays;
 
 export const BASE_MONEY_SUPPLY = 4000000; // M0 = 4M Zinthos
 export const INFLATION_ALPHA = 0.25; // Reduzido de 0.5 para 0.25 (metade da taxa de inflação, ~49%)

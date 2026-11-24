@@ -1,4 +1,5 @@
 import { Rarity } from '@prisma/client';
+import { config, cotaRarityDays, marriedProgressionWeights } from '../config.js';
 
 export const RARITY_BASE_WEIGHTS: Record<Rarity, number> = {
   LEGENDARY: 2.5,
@@ -38,13 +39,13 @@ export const RARITY_KEY_DIVORCE_BONUS: Record<Rarity, number> = {
   LEGENDARY: 75000,
 };
 
-// Valores de divórcio equivalentes a 4 COTAS exclusivo para SOULMATES (100% do preço base de mercado da waifu: RARITY_DAYS * 21.000 Zinthos)
+// Valores de divórcio equivalentes a 4 COTAS exclusivo para SOULMATES (100% do preço base de mercado da waifu: RARITY_DAYS * BASE_DAILY_ZINTHOS)
 export const SOULMATE_DIVORCE_VALUES: Record<Rarity, number> = {
-  COMMON: 315000,      // 15 dias x 21.000 Zinthos (4 cotas)
-  UNCOMMON: 630000,    // 30 dias x 21.000 Zinthos (4 cotas)
-  RARE: 1260000,       // 60 dias x 21.000 Zinthos (4 cotas)
-  EPIC: 2100000,       // 100 dias x 21.000 Zinthos (4 cotas)
-  LEGENDARY: 4410000,  // 210 dias x 21.000 Zinthos (4 cotas)
+  COMMON: cotaRarityDays.COMMON * (config.COTA_BASE_DAILY_ZINTHOS ?? 21000),
+  UNCOMMON: cotaRarityDays.UNCOMMON * (config.COTA_BASE_DAILY_ZINTHOS ?? 21000),
+  RARE: cotaRarityDays.RARE * (config.COTA_BASE_DAILY_ZINTHOS ?? 21000),
+  EPIC: cotaRarityDays.EPIC * (config.COTA_BASE_DAILY_ZINTHOS ?? 21000),
+  LEGENDARY: cotaRarityDays.LEGENDARY * (config.COTA_BASE_DAILY_ZINTHOS ?? 21000),
 };
 
 export const SOULMATE_KEY_KAKERA_BONUS = 21000; // 21.000 Zinthos de bônus por chave para soulmates
@@ -104,21 +105,10 @@ export function calculateRankMultiplier(position: number, total: number): number
 /**
  * Pesos progressivos de custo para evolução de chaves via cotas de cônjuge (chaves 1 -> 2 até 9 -> 10).
  * Quanto mais chaves o jogador possui no personagem, mais caras ficam as cotas.
- * A soma total dos 9 níveis até Soulmate é 1.20x o valor de referência (garantindo que o custo total
- * de todas as 36 cotas para virar Soulmate seja ~1.20x o valor de divórcio da Soulmate,
- * permitindo ao jogador recuperar ~79.2% do valor investido caso decida divorciar, sem possibilidade de lucro/infinito).
+ * A progressão sobe gradativamente até a última cota da 10ª chave (Soulmate) atingir o valor de referência
+ * integral (peso 1.0, ~5x o valor anterior), parametrizável via .env.
  */
-export const MARRIED_KEY_PROGRESSION_WEIGHTS = [
-  0.07, // Chave 1 -> 2 (93% OFF)
-  0.08, // Chave 2 -> 3 (92% OFF)
-  0.10, // Chave 3 -> 4 (90% OFF)
-  0.11, // Chave 4 -> 5 (89% OFF)
-  0.13, // Chave 5 -> 6 (87% OFF)
-  0.15, // Chave 6 -> 7 (85% OFF)
-  0.17, // Chave 7 -> 8 (83% OFF)
-  0.19, // Chave 8 -> 9 (81% OFF)
-  0.20, // Chave 9 -> 10 / Soulmate (80% OFF)
-];
+export const MARRIED_KEY_PROGRESSION_WEIGHTS: number[] = marriedProgressionWeights;
 
 export interface CharacterSharePricingParams {
   baseRarity: Rarity;

@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { CharacterService } from '../../services/CharacterService.js';
 import { isTrustedRequest } from '../../plugins/auth.js';
+import { config } from '../../config.js';
 
 export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
   const characterService = new CharacterService(fastify.prisma, fastify.redis);
@@ -273,9 +274,9 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
               -- Lendário SEM Diminishing Returns (200 pts integrais sempre)
               "legendaryCount" * 200 +
 
-              -- Chaves e Soulmates
+              -- Chaves e Soulmates (pontuação reduzida em 30%: 2.100 pts)
               "totalKeys" * 1 +
-              "totalSoulmates" * 3000
+              "totalSoulmates" * ${config.SOULMATE_RANKING_SCORE ?? 2100}
             )::int as "collectionPoints"
           FROM user_harem_stats
           ORDER BY "collectionPoints" DESC, "totalMarriages" DESC
