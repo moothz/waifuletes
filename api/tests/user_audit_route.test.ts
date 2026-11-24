@@ -72,7 +72,7 @@ describe('User Audit Web Route (GET /api/admin/users/:userId/audit)', () => {
       },
     });
 
-    // Cria 1 transação de kakera
+    // Cria 1 transação de kakera (ADMIN_GRANT)
     await server.prisma.kakeraTransaction.create({
       data: {
         userId: testUserId,
@@ -81,10 +81,37 @@ describe('User Audit Web Route (GET /api/admin/users/:userId/audit)', () => {
         metadata: { characterName: 'Audit Test Character' },
       },
     });
+
+    // Cria 1 divórcio
+    await server.prisma.kakeraTransaction.create({
+      data: {
+        userId: testUserId,
+        amount: 8500,
+        reason: 'DIVORCE',
+        metadata: {
+          characterId: testCharacterId,
+          characterName: 'Audit Test Character',
+          rarity: 'LEGENDARY',
+          keysAccumulated: 2,
+          penaltyRate: '5%',
+          dailyDivorceNumber: 1,
+        },
+      },
+    });
+
+    // Cria 1 soulmate
+    await server.prisma.soulmate.create({
+      data: {
+        userId: testUserId,
+        characterId: testCharacterId,
+        alias: 'Amada Teste',
+      },
+    });
   });
 
   afterAll(async () => {
     if (server?.prisma) {
+      await server.prisma.soulmate.deleteMany({ where: { userId: testUserId } });
       await server.prisma.haremEntry.deleteMany({ where: { userId: testUserId } });
       await server.prisma.marketListing.deleteMany({ where: { userId: testUserId } });
       await server.prisma.kakeraTransaction.deleteMany({ where: { userId: testUserId } });
@@ -130,11 +157,12 @@ describe('User Audit Web Route (GET /api/admin/users/:userId/audit)', () => {
     expect(user.id).toBe(testUserId);
     expect(summary.days).toBe(30);
     expect(summary.marriagesCount).toBeGreaterThanOrEqual(1);
+    expect(summary.divorcesCount).toBeGreaterThanOrEqual(1);
     expect(summary.marriagesByRarity.LEGENDARY).toBeGreaterThanOrEqual(1);
     expect(summary.listingsCount).toBeGreaterThanOrEqual(1);
 
-    expect(items.length).toBeGreaterThanOrEqual(3);
-    expect(pagination.total).toBeGreaterThanOrEqual(3);
+    expect(items.length).toBeGreaterThanOrEqual(4);
+    expect(pagination.total).toBeGreaterThanOrEqual(4);
 
     // Valida estrutura dos itens
     const marriageItem = items.find((i: any) => i.category === 'MARRIAGE');
@@ -142,6 +170,17 @@ describe('User Audit Web Route (GET /api/admin/users/:userId/audit)', () => {
     expect(marriageItem.character.name).toBe('Audit Test Character');
     expect(marriageItem.character.rarity).toBe('LEGENDARY');
     expect(marriageItem.counterpart.group).toBe('test_group_audit');
+
+    const divorceItem = items.find((i: any) => i.category === 'DIVORCE');
+    expect(divorceItem).toBeDefined();
+    expect(divorceItem.badge.label).toBe('Divórcio');
+    expect(divorceItem.character.name).toBe('Audit Test Character');
+    expect(divorceItem.details).toContain('Divórcio #1 no dia');
+
+    const soulmateItem = items.find((i: any) => i.category === 'SOULMATE');
+    expect(soulmateItem).toBeDefined();
+    expect(soulmateItem.badge.label).toBe('Soulmate');
+    expect(soulmateItem.details).toContain('Amada Teste');
 
     const listingItem = items.find((i: any) => i.category === 'LISTING');
     expect(listingItem).toBeDefined();
@@ -160,6 +199,35 @@ describe('User Audit Web Route (GET /api/admin/users/:userId/audit)', () => {
     expect(body.data.items.every((i: any) => i.category === 'MARRIAGE')).toBe(true);
   });
 
+  it('deve filtrar apenas divórcios quando type=DIVORCES', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/admin/users/${testUserId}/audit?days=30&type=DIVORCES`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.items.length).toBeGreaterThanOrEqual(1);
+    expect(body.data.items.every((i: any) => i.category === 'DIVORCE')).toBe(true);
+    expect(body.data.items[0].badge.label).toBe('Divórcio');
+    expect(body.data.items[0].character.name).toBe('Audit Test Character');
+  });
+
+  it('deve filtrar apenas soulmates quando type=SOULMATES', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/admin/users/${testUserId}/audit?days=30&type=SOULMATES`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.items.length).toBeGreaterThanOrEqual(1);
+    expect(body.data.items.every((i: any) => i.category === 'SOULMATE')).toBe(true);
+    expect(body.data.items[0].details).toContain('Amada Teste');
+  });
+
   it('deve filtrar apenas anúncios quando type=LISTINGS', async () => {
     const res = await server.inject({
       method: 'GET',
@@ -170,6 +238,32 @@ describe('User Audit Web Route (GET /api/admin/users/:userId/audit)', () => {
     const body = JSON.parse(res.body);
     expect(body.success).toBe(true);
     expect(body.data.items.every((i: any) => i.category === 'LISTING')).toBe(true);
+  });
+
+  it('deve filtrar transações quando type=TRANSACTIONS', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/admin/users/${testUserId}/audit?days=30&type=TRANSACTIONS`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.items.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('deve respeitar filtro de período days=0 (Hoje)', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/admin/users/${testUserId}/audit?days=0`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.summary.days).toBe(0);
+    // Atividades criadas hoje nos testes devem aparecer
+    expect(body.data.items.length).toBeGreaterThanOrEqual(1);
   });
 
   it('deve respeitar filtro de período (ex: days=15)', async () => {

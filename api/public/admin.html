@@ -624,10 +624,13 @@
             <label style="font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 5px;">
               <i class="fas fa-calendar-alt" style="color: #64748b;"></i> Período:
               <select id="audit-filter-days" class="retro-input" style="height: 30px; padding: 2px 8px; font-size: 12px; font-weight: 700; width: auto;">
+                <option value="0">Hoje</option>
+                <option value="7">Últimos 7 dias</option>
                 <option value="15">Últimos 15 dias</option>
                 <option value="30" selected>Últimos 30 dias</option>
                 <option value="60">Últimos 60 dias</option>
                 <option value="90">Últimos 90 dias</option>
+                <option value="365">Último ano (365 dias)</option>
               </select>
             </label>
 
@@ -636,10 +639,16 @@
               <select id="audit-filter-type" class="retro-input" style="height: 30px; padding: 2px 8px; font-size: 12px; font-weight: 700; width: auto;">
                 <option value="ALL">Todas as Ações</option>
                 <option value="MARRIAGES">💍 Casamentos</option>
+                <option value="DIVORCES">💔 Divórcios</option>
+                <option value="SOULMATES">💖 Soulmates</option>
                 <option value="LISTINGS">📢 Classificados (Anúncios)</option>
                 <option value="OFFERS_SENT">🤝 Ofertas Enviadas</option>
-                <option value="SALES">💰 Vendas & Ofertas Recebidas</option>
-                <option value="TRANSACTIONS">🪙 Transações Financeiras</option>
+                <option value="SALES">💰 Vendas Concluídas</option>
+                <option value="OFFERS_RECEIVED">📥 Todas as Ofertas Recebidas</option>
+                <option value="DAILY_REWARDS">🎁 Recompensas Diárias (Daily)</option>
+                <option value="ADMIN_GRANTS">⚙️ Concessões / Ajustes Admin</option>
+                <option value="ROLL_CRYSTALS">💎 Cristais de Roll</option>
+                <option value="TRANSACTIONS">🪙 Transações Financeiras (Todas)</option>
               </select>
             </label>
 
