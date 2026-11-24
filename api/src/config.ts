@@ -102,6 +102,17 @@ const envSchema = z.object({
   HOSTING_GRACE_HOURS: z.coerce.number().default(72),
   HOSTING_INACTIVE_DAILY_SURCHARGE_PERCENT: z.coerce.number().default(10),
   HOSTING_INACTIVE_MAX_MULTIPLIER: z.coerce.number().default(5),
+
+  // Cotas de Mercado e Soulmate
+  COTA_BASE_DAILY_ZINTHOS: z.coerce.number().default(21000),
+  COTA_RARITY_DAYS: z.string().default('50,65,80,100,210'),
+  COTA_DAYS_COMMON: z.coerce.number().optional(),
+  COTA_DAYS_UNCOMMON: z.coerce.number().optional(),
+  COTA_DAYS_RARE: z.coerce.number().optional(),
+  COTA_DAYS_EPIC: z.coerce.number().optional(),
+  COTA_DAYS_LEGENDARY: z.coerce.number().optional(),
+  COTA_MARRIED_PROGRESSION_WEIGHTS: z.string().default('0.35,0.40,0.50,0.55,0.65,0.75,0.85,0.95,1.00'),
+  SOULMATE_RANKING_SCORE: z.coerce.number().default(2100),
 });
 
 export const config = envSchema.parse(process.env);
@@ -199,5 +210,68 @@ export const inactiveHostingRates = parseHostingRates(config.HOSTING_TAXAS_INATI
   EPIC: 700,
   LEGENDARY: 2000,
 });
+
+export interface RarityDays {
+  [key: string]: number;
+  COMMON: number;
+  UNCOMMON: number;
+  RARE: number;
+  EPIC: number;
+  LEGENDARY: number;
+}
+
+export function parseRarityDays(csv: string, defaultDays: RarityDays): RarityDays {
+  if (!csv || typeof csv !== 'string') return defaultDays;
+  const parts = csv.split(',').map((p) => parseInt(p.trim(), 10));
+  if (parts.length < 5 || parts.some((n) => isNaN(n) || n < 0)) {
+    return defaultDays;
+  }
+  return {
+    COMMON: parts[0],
+    UNCOMMON: parts[1],
+    RARE: parts[2],
+    EPIC: parts[3],
+    LEGENDARY: parts[4],
+  };
+}
+
+const defaultCotaRarityDays: RarityDays = {
+  COMMON: 50,
+  UNCOMMON: 65,
+  RARE: 80,
+  EPIC: 100,
+  LEGENDARY: 210,
+};
+
+const defaultMarriedProgressionWeights: number[] = [
+  0.35, 0.40, 0.50, 0.55, 0.65, 0.75, 0.85, 0.95, 1.00,
+];
+
+export function parseMarriedProgressionWeights(
+  csv: string,
+  defaultWeights: number[] = defaultMarriedProgressionWeights
+): number[] {
+  if (!csv || typeof csv !== 'string') return defaultWeights;
+  const parts = csv.split(',').map((p) => parseFloat(p.trim()));
+  if (parts.length < 9 || parts.some((n) => isNaN(n) || n <= 0)) {
+    return defaultWeights;
+  }
+  return parts.slice(0, 9);
+}
+
+const baseDays = parseRarityDays(config.COTA_RARITY_DAYS, defaultCotaRarityDays);
+
+export const cotaRarityDays: Record<Rarity, number> = {
+  COMMON: config.COTA_DAYS_COMMON ?? baseDays.COMMON,
+  UNCOMMON: config.COTA_DAYS_UNCOMMON ?? baseDays.UNCOMMON,
+  RARE: config.COTA_DAYS_RARE ?? baseDays.RARE,
+  EPIC: config.COTA_DAYS_EPIC ?? baseDays.EPIC,
+  LEGENDARY: config.COTA_DAYS_LEGENDARY ?? baseDays.LEGENDARY,
+};
+
+export const marriedProgressionWeights: number[] = parseMarriedProgressionWeights(
+  config.COTA_MARRIED_PROGRESSION_WEIGHTS,
+  defaultMarriedProgressionWeights
+);
 
 export type Config = typeof config;

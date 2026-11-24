@@ -141,12 +141,141 @@
 
         <ul class="cmd-list">
           <li><strong>Chaves no harém:</strong> soma 1 ponto por chave acumulada (não se aplica a míticos).</li>
-          <li><strong>Soulmates (10 chaves):</strong> soma 3.000 pontos por Soulmate completada.</li>
+          <li><strong>Soulmates (10 chaves):</strong> soma <strong>2.100 pontos</strong> por Soulmate completada (redução de 30% para equilibrar o ranking em relação à quantidade de chaves e tamanho do harém).</li>
           <li><strong>Míticos:</strong> personagens personalizados ficam fora do cálculo do ranking para manter a disputa equilibrada.</li>
         </ul>
       </section>
 
-      <!-- Seção 3: Taxa de Hospedagem & Inatividade -->
+      <!-- Seção 3: Cotas de Mercado e Evolução de Soulmates -->
+      <section class="about-section">
+        <h2 class="about-title"><i class="fas fa-coins" style="color: #eab308;"></i> Cotas de mercado e evolução de Soulmates</h2>
+        <p>O mercado de cotas permite investir em waifus solteiras no catálogo ou evoluir laços com personagens que você já possui no harém até atingir o status definitivo de <strong>Soulmate (Alma Gêmea)</strong>.</p>
+
+        <div class="cmd-category">Preço base e cotas por raridade</div>
+        <p style="font-size: 0.95rem;">Cada personagem é dividido em <strong>4 cotas de 25%</strong>. O valor base equivale a uma quantidade de dias multiplicada pela diária de mercado (21.000 Zinthos), ajustado por inflação e escassez. Os valores de Comum, Incomum e Raro são mantidos em patamares próximos de Épico em escala progressiva:</p>
+        <div style="overflow-x: auto;">
+          <table class="fee-table">
+            <thead>
+              <tr>
+                <th>Raridade</th>
+                <th>Dias de referência</th>
+                <th>Valor base (4 cotas)</th>
+                <th>Preço por cota (25%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>⚪ Comum</td>
+                <td><strong>50 dias</strong></td>
+                <td>1.050.000 Zinthos</td>
+                <td><strong>262.500 Zinthos</strong></td>
+              </tr>
+              <tr>
+                <td>🟢 Incomum</td>
+                <td><strong>65 dias</strong></td>
+                <td>1.365.000 Zinthos</td>
+                <td><strong>341.250 Zinthos</strong></td>
+              </tr>
+              <tr>
+                <td>🔵 Raro</td>
+                <td><strong>80 dias</strong></td>
+                <td>1.680.000 Zinthos</td>
+                <td><strong>420.000 Zinthos</strong></td>
+              </tr>
+              <tr>
+                <td>🟣 Épico</td>
+                <td><strong>100 dias</strong></td>
+                <td>2.100.000 Zinthos</td>
+                <td><strong>525.000 Zinthos</strong></td>
+              </tr>
+              <tr>
+                <td>⭐ Lendário</td>
+                <td><strong>210 dias</strong></td>
+                <td>4.410.000 Zinthos</td>
+                <td><strong>1.102.500 Zinthos</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="cmd-category">Investimento em personagens livres (solteiras)</div>
+        <ul class="cmd-list" style="margin-top: 6px; font-size: 0.95rem;">
+          <li><strong>Aquisição integral:</strong> quem adquire as 4 cotas (100%) casa imediatamente com o personagem, tornando-se seu cônjuge oficial.</li>
+          <li><strong>Multiplicador de sorteio (Roll):</strong> possuir cotas investidas aumenta expressivamente a chance de encontrar a waifu nos sorteios:
+            <br>• 1 cota (25%): <strong>4x peso</strong> (+300% de chance no roll)
+            <br>• 2 cotas (50%): <strong>10x peso</strong> (+900% de chance no roll)
+            <br>• 3 cotas (75%): <strong>25x peso</strong> (+2.400% de chance no roll)
+          </li>
+          <li><strong>Casamento instantâneo por cota no Roll:</strong> ao sortear nos rolls uma personagem livre na qual você tenha comprado ao menos 1 cota, o casamento acontece <em>instantaneamente na hora</em>, sem consumir tempo de espera (sem cooldown de claim) e sem gastar sua cota diária de casamentos da raridade. As cotas são consumidas e você recebe o personagem com 1 chave inicial.</li>
+          <li><strong>Estorno de cotas concorrentes:</strong> se outro jogador casar com a waifu (seja no roll normal ou completando 4 cotas), os investidores concorrentes recebem <strong>50% dos Zinthos investidos de volta</strong> automaticamente em seu saldo; os 50% restantes são absorvidos pela economia.</li>
+        </ul>
+
+        <div class="cmd-category">Evolução de chaves e Soulmate pelo cônjuge</div>
+        <p style="font-size: 0.95rem;">Apenas quem já é casado com o personagem pode adquirir cotas nele. Cada ciclo de <strong>4 cotas adiciona +1 chave</strong>. O custo sobe progressivamente a cada chave acumulada até atingir o patamar pleno na 10ª chave (Soulmate):</p>
+        <div style="overflow-x: auto;">
+          <table class="fee-table">
+            <thead>
+              <tr>
+                <th>Evolução de chave</th>
+                <th>Multiplicador sobre a base</th>
+                <th>Desconto aplicado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Chave 1 → 2</td>
+                <td><strong>0,35x</strong></td>
+                <td>65% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 2 → 3</td>
+                <td><strong>0,40x</strong></td>
+                <td>60% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 3 → 4</td>
+                <td><strong>0,50x</strong></td>
+                <td>50% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 4 → 5</td>
+                <td><strong>0,55x</strong></td>
+                <td>45% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 5 → 6</td>
+                <td><strong>0,65x</strong></td>
+                <td>35% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 6 → 7</td>
+                <td><strong>0,75x</strong></td>
+                <td>25% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 7 → 8</td>
+                <td><strong>0,85x</strong></td>
+                <td>15% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 8 → 9</td>
+                <td><strong>0,95x</strong></td>
+                <td>5% OFF</td>
+              </tr>
+              <tr>
+                <td>Chave 9 → 10 (Soulmate)</td>
+                <td><strong>1,00x</strong> (5x o custo anterior)</td>
+                <td>0% OFF (preço de referência integral)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top: 8px; font-size: 0.95rem; color: var(--text-muted);">
+          * <strong>Chaves orgânicas via Roll:</strong> quando você sortear novamente nos rolls uma waifu com quem já é casado, ganha <strong>+1 chave imediatamente sem gastar nada</strong>! Ao alcançar 10 chaves, ela atinge o status de Alma Gêmea (Soulmate), travando novas compras de cotas.
+        </p>
+      </section>
+
+      <!-- Seção 4: Taxa de Hospedagem & Inatividade -->
       <section class="about-section">
         <h2 class="about-title"><i class="fas fa-hotel" style="color: #9333ea;"></i> Taxa de hospedagem e inatividade</h2>
         <p>Todo dia às <strong>04:00 BRT</strong> o sistema desconta a taxa de manutenção diária com base na quantidade e na raridade dos personagens no harém. Jogadores inativos por mais de 72 horas pagam tarifas maiores, com acréscimo progressivo diário para acelerar a liberação de haréns abandonados:</p>
@@ -208,9 +337,9 @@
         </div>
       </section>
 
-      <!-- Seção 4: Limites, Cotas & Cooldowns -->
+      <!-- Seção 5: Limites e tempos de espera -->
       <section class="about-section">
-        <h2 class="about-title"><i class="fas fa-scale-balanced" style="color: #f59e0b;"></i> Limites, cotas e tempos de espera</h2>
+        <h2 class="about-title"><i class="fas fa-scale-balanced" style="color: #f59e0b;"></i> Limites e tempos de espera</h2>
         <p>Os limites diários resetam às <strong>04:00 BRT</strong> e os tempos de espera entre casamentos são calculados separadamente por raridade:</p>
 
         <div class="cmd-category">Casamentos, trocas e tempo de espera por raridade</div>
@@ -301,12 +430,12 @@
           <li>🌟 <strong>Lista de desejos (Wishlist):</strong> suporta até 1.000 personagens. Cada item adiciona +0,1% ao bônus de Zinthos no comando <span class="cmd-code">!mu-diario</span> e aos fragmentos por roll, chegando a 2,0x com a lista completa.</li>
           <li>💖 <strong>Soulmate:</strong> conquistada ao alcançar 10 chaves com o mesmo personagem.</li>
           <li>⭐ <strong>Favoritos, coleções e harém:</strong> até 5 personagens favoritos em destaque, até 100 pastas de coleções (nomes com até 50 caracteres) e nome de harém de até 20 caracteres.</li>
-          <li>📈 <strong>Cotas de investimento (personagens livres):</strong> até 4 cotas de 25% por personagem livre. Quem completa as 4 cotas adquire o personagem na hora. Caso o jogador role o personagem livre e já tenha ao menos 1 cota, o casamento acontece imediatamente sem espera de cooldown. Se outro jogador casar antes, 50% dos Zinthos investidos retornam para a sua conta.</li>
+          <li>📈 <strong>Cotas de investimento e evolução:</strong> consulte as tabelas e regras completas de aquisição, bônus de sorteio e progressão de Soulmates na Seção 3 acima.</li>
           <li>🔮 <strong>Personagens míticos:</strong> quantidade restrita aos slots da conta (1 slot a cada R$ 50 doados), com até 5 fotos por personagem. Míticos não podem ser negociados nos classificados, adicionados à wishlist ou coleções, nem passar por divórcio convencional.</li>
         </ul>
       </section>
 
-      <!-- Seção 5: Comandos do Jogo -->
+      <!-- Seção 6: Comandos do Jogo -->
       <section class="about-section">
         <h2 class="about-title"><i class="fas fa-terminal" style="color: #2563eb;"></i> Comandos principais</h2>
         
@@ -335,7 +464,7 @@
         </ul>
       </section>
 
-      <!-- Seção 6: Código Aberto e Apoio -->
+      <!-- Seção 7: Código Aberto e Apoio -->
       <section class="about-section" style="border: 2px solid #16a34a;">
         <h2 class="about-title"><i class="fas fa-heart" style="color: #ec4899;"></i> Código aberto e apoio ao projeto</h2>
         <p>O Waifuletes opera integrado à Ravena AI e tem código aberto. Sugestões, correções e melhorias podem ser enviadas diretamente pelo repositório no GitHub:</p>
