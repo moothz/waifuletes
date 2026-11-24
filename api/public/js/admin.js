@@ -306,7 +306,8 @@ function setupAdminEvents() {
   const auditFilterDays = document.getElementById('audit-filter-days');
   if (auditFilterDays) {
     auditFilterDays.addEventListener('change', () => {
-      auditState.days = Number(auditFilterDays.value) || 30;
+      const val = auditFilterDays.value;
+      auditState.days = val !== '' ? Number(val) : 30;
       auditState.page = 1;
       loadUserAudit();
     });
@@ -2559,7 +2560,9 @@ function openUserAuditModal(userId, userName) {
   auditState.userId = userId;
   auditState.userName = userName;
   auditState.page = 1;
-  auditState.days = Number(document.getElementById('audit-filter-days')?.value) || 30;
+  const daysEl = document.getElementById('audit-filter-days');
+  const daysVal = daysEl ? daysEl.value : '';
+  auditState.days = daysVal !== '' ? Number(daysVal) : 30;
   auditState.type = document.getElementById('audit-filter-type')?.value || 'ALL';
   auditState.includeRollCrystals = Boolean(document.getElementById('audit-filter-roll-crystals')?.checked);
 
@@ -2618,9 +2621,10 @@ async function loadUserAudit() {
     // Render Stats Cards
     if (cardsContainer) {
       const mb = summary.marriagesByRarity || {};
+      const periodLabel = summary.days === 0 ? 'Hoje' : `${summary.days}d`;
       cardsContainer.innerHTML = `
         <div style="background: #fdf2f8; border: 2px solid #fbcfe8; border-radius: 6px; padding: 8px 12px;">
-          <div style="font-size: 11px; font-weight: 700; color: #db2777; text-transform: uppercase;">💍 Casamentos (${summary.days}d)</div>
+          <div style="font-size: 11px; font-weight: 700; color: #db2777; text-transform: uppercase;">💍 Casamentos (${periodLabel})</div>
           <div style="font-size: 20px; font-weight: 900; color: #9d174d;">${Number(summary.marriagesCount || 0).toLocaleString('pt-BR')}</div>
           <div style="font-size: 11px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
             <span style="color: #b45309; font-weight: 800;" title="Lendárias">🟡 ${mb.LEGENDARY || 0}</span>
@@ -2629,6 +2633,12 @@ async function loadUserAudit() {
             <span style="color: #15803d; font-weight: 800;" title="Incomuns">🟢 ${mb.UNCOMMON || 0}</span>
             <span style="color: #475569; font-weight: 800;" title="Comuns">⚪ ${mb.COMMON || 0}</span>
           </div>
+        </div>
+
+        <div style="background: #fef2f2; border: 2px solid #fecaca; border-radius: 6px; padding: 8px 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: #dc2626; text-transform: uppercase;">💔 Divórcios (${periodLabel})</div>
+          <div style="font-size: 20px; font-weight: 900; color: #991b1b;">${Number(summary.divorcesCount || 0).toLocaleString('pt-BR')}</div>
+          <div style="font-size: 11px; color: #b91c1c; margin-top: 4px;">Separações no período</div>
         </div>
 
         <div style="background: #fefce8; border: 2px solid #fef08a; border-radius: 6px; padding: 8px 12px;">

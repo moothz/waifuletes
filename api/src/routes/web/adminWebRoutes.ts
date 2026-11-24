@@ -899,10 +899,23 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'object',
         additionalProperties: false,
         properties: {
-          days: { type: 'integer', minimum: 1, maximum: 365, default: 30 },
+          days: { type: 'integer', minimum: 0, maximum: 365, default: 30 },
           type: {
             type: 'string',
-            enum: ['ALL', 'MARRIAGES', 'LISTINGS', 'OFFERS_SENT', 'SALES', 'TRANSACTIONS'],
+            enum: [
+              'ALL',
+              'MARRIAGES',
+              'DIVORCES',
+              'SOULMATES',
+              'LISTINGS',
+              'OFFERS_SENT',
+              'SALES',
+              'OFFERS_RECEIVED',
+              'DAILY_REWARDS',
+              'ADMIN_GRANTS',
+              'ROLL_CRYSTALS',
+              'TRANSACTIONS',
+            ],
             default: 'ALL',
           },
           page: { type: 'integer', minimum: 1, default: 1 },
@@ -915,13 +928,25 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
       const { userId } = request.params as { userId: string };
       const query = request.query as {
         days?: number;
-        type?: 'ALL' | 'MARRIAGES' | 'LISTINGS' | 'OFFERS_SENT' | 'SALES' | 'TRANSACTIONS';
+        type?:
+          | 'ALL'
+          | 'MARRIAGES'
+          | 'DIVORCES'
+          | 'SOULMATES'
+          | 'LISTINGS'
+          | 'OFFERS_SENT'
+          | 'SALES'
+          | 'OFFERS_RECEIVED'
+          | 'DAILY_REWARDS'
+          | 'ADMIN_GRANTS'
+          | 'ROLL_CRYSTALS'
+          | 'TRANSACTIONS';
         page?: number;
         limit?: number;
         includeRollCrystals?: boolean;
       };
 
-      const days = Number(query.days) || 30;
+      const days = query.days !== undefined && query.days !== null ? Number(query.days) : 30;
       const type = query.type || 'ALL';
       const page = Math.max(1, Number(query.page) || 1);
       const limit = Math.min(100, Math.max(1, Number(query.limit) || 30));
@@ -949,12 +974,22 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      let startDate: Date;
+      if (days === 0) {
+        const now = new Date();
+        const spDateStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // 'YYYY-MM-DD'
+        const spMidnight = new Date(`${spDateStr}T00:00:00-03:00`);
+        const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        startDate = new Date(Math.min(spMidnight.getTime(), localMidnight.getTime()));
+      } else {
+        startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      }
 
       // Resumo de métricas no período
       const [
         marriagesCount,
         marriagesByRarityRaw,
+        divorcesCount,
         listingsCount,
         offersSentCount,
         salesCount,
@@ -966,6 +1001,9 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.prisma.haremEntry.findMany({
           where: { userId: user.id, claimedAt: { gte: startDate } },
           select: { character: { select: { baseRarity: true } } },
+        }),
+        fastify.prisma.kakeraTransaction.count({
+          where: { userId: user.id, reason: 'DIVORCE', createdAt: { gte: startDate } },
         }),
         fastify.prisma.marketListing.count({
           where: { userId: user.id, createdAt: { gte: startDate } },
@@ -1022,6 +1060,107 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         return parts.length > 0 ? parts.join(' + ') : 'Sem itens';
       };
 
+      // Helper para mapear transações e divórcios com precisão visual
+      const mapTransaction = (t: any) => {
+        const meta = t.metadata as any;
+        const charName = meta?.characterName || meta?.characterId;
+        const sign = t.amount >= 0 ? '+' : '';
+
+        if (t.reason === 'DIVORCE') {
+          const isSoulmate = Boolean(meta?.isSoulmate);
+          return {
+            id: `divorce_${t.id}`,
+            timestamp: t.createdAt.toISOString(),
+            category: 'DIVORCE',
+            badge: {
+              label: isSoulmate ? 'Divórcio Soulmate' : 'Divórcio',
+              color: '#ef4444',
+              icon: 'fas fa-heart-broken',
+            },
+            character: charName
+              ? {
+                  id: meta?.characterId,
+                  name: charName,
+                  rarity: meta?.rarity || 'UNKNOWN',
+                  series: meta?.series,
+                }
+              : undefined,
+            currency: {
+              formatted: `+${Number(t.amount).toLocaleString('pt-BR')} 🪙 Zinthos`,
+              amount: t.amount,
+            },
+            details: isSoulmate
+              ? `Divórcio Soulmate de ${charName || 'personagem'} (recebeu ${Number(t.amount).toLocaleString('pt-BR')} Zinthos)${meta?.keysAccumulated ? ` - Chaves: ${meta.keysAccumulated}` : ''}${meta?.penaltyRate ? ` (taxa: ${meta.penaltyRate})` : ''}`
+              : `Divórcio de ${charName || 'personagem'} (recebeu ${Number(t.amount).toLocaleString('pt-BR')} Zinthos)${meta?.keysAccumulated ? ` - Chaves: ${meta.keysAccumulated}` : ''}${meta?.penaltyRate ? ` (taxa: ${meta.penaltyRate})` : ''}${meta?.dailyDivorceNumber ? ` [Divórcio #${meta.dailyDivorceNumber} no dia]` : ''}`,
+            status: 'COMPLETED',
+          };
+        }
+
+        let badgeLabel: string = t.reason;
+        let badgeColor = t.amount >= 0 ? '#10b981' : '#ef4444';
+        let badgeIcon = 'fas fa-receipt';
+
+        if (t.reason === 'DAILY_REWARD') {
+          badgeLabel = 'Daily Reward';
+          badgeColor = '#06b6d4';
+          badgeIcon = 'fas fa-calendar-check';
+        } else if (t.reason === 'ADMIN_GRANT') {
+          badgeLabel = 'Admin Grant';
+          badgeColor = '#8b5cf6';
+          badgeIcon = 'fas fa-shield-alt';
+        } else if (t.reason === 'ROLL_CRYSTAL') {
+          badgeLabel = 'Cristal Roll';
+          badgeColor = '#a855f7';
+          badgeIcon = 'fas fa-gem';
+        } else if (t.reason === 'MARKET_TRADE') {
+          badgeLabel = 'Mercado (Troca)';
+          badgeColor = '#10b981';
+          badgeIcon = 'fas fa-exchange-alt';
+        } else if (t.reason === 'MARKET_BUY') {
+          badgeLabel = 'Mercado (Compra)';
+          badgeColor = '#3b82f6';
+          badgeIcon = 'fas fa-shopping-cart';
+        } else if (t.reason === 'MARKET_REFUND') {
+          badgeLabel = 'Mercado (Reembolso)';
+          badgeColor = '#f59e0b';
+          badgeIcon = 'fas fa-undo';
+        } else if (t.reason === 'WISHLIST_BONUS') {
+          badgeLabel = 'Bônus Wishlist';
+          badgeColor = '#eab308';
+          badgeIcon = 'fas fa-star';
+        } else if (t.reason === 'SOULMATE_BONUS') {
+          badgeLabel = 'Bônus Soulmate';
+          badgeColor = '#ec4899';
+          badgeIcon = 'fas fa-heart';
+        } else if (t.reason === 'EVENT_REWARD') {
+          badgeLabel = 'Recompensa Evento';
+          badgeColor = '#14b8a6';
+          badgeIcon = 'fas fa-gift';
+        } else if (t.reason === 'HOSTING_FEE' || t.reason === 'HOSTING_FEE_WAIFU') {
+          badgeLabel = 'Taxa Hospedagem';
+          badgeColor = '#64748b';
+          badgeIcon = 'fas fa-home';
+        }
+
+        return {
+          id: `tx_${t.id}`,
+          timestamp: t.createdAt.toISOString(),
+          category: 'TRANSACTION',
+          badge: {
+            label: badgeLabel,
+            color: badgeColor,
+            icon: badgeIcon,
+          },
+          character: charName ? { name: charName, rarity: meta?.rarity || 'UNKNOWN' } : undefined,
+          currency: {
+            formatted: `${sign}${Number(t.amount).toLocaleString('pt-BR')} 🪙 Zinthos`,
+            amount: t.amount,
+          },
+          details: `Transação: ${t.reason} (${sign}${Number(t.amount).toLocaleString('pt-BR')} Zinthos)${meta?.shares ? ` - Cotas: ${meta.shares}` : ''}${meta?.type ? ` [${meta.type}]` : ''}`,
+          status: 'COMPLETED',
+        };
+      };
+
       // Montagem dos eventos unificados ou filtrados por categoria
       let allItems: any[] = [];
       let totalCount = 0;
@@ -1065,6 +1204,63 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         if (type === 'MARRIAGES') {
           allItems = mapped;
           totalCount = marriagesCount;
+        } else {
+          allItems.push(...mapped);
+        }
+      }
+
+      if (type === 'DIVORCES') {
+        const divorceOptions: any = {
+          where: { userId: user.id, reason: 'DIVORCE', createdAt: { gte: startDate } },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        };
+        const divorces = await fastify.prisma.kakeraTransaction.findMany(divorceOptions);
+        allItems = divorces.map(mapTransaction);
+        totalCount = divorcesCount;
+      }
+
+      if (type === 'ALL' || type === 'SOULMATES') {
+        const soulmateCount = await fastify.prisma.soulmate.count({
+          where: { userId: user.id, becameSoulmateAt: { gte: startDate } },
+        });
+        const soulmateOptions: any = {
+          where: { userId: user.id, becameSoulmateAt: { gte: startDate } },
+          include: {
+            character: {
+              select: { id: true, name: true, baseRarity: true, series: true },
+            },
+          },
+          orderBy: { becameSoulmateAt: 'desc' },
+        };
+        if (type === 'SOULMATES') {
+          soulmateOptions.skip = skip;
+          soulmateOptions.take = limit;
+        }
+        const soulmates = await fastify.prisma.soulmate.findMany(soulmateOptions);
+
+        const mapped = soulmates.map((s: any) => ({
+          id: `soulmate_${s.id}`,
+          timestamp: s.becameSoulmateAt.toISOString(),
+          category: 'SOULMATE',
+          badge: { label: 'Soulmate', color: '#ec4899', icon: 'fas fa-heart' },
+          character: {
+            id: s.character?.id,
+            name: s.character?.name || 'Desconhecido',
+            rarity: s.character?.baseRarity || 'COMMON',
+            series: s.character?.series,
+          },
+          currency: {
+            formatted: '💖 Vínculo Eterno',
+          },
+          details: `Tornou-se Soulmate de ${s.character?.name || 'Desconhecido'}${s.alias ? ` ("${s.alias}")` : ''}`,
+          status: 'COMPLETED',
+        }));
+
+        if (type === 'SOULMATES') {
+          allItems = mapped;
+          totalCount = soulmateCount;
         } else {
           allItems.push(...mapped);
         }
@@ -1159,7 +1355,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      if (type === 'ALL' || type === 'SALES') {
+      if (type === 'ALL' || type === 'SALES' || type === 'OFFERS_RECEIVED') {
         const offerReceivedOptions: any = {
           where: {
             sellerId: user.id,
@@ -1176,7 +1372,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
           },
           orderBy: { createdAt: 'desc' },
         };
-        if (type === 'SALES') {
+        if (type === 'SALES' || type === 'OFFERS_RECEIVED') {
           offerReceivedOptions.skip = skip;
           offerReceivedOptions.take = limit;
         }
@@ -1212,9 +1408,37 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
         if (type === 'SALES') {
           allItems = mapped;
           totalCount = salesCount;
+        } else if (type === 'OFFERS_RECEIVED') {
+          allItems = mapped;
+          totalCount = offersReceivedCount;
         } else {
           allItems.push(...mapped);
         }
+      }
+
+      if (type === 'DAILY_REWARDS' || type === 'ADMIN_GRANTS' || type === 'ROLL_CRYSTALS') {
+        const reason: 'DAILY_REWARD' | 'ADMIN_GRANT' | 'ROLL_CRYSTAL' =
+          type === 'DAILY_REWARDS'
+            ? 'DAILY_REWARD'
+            : type === 'ADMIN_GRANTS'
+            ? 'ADMIN_GRANT'
+            : 'ROLL_CRYSTAL';
+
+        const txWhere: any = {
+          userId: user.id,
+          reason,
+          createdAt: { gte: startDate },
+        };
+        const count = await fastify.prisma.kakeraTransaction.count({ where: txWhere });
+        const transactions = await fastify.prisma.kakeraTransaction.findMany({
+          where: txWhere,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        });
+
+        allItems = transactions.map(mapTransaction);
+        totalCount = count;
       }
 
       if (type === 'ALL' || type === 'TRANSACTIONS') {
@@ -1235,32 +1459,10 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
           txFindOptions.skip = skip;
           txFindOptions.take = limit;
         } else {
-          txFindOptions.take = 100;
+          txFindOptions.take = Math.max(150, page * limit + 50);
         }
         const transactions = await fastify.prisma.kakeraTransaction.findMany(txFindOptions);
-
-        const mapped = transactions.map((t) => {
-          const meta = t.metadata as any;
-          const charName = meta?.characterName || meta?.characterId;
-          const sign = t.amount >= 0 ? '+' : '';
-          return {
-            id: `tx_${t.id}`,
-            timestamp: t.createdAt.toISOString(),
-            category: 'TRANSACTION',
-            badge: {
-              label: t.reason,
-              color: t.amount >= 0 ? '#10b981' : '#ef4444',
-              icon: 'fas fa-receipt',
-            },
-            character: charName ? { name: charName, rarity: meta?.rarity || 'UNKNOWN' } : undefined,
-            currency: {
-              formatted: `${sign}${Number(t.amount).toLocaleString('pt-BR')} 🪙 Zinthos`,
-              amount: t.amount,
-            },
-            details: `Transação: ${t.reason} (${sign}${Number(t.amount).toLocaleString('pt-BR')} Zinthos)${meta?.shares ? ` - Cotas: ${meta.shares}` : ''}${meta?.type ? ` [${meta.type}]` : ''}`,
-            status: 'COMPLETED',
-          };
-        });
+        const mapped = transactions.map(mapTransaction);
 
         if (type === 'TRANSACTIONS') {
           allItems = mapped;
@@ -1291,6 +1493,7 @@ export const adminWebRoutes: FastifyPluginAsync = async (fastify) => {
           summary: {
             days,
             marriagesCount,
+            divorcesCount,
             marriagesByRarity: rarityBreakdown,
             listingsCount,
             offersSentCount,
