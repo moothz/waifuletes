@@ -1004,6 +1004,17 @@
           <span style="font-size: 13px; font-weight: 700; color: #16a34a;">💰 Reembolso a receber:</span>
           <span id="divorce-modal-refund-amount" style="font-size: 15px; font-weight: 800; color: #16a34a;">Calculando...</span>
         </div>
+        <div id="divorce-modal-dr-box" class="hidden" style="margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: var(--bg-card-subtle, rgba(0,0,0,0.05)); border: 1.5px dashed var(--border-retro, #ccc);">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
+            <span id="divorce-modal-dr-rarity-title"><i class="fas fa-layer-group"></i> Raridade</span>
+            <span id="divorce-modal-dr-count-badge" class="badge-tag" style="font-size: 11px; font-weight: 800;">0 hoje</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 4px;">
+            <span style="color: var(--text-muted); font-weight: 600;">Penalidade diária (DR):</span>
+            <span id="divorce-modal-dr-rate-tag" style="font-weight: 800;">100% líquido</span>
+          </div>
+          <div id="divorce-modal-dr-penalty-desc" style="font-size: 11px; color: var(--text-muted); line-height: 1.4;"></div>
+        </div>
         <div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: 6px; padding: 12px; margin-top: 14px; font-size: 13px;">
           ⚠️ <strong>Atenção:</strong> Ao divorciar, o personagem será removido do seu harém e voltará para o pool global de sorteios. Você receberá o valor proporcional de Zinthos/Kakera.
         </div>
@@ -2055,6 +2066,6 @@
   <script src="/vendor/cropper.min.js"></script>
   <script src="/js/api.js?v=20261121-sugestoes-fix"></script>
   <script src="/js/suggestion-modal.js?v=20261121-sugestoes-fix"></script>
-  <script src="/js/user.js?v=20261121-sugestoes-fix"></script>
+  <script src="/js/user.js?v=20261124-divorce-dr"></script>
 </body>
 </html>
