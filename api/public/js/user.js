@@ -1268,21 +1268,42 @@ function renderSessionTimer(remainingSeconds) {
 
 const RARITY_WEIGHT = { MYTHIC: 6, LEGENDARY: 5, EPIC: 4, RARE: 3, UNCOMMON: 2, COMMON: 1 };
 
+function isHaremSoulmate(entry) {
+  if (!entry) return false;
+  const isMythic = Boolean(entry.character?.isMythic || String(entry.character?.rarity || '').toUpperCase() === 'MYTHIC');
+  if (isMythic) return false;
+  return Boolean(entry.isSoulmate || entry.character?.isSoulmate || ((entry.keys || 0) >= 10));
+}
+
 function sortHaremCards(harem) {
   return harem.sort((a, b) => {
-    // 1. Favorita em destaque
+    // 1. Míticos sempre no topo se estiverem na mesma lista
+    const mythicA = Boolean(a.character?.isMythic || String(a.character?.rarity || '').toUpperCase() === 'MYTHIC');
+    const mythicB = Boolean(b.character?.isMythic || String(b.character?.rarity || '').toUpperCase() === 'MYTHIC');
+    if (mythicB !== mythicA) return (mythicB ? 1 : 0) - (mythicA ? 1 : 0);
+
+    // 2. Soulmates sempre em primeiro lugar (Soulmates > Lendário > Épico > Raro > Incomum > Comum)
+    const soulA = isHaremSoulmate(a);
+    const soulB = isHaremSoulmate(b);
+    if (soulB !== soulA) return (soulB ? 1 : 0) - (soulA ? 1 : 0);
+
+    // 3. Favorita em destaque dentro de cada grupo
     if (b.isFavorite !== a.isFavorite) return (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0);
-    // 2. Raridade (sempre sobressai chaves)
-    const rA = a.character?.isMythic ? RARITY_WEIGHT.MYTHIC : (RARITY_WEIGHT[a.character?.baseRarity || a.character?.rarity] || 0);
-    const rB = b.character?.isMythic ? RARITY_WEIGHT.MYTHIC : (RARITY_WEIGHT[b.character?.baseRarity || b.character?.rarity] || 0);
+
+    // 4. Raridade (Lendário > Épico > Raro > Incomum > Comum)
+    const rA = mythicA ? RARITY_WEIGHT.MYTHIC : (RARITY_WEIGHT[a.character?.baseRarity || a.character?.rarity] || 0);
+    const rB = mythicB ? RARITY_WEIGHT.MYTHIC : (RARITY_WEIGHT[b.character?.baseRarity || b.character?.rarity] || 0);
     if (rB !== rA) return rB - rA;
-    // 3. Chaves
+
+    // 5. Chaves
     if ((b.keys || 0) !== (a.keys || 0)) return (b.keys || 0) - (a.keys || 0);
-    // 4. Popularidade
+
+    // 6. Popularidade
     const popA = a.character?.claimCount || a.character?.likeCount || (100000 - (a.character?.rank || 100000));
     const popB = b.character?.claimCount || b.character?.likeCount || (100000 - (b.character?.rank || 100000));
     if (popB !== popA) return popB - popA;
-    // 5. Wishlist
+
+    // 7. Wishlist
     return (b.character?.wishlistCount || 0) - (a.character?.wishlistCount || 0);
   });
 }

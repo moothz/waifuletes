@@ -69,35 +69,58 @@ export class HaremService {
 
     const soulmateSet = new Set(soulmateRecords.map((s) => s.characterId));
 
+    const data = entries.map((e) => {
+      const { _count, ...charRest } = e.character;
+      return {
+        id: e.id,
+        claimedAt: e.claimedAt,
+        claimedInGroup: e.claimedInGroup,
+        keys: e.keys,
+        isFavorite: e.isFavorite,
+        isLocked: e.isLocked,
+        note: e.note,
+        collectionId: e.collectionId || null,
+        collection: e.collection
+          ? { id: e.collection.id, name: e.collection.name, isPrivate: e.collection.isPrivate, isLocked: e.collection.isLocked }
+          : null,
+        pinnedPhoto: e.pinnedPhoto || null,
+        isSoulmate: (e.keys ?? 1) >= 10 || soulmateSet.has(e.characterId),
+        character: {
+          ...charRest,
+          wishlistCount: _count?.wishlists ?? 0,
+          imageUrl: this.resolveCardImageUrl(e.character.id, e.character.imageUrls, e.pinnedPhoto),
+          imageUrls: e.character.imageUrls.map((img) => this.characterService.formatImageUrl(e.character.id, img)),
+        },
+      };
+    });
+
+    if (limit === 0 && (sort === 'keys' || sort === 'rarity')) {
+      const RARITY_WEIGHT: Record<string, number> = { MYTHIC: 6, LEGENDARY: 5, EPIC: 4, RARE: 3, UNCOMMON: 2, COMMON: 1 };
+      data.sort((a, b) => {
+        const mythicA = Boolean(a.character.isMythic);
+        const mythicB = Boolean(b.character.isMythic);
+        if (mythicB !== mythicA) return (mythicB ? 1 : 0) - (mythicA ? 1 : 0);
+
+        if (b.isSoulmate !== a.isSoulmate) return (b.isSoulmate ? 1 : 0) - (a.isSoulmate ? 1 : 0);
+
+        if (b.isFavorite !== a.isFavorite) return (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0);
+
+        const rA = mythicA ? RARITY_WEIGHT.MYTHIC : (RARITY_WEIGHT[a.character.baseRarity] || 0);
+        const rB = mythicB ? RARITY_WEIGHT.MYTHIC : (RARITY_WEIGHT[b.character.baseRarity] || 0);
+        if (rB !== rA) return rB - rA;
+
+        if ((b.keys || 0) !== (a.keys || 0)) return (b.keys || 0) - (a.keys || 0);
+
+        return (b.character.claimCount || 0) - (a.character.claimCount || 0);
+      });
+    }
+
     return {
       total,
       page: limit > 0 ? page : 1,
       limit: limit > 0 ? limit : total,
       totalPages: limit > 0 ? Math.ceil(total / limit) : 1,
-      data: entries.map((e) => {
-        const { _count, ...charRest } = e.character;
-        return {
-          id: e.id,
-          claimedAt: e.claimedAt,
-          claimedInGroup: e.claimedInGroup,
-          keys: e.keys,
-          isFavorite: e.isFavorite,
-          isLocked: e.isLocked,
-          note: e.note,
-          collectionId: e.collectionId || null,
-          collection: e.collection
-            ? { id: e.collection.id, name: e.collection.name, isPrivate: e.collection.isPrivate, isLocked: e.collection.isLocked }
-            : null,
-          pinnedPhoto: e.pinnedPhoto || null,
-          isSoulmate: (e.keys ?? 1) >= 10 || soulmateSet.has(e.characterId),
-          character: {
-            ...charRest,
-            wishlistCount: _count?.wishlists ?? 0,
-            imageUrl: this.resolveCardImageUrl(e.character.id, e.character.imageUrls, e.pinnedPhoto),
-            imageUrls: e.character.imageUrls.map((img) => this.characterService.formatImageUrl(e.character.id, img)),
-          },
-        };
-      }),
+      data,
     };
   }
 
