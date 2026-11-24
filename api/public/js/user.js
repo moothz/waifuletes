@@ -44,6 +44,13 @@ let haremFilterState = {
   pageSize: 30,
 };
 
+let publicHaremFilterState = {
+  search: '',
+  rarity: '',
+  page: 1,
+  pageSize: 30,
+};
+
 let wishlistFilterState = {
   search: '',
   onlyMarried: false,
@@ -549,6 +556,64 @@ function setupEventListeners() {
     haremBtnNext.addEventListener('click', () => {
       haremFilterState.page++;
       renderPrivateHarem(userSessionData?.harem || []);
+    });
+  }
+
+  // Busca e Paginação do Harém Público
+  let publicHaremSearchTimer = null;
+  const publicHaremSearchInput = document.getElementById('public-harem-search-input');
+  const btnClearPublicHaremSearch = document.getElementById('btn-clear-public-harem-search');
+  if (publicHaremSearchInput) {
+    publicHaremSearchInput.addEventListener('input', () => {
+      clearTimeout(publicHaremSearchTimer);
+      if (btnClearPublicHaremSearch) {
+        if (publicHaremSearchInput.value.trim()) btnClearPublicHaremSearch.classList.remove('hidden');
+        else btnClearPublicHaremSearch.classList.add('hidden');
+      }
+      publicHaremSearchTimer = setTimeout(() => {
+        publicHaremFilterState.search = publicHaremSearchInput.value.trim();
+        publicHaremFilterState.page = 1;
+        renderPublicHarem(userSessionData?.harem || []);
+      }, 300);
+    });
+  }
+
+  if (btnClearPublicHaremSearch) {
+    btnClearPublicHaremSearch.addEventListener('click', () => {
+      if (publicHaremSearchInput) publicHaremSearchInput.value = '';
+      btnClearPublicHaremSearch.classList.add('hidden');
+      publicHaremFilterState.search = '';
+      publicHaremFilterState.page = 1;
+      renderPublicHarem(userSessionData?.harem || []);
+    });
+  }
+
+  const publicHaremRaritySelect = document.getElementById('public-harem-rarity-select');
+  if (publicHaremRaritySelect) {
+    publicHaremRaritySelect.addEventListener('change', () => {
+      publicHaremFilterState.rarity = publicHaremRaritySelect.value;
+      publicHaremFilterState.page = 1;
+      renderPublicHarem(userSessionData?.harem || []);
+    });
+  }
+
+  const publicHaremBtnPrev = document.getElementById('public-harem-btn-prev');
+  if (publicHaremBtnPrev) {
+    publicHaremBtnPrev.addEventListener('click', () => {
+      if (publicHaremFilterState.page > 1) {
+        publicHaremFilterState.page--;
+        renderPublicHarem(userSessionData?.harem || []);
+        document.getElementById('public-harem-section-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+
+  const publicHaremBtnNext = document.getElementById('public-harem-btn-next');
+  if (publicHaremBtnNext) {
+    publicHaremBtnNext.addEventListener('click', () => {
+      publicHaremFilterState.page++;
+      renderPublicHarem(userSessionData?.harem || []);
+      document.getElementById('public-harem-section-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }
 
@@ -2637,86 +2702,159 @@ function renderPublicHarem(harem) {
   const collectionsContainer = document.getElementById('public-collections-container');
   const sectionTitle = document.getElementById('public-harem-section-title');
   const grid = document.getElementById('public-harem-grid');
+  const pagination = document.getElementById('public-harem-pagination');
 
   if (harem.length === 0) {
     if (mythicsSection) mythicsSection.classList.add('hidden');
     if (favoritesSection) favoritesSection.classList.add('hidden');
     if (collectionsSection) collectionsSection.classList.add('hidden');
     if (sectionTitle) sectionTitle.classList.add('hidden');
+    if (pagination) pagination.classList.add('hidden');
     grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Este usuário ainda não possui personagens no harém.</div>';
     return;
   }
 
   sortHaremCards(harem);
 
+  const searchText = (publicHaremFilterState.search || '').trim();
+  const rarityFilter = (publicHaremFilterState.rarity || '').trim();
+  const hasFilter = Boolean(searchText || rarityFilter);
+  const filterLabel = rarityFilter === 'COVETED' ? 'Cobiçados' : (RARITY_CONFIG[rarityFilter]?.label || rarityFilter);
+  const searchSummary = searchText || (rarityFilter ? filterLabel : '');
+
   // 1. Míticos Forjados (Fica acima de todos e só é exibida se tiver pelo menos 1 Mítico)
   const mythicEntries = harem.filter(entry => entry.character?.isMythic);
-  if (mythicEntries.length > 0 && mythicsSection && mythicsGrid) {
-    mythicsSection.classList.remove('hidden');
-    mythicsGrid.innerHTML = '';
-    mythicEntries.forEach(entry => mythicsGrid.appendChild(createPublicHaremCard(entry)));
-  } else if (mythicsSection) {
-    mythicsSection.classList.add('hidden');
+  const matchingMythics = mythicEntries.filter(e => matchesHaremCard(e, searchText, rarityFilter));
+  if (mythicsSection && mythicsGrid) {
+    if (hasFilter) {
+      if (matchingMythics.length > 0) {
+        mythicsSection.classList.remove('hidden');
+        mythicsGrid.innerHTML = '';
+        matchingMythics.forEach(entry => mythicsGrid.appendChild(createPublicHaremCard(entry)));
+      } else {
+        mythicsSection.classList.add('hidden');
+      }
+    } else {
+      if (mythicEntries.length > 0) {
+        mythicsSection.classList.remove('hidden');
+        mythicsGrid.innerHTML = '';
+        mythicEntries.forEach(entry => mythicsGrid.appendChild(createPublicHaremCard(entry)));
+      } else {
+        mythicsSection.classList.add('hidden');
+      }
+    }
   }
 
   // 2. Favoritos (em cima, logo após os míticos)
-  const favorites = harem.filter(entry => entry.isFavorite && !entry.character?.isMythic).slice(0, 5);
-  if (favorites.length > 0 && favoritesSection && favoritesGrid) {
+  const allFavorites = harem.filter(entry => entry.isFavorite && !entry.character?.isMythic);
+  const matchingFavorites = allFavorites.filter(e => matchesHaremCard(e, searchText, rarityFilter));
+  if (favoritesSection && favoritesGrid) {
     favoritesSection.style.scrollMarginTop = '70px';
-    favoritesSection.classList.remove('hidden');
-    favoritesGrid.innerHTML = '';
-    favorites.forEach(entry => favoritesGrid.appendChild(createPublicHaremCard(entry)));
-  } else if (favoritesSection) {
-    favoritesSection.classList.add('hidden');
+    if (hasFilter) {
+      if (matchingFavorites.length > 0) {
+        favoritesSection.classList.remove('hidden');
+        favoritesGrid.innerHTML = '';
+        matchingFavorites.forEach(entry => favoritesGrid.appendChild(createPublicHaremCard(entry)));
+      } else {
+        favoritesSection.classList.add('hidden');
+      }
+    } else {
+      if (allFavorites.length > 0) {
+        favoritesSection.classList.remove('hidden');
+        favoritesGrid.innerHTML = '';
+        allFavorites.slice(0, 5).forEach(entry => favoritesGrid.appendChild(createPublicHaremCard(entry)));
+      } else {
+        favoritesSection.classList.add('hidden');
+      }
+    }
   }
 
   // 3. Coleções do Usuário (separadas em pastas, excluindo míticos)
   const collections = userSessionData?.collections || [];
   const colWithChars = collections.filter(c => harem.some(e => e.collectionId === c.id && !e.character?.isMythic));
 
-  if (colWithChars.length > 0 && collectionsSection && collectionsContainer) {
-    collectionsSection.classList.remove('hidden');
+  if (collectionsSection && collectionsContainer) {
     collectionsContainer.innerHTML = '';
+    let visibleCollectionsCount = 0;
 
     colWithChars.forEach(col => {
       const colChars = harem.filter(e => e.collectionId === col.id && !e.character?.isMythic);
+      const matchingColChars = colChars.filter(e => matchesHaremCard(e, searchText, rarityFilter));
       if (colChars.length === 0) return;
+      if (hasFilter && matchingColChars.length === 0) return;
 
+      visibleCollectionsCount++;
       const colBox = document.createElement('div');
       colBox.id = `public-collection-block-${col.id}`;
       colBox.style.cssText = 'background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px; box-shadow: var(--shadow-retro-sm); scroll-margin-top: 70px;';
       colBox.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
           <span style="font-size: 16px; font-weight: 800; color: var(--text-main);">📂 ${escapeHtml(col.name)}</span>
-          <span class="badge-tag" style="background: #3b82f6; color: #fff; font-weight: 800;">${colChars.length}</span>
+          <span class="badge-tag" style="background: #3b82f6; color: #fff; font-weight: 800;">${matchingColChars.length}${hasFilter ? ` / ${colChars.length}` : ''}</span>
         </div>
         ${col.description ? `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">${escapeHtml(col.description)}</div>` : ''}
         <div class="waifu-grid" id="public-col-grid-${col.id}"></div>
       `;
 
       const subGrid = colBox.querySelector(`#public-col-grid-${col.id}`);
-      colChars.forEach(entry => subGrid.appendChild(createPublicHaremCard(entry)));
+      matchingColChars.forEach(entry => subGrid.appendChild(createPublicHaremCard(entry)));
       collectionsContainer.appendChild(colBox);
     });
+
+    if (visibleCollectionsCount > 0) {
+      collectionsSection.classList.remove('hidden');
+    } else {
+      collectionsSection.classList.add('hidden');
+    }
   } else if (collectionsSection) {
     collectionsSection.classList.add('hidden');
   }
 
   // 4. Harém Geral (demais personagens sem coleção, não favoritos e não míticos)
-  const generalOthers = harem.filter(e => !e.collectionId && !e.character?.isMythic && !favorites.includes(e));
-  if (generalOthers.length > 0) {
+  const generalOthers = harem.filter(e => !e.collectionId && !e.character?.isMythic && !allFavorites.includes(e));
+  const matchingGeneral = generalOthers.filter(e => matchesHaremCard(e, searchText, rarityFilter));
+
+  const totalGeneral = matchingGeneral.length;
+  const pageSize = publicHaremFilterState.pageSize || 30;
+  const totalGeneralPages = Math.max(1, Math.ceil(totalGeneral / pageSize));
+  publicHaremFilterState.page = Math.min(Math.max(1, publicHaremFilterState.page), totalGeneralPages);
+
+  const startIndex = (publicHaremFilterState.page - 1) * pageSize;
+  const pagedGeneral = matchingGeneral.slice(startIndex, startIndex + pageSize);
+
+  grid.innerHTML = '';
+  if (pagedGeneral.length > 0) {
     if (sectionTitle) {
       sectionTitle.style.scrollMarginTop = '70px';
       sectionTitle.classList.remove('hidden');
     }
-    grid.innerHTML = '';
-    generalOthers.forEach(entry => grid.appendChild(createPublicHaremCard(entry)));
+    pagedGeneral.forEach(entry => grid.appendChild(createPublicHaremCard(entry)));
+  } else if (hasFilter) {
+    if (sectionTitle) sectionTitle.classList.remove('hidden');
+    grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--text-muted); font-weight: bold;">Nenhum personagem no harém geral encontrado para "${escapeHtml(searchSummary)}"</div>`;
   } else {
     if (sectionTitle) sectionTitle.classList.add('hidden');
-    if (mythicEntries.length > 0 || favorites.length > 0 || colWithChars.length > 0) {
+    if (mythicEntries.length > 0 || allFavorites.length > 0 || colWithChars.length > 0) {
       grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: var(--text-muted); font-weight: bold;">Todas as waifus estão organizadas acima nas coleções ou em destaque! ✨</div>';
     } else {
       grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; font-weight: bold;">Este usuário ainda não possui personagens no harém.</div>';
+    }
+  }
+
+  // Atualiza controles de paginação do Harém Geral Público
+  if (pagination) {
+    if (totalGeneral === 0 && !hasFilter) {
+      pagination.classList.add('hidden');
+    } else {
+      pagination.classList.remove('hidden');
+      const totalCountEl = document.getElementById('public-harem-general-total-count');
+      if (totalCountEl) totalCountEl.textContent = `${totalGeneral} ${totalGeneral === 1 ? 'personagem' : 'personagens'}`;
+      const pageIndicator = document.getElementById('public-harem-page-indicator');
+      if (pageIndicator) pageIndicator.textContent = `${publicHaremFilterState.page} / ${totalGeneralPages}`;
+      const btnPrev = document.getElementById('public-harem-btn-prev');
+      if (btnPrev) btnPrev.disabled = publicHaremFilterState.page <= 1;
+      const btnNext = document.getElementById('public-harem-btn-next');
+      if (btnNext) btnNext.disabled = publicHaremFilterState.page >= totalGeneralPages;
     }
   }
 
@@ -7475,15 +7613,17 @@ function updateHaremCollectionsNav(collections, haremEntries, isPublic = false) 
   if (!badge || !listEl) return;
 
   const validCollections = Array.isArray(collections) ? collections : [];
-  if (isPublic && validCollections.length === 0) {
+  const allEntries = Array.isArray(haremEntries) ? haremEntries : [];
+  const favCount = allEntries.filter(e => e.isFavorite && !e.character?.isMythic).length;
+  const generalCount = allEntries.filter(e => !e.collectionId && !e.character?.isMythic).length;
+
+  if (allEntries.length === 0 || (validCollections.length === 0 && favCount === 0)) {
     badge.classList.add('hidden');
     return;
   }
-  if (isPublic) {
-    badge.classList.remove('hidden');
-  }
+  badge.classList.remove('hidden');
 
-  if (validCollections.length === 0) {
+  if (validCollections.length === 0 && favCount === 0) {
     listEl.innerHTML = `
       <div style="color: var(--text-muted); font-size: 12px; font-style: italic; padding: 8px; text-align: center;">
         Nenhuma coleção criada ainda.
@@ -7491,10 +7631,6 @@ function updateHaremCollectionsNav(collections, haremEntries, isPublic = false) 
     `;
     return;
   }
-
-  const allEntries = Array.isArray(haremEntries) ? haremEntries : [];
-  const favCount = allEntries.filter(e => e.isFavorite && !e.character?.isMythic).length;
-  const generalCount = allEntries.filter(e => !e.collectionId && !e.character?.isMythic).length;
 
   let itemsHtml = '';
 
