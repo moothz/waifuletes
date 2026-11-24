@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
+import { Prisma } from '@prisma/client';
 import { CharacterService } from '../../services/CharacterService.js';
 import { isTrustedRequest } from '../../plugins/auth.js';
 
@@ -80,15 +81,19 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'object',
         properties: {
           limit: { type: 'integer', minimum: 1, maximum: 500, default: 10 },
+          search: { type: 'string', maxLength: 100 },
         },
       },
     },
     handler: async (request, reply) => {
-      const { limit = 10 } = request.query as { limit?: number };
+      const { limit = 10, search } = request.query as { limit?: number; search?: string };
       const parsedLimit = Math.min(500, Math.max(1, Number(limit)));
+      const cleanSearch = typeof search === 'string' ? search.trim() : '';
       const isTrusted = isTrustedRequest(request);
 
-      const cacheKey = `cache:leaderboard:users:${parsedLimit}`;
+      const cacheKey = cleanSearch
+        ? `cache:leaderboard:users:${parsedLimit}:${encodeURIComponent(cleanSearch.toLowerCase())}`
+        : `cache:leaderboard:users:${parsedLimit}`;
       const cached = await fastify.redis.get(cacheKey);
 
       let topRich: any[] | null = null;
@@ -101,20 +106,32 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       if (!topRich || topRich.length === 0) {
+        const whereCondition: any = {
+          NOT: [
+            { id: 'test_web_user_1' },
+            { name: { contains: 'Jogador Web Teste', mode: 'insensitive' } },
+          ],
+        };
+
+        if (cleanSearch) {
+          whereCondition.OR = [
+            { name: { contains: cleanSearch, mode: 'insensitive' } },
+            { haremName: { contains: cleanSearch, mode: 'insensitive' } },
+          ];
+        }
+
         topRich = await fastify.prisma.user.findMany({
-          where: {
-            NOT: [
-              { id: 'test_web_user_1' },
-              { name: { contains: 'Jogador Web Teste', mode: 'insensitive' } },
-            ],
-          },
+          where: whereCondition,
           take: parsedLimit,
           orderBy: { kakera: 'desc' },
           select: {
             id: true,
+            publicId: true,
             name: true,
             platform: true,
             kakera: true,
+            haremName: true,
+            haremPrivate: true,
             _count: {
               select: {
                 harem: true,
@@ -124,7 +141,7 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
 
-        await fastify.redis.set(cacheKey, JSON.stringify(topRich), 'EX', 30);
+        await fastify.redis.set(cacheKey, JSON.stringify(topRich), 'EX', cleanSearch ? 15 : 30);
       }
 
       // Proteção de PII: Em chamadas anônimas, remove completamente o 'id' (número/telefone do usuário)
@@ -134,6 +151,9 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
         }
         return {
           name: u.name,
+          publicId: u.publicId,
+          haremName: u.haremName,
+          haremPrivate: Boolean(u.haremPrivate),
           platform: u.platform,
           kakera: u.kakera,
           _count: u._count,
@@ -161,15 +181,19 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
         type: 'object',
         properties: {
           limit: { type: 'integer', minimum: 1, maximum: 500, default: 10 },
+          search: { type: 'string', maxLength: 100 },
         },
       },
     },
     handler: async (request, reply) => {
-      const { limit = 10 } = request.query as { limit?: number };
+      const { limit = 10, search } = request.query as { limit?: number; search?: string };
       const parsedLimit = Math.min(500, Math.max(1, Number(limit)));
+      const cleanSearch = typeof search === 'string' ? search.trim() : '';
       const isTrusted = isTrustedRequest(request);
 
-      const cacheKey = `cache:leaderboard:harem:${parsedLimit}`;
+      const cacheKey = cleanSearch
+        ? `cache:leaderboard:harem:${parsedLimit}:${encodeURIComponent(cleanSearch.toLowerCase())}`
+        : `cache:leaderboard:harem:${parsedLimit}`;
       const cached = await fastify.redis.get(cacheKey);
 
       let topHarem: any[] | null = null;
@@ -182,12 +206,19 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       if (!topHarem || topHarem.length === 0) {
+        const searchFilter = cleanSearch
+          ? Prisma.sql`AND (LOWER(u.name) LIKE ${'%' + cleanSearch.toLowerCase() + '%'} OR LOWER(COALESCE(u.harem_name, '')) LIKE ${'%' + cleanSearch.toLowerCase() + '%'})`
+          : Prisma.empty;
+
         topHarem = await fastify.prisma.$queryRaw`
           WITH user_harem_stats AS (
             SELECT 
               u.id,
+              u."publicId",
               u.name,
               u.platform,
+              u.harem_name as "haremName",
+              u.harem_private as "haremPrivate",
               count(h.id) FILTER (WHERE c.is_mythic IS NOT TRUE)::int as "totalMarriages",
               count(h.id) FILTER (WHERE c."baseRarity" = 'COMMON' AND c.is_mythic IS NOT TRUE)::int as "commonCount",
               count(h.id) FILTER (WHERE c."baseRarity" = 'UNCOMMON' AND c.is_mythic IS NOT TRUE)::int as "uncommonCount",
@@ -200,12 +231,16 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
             JOIN harem_entries h ON h."userId" = u.id
             JOIN characters c ON c.id = h."characterId"
             WHERE u.id != 'test_web_user_1' AND LOWER(u.name) NOT LIKE '%jogador web teste%'
-            GROUP BY u.id, u.name, u.platform
+            ${searchFilter}
+            GROUP BY u.id, u."publicId", u.name, u.platform, u.harem_name, u.harem_private
           )
           SELECT 
             id,
+            "publicId",
             name,
             platform,
+            "haremName",
+            "haremPrivate",
             "totalMarriages",
             "commonCount",
             "uncommonCount",
@@ -247,7 +282,7 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
           LIMIT ${parsedLimit}
         `;
 
-        await fastify.redis.set(cacheKey, JSON.stringify(topHarem), 'EX', 30);
+        await fastify.redis.set(cacheKey, JSON.stringify(topHarem), 'EX', cleanSearch ? 15 : 30);
       }
 
       const sanitizedTopHarem = (topHarem || []).map((u: any) => {
@@ -255,7 +290,10 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
           return u;
         }
         const { id, platform, ...rest } = u;
-        return rest;
+        return {
+          ...rest,
+          haremPrivate: Boolean(u.haremPrivate),
+        };
       });
 
       if (!isTrusted) {
