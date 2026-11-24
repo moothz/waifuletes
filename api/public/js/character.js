@@ -132,7 +132,16 @@ const CharacterPage = {
     document.title = `${cName} • Waifuletes ✨`;
     document.getElementById('char-card-title').textContent = cName;
     document.getElementById('char-name').textContent = cName;
-    document.getElementById('char-series').textContent = `Série: ${cSeries}`;
+    const seriesEl = document.getElementById('char-series');
+    if (seriesEl) {
+      const rawSeries = c.series ? String(c.series).trim() : '';
+      if (rawSeries) {
+        const filterUrl = `/?q=${encodeURIComponent(rawSeries)}`;
+        seriesEl.innerHTML = `Série: <a href="${filterUrl}" class="series-filter-link" title="Filtrar catálogo por ${escapeHtml(rawSeries)}" style="color: var(--accent, #3b82f6); text-decoration: underline; font-weight: 700;">${escapeHtml(rawSeries)}</a>`;
+      } else {
+        seriesEl.textContent = `Série: ${cSeries}`;
+      }
+    }
 
     // Ranks
     const rankEl = document.getElementById('char-rank-line');
@@ -183,8 +192,11 @@ const CharacterPage = {
         const creator = c.creator || c.creatorUser;
         const creatorName = creator?.name || cOwner?.name || 'Apoiador';
         const creatorPublicId = creator?.publicId || cOwner?.publicId || null;
-        const creatorLink = creatorPublicId
-          ? `<a href="/user/${creatorPublicId}" target="_blank" style="color: #facc15; text-decoration: underline; font-weight: 800;">${escapeHtml(creatorName)}</a>`
+        const creatorHref = creatorPublicId
+          ? (typeof Api !== 'undefined' && Api.getShareUrl ? Api.getShareUrl(`/user/${encodeURIComponent(creatorPublicId)}`) : `/user/${encodeURIComponent(creatorPublicId)}`)
+          : null;
+        const creatorLink = creatorHref
+          ? `<a href="${escapeHtml(creatorHref)}" target="_blank" rel="noopener noreferrer" class="spouse-profile-link" title="Abrir perfil público de ${escapeHtml(creatorName)}" style="color: #facc15; text-decoration: underline; font-weight: 800;">${escapeHtml(creatorName)}</a>`
           : `<span style="color: #facc15; font-weight: 800;">${escapeHtml(creatorName)}</span>`;
 
         marriageEl.innerHTML = `
@@ -195,7 +207,8 @@ const CharacterPage = {
         const ownerName = cOwner?.name || (typeof cOwner === 'string' ? cOwner : 'Outro jogador');
         const ownerPublicId = cOwner?.publicId || null;
         if (ownerPublicId) {
-          marriageEl.innerHTML = `💍 Casada(o) com <a href="/user/${ownerPublicId}" target="_blank" style="color: #ec4899; text-decoration: underline; font-weight: 800;">${escapeHtml(ownerName)}</a>`;
+          const ownerHref = typeof Api !== 'undefined' && Api.getShareUrl ? Api.getShareUrl(`/user/${encodeURIComponent(ownerPublicId)}`) : `/user/${encodeURIComponent(ownerPublicId)}`;
+          marriageEl.innerHTML = `💍 Casada(o) com <a href="${escapeHtml(ownerHref)}" target="_blank" rel="noopener noreferrer" class="spouse-profile-link" title="Abrir perfil público de ${escapeHtml(ownerName)}" style="color: #ec4899; text-decoration: underline; font-weight: 800;">${escapeHtml(ownerName)}</a>`;
         } else {
           marriageEl.innerHTML = `💍 Casada(o) com <span style="color: #ec4899; font-weight: 800;">${escapeHtml(ownerName)}</span>`;
         }
