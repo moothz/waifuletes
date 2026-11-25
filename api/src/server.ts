@@ -28,6 +28,7 @@ declare module 'fastify' {
 // Rotas públicas
 import { publicCharacterRoutes } from './routes/public/characters.js';
 import { publicLeaderboardRoutes } from './routes/public/leaderboard.js';
+import { publicCalculatorRoutes } from './routes/public/calculator.js';
 
 // Rotas web públicas e administrativas
 import { userWebRoutes } from './routes/web/userWebRoutes.js';
@@ -197,6 +198,10 @@ async function buildServer() {
     return sendHtmlNoCache(reply, 'user.html');
   });
 
+  fastify.get('/calculadora-chances', async (req, reply) => {
+    return sendHtmlNoCache(reply, 'calculadora-chances.html');
+  });
+
   // Esvazia a fila de spans no encerramento (teto de 3 s; no-op sem telemetria).
   fastify.addHook('onClose', async () => {
     await (globalThis as any).__OTEL_SHUTDOWN?.();
@@ -326,6 +331,7 @@ async function buildServer() {
   // Registro de rotas públicas
   await fastify.register(publicCharacterRoutes);
   await fastify.register(publicLeaderboardRoutes);
+  await fastify.register(publicCalculatorRoutes);
 
   // Registro de rotas web do usuário e moderação de admin
   await fastify.register(userWebRoutes);
