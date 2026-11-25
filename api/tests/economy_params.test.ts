@@ -192,6 +192,8 @@ describe('📐 GET /internal/economy/params — parâmetros de balanceamento (Zi
       'daily.DAILY_KAKERA_VARIANCE': config.DAILY_KAKERA_VARIANCE,
       'daily.DAILY_RESET_HOUR_UTC': config.DAILY_RESET_HOUR_UTC,
       'daily.DAILY_RESET_MINUTE_UTC': config.DAILY_RESET_MINUTE_UTC,
+      'claim.COTA_INFLATION_ALPHA': config.COTA_INFLATION_ALPHA,
+      'claim.COTA_SCARCITY_BETAS': config.COTA_SCARCITY_BETAS,
       'daily.COOLDOWN_DAILY_SECONDS': config.COOLDOWN_DAILY_SECONDS,
       'daily.DAILY_STREAK_MAX_DAYS': kakera.DAILY_STREAK_MAX_DAYS,
       ...flat('daily.DAILY_STREAK_BONUS_PERCENT', kakera.DAILY_STREAK_BONUS_PERCENT),
@@ -258,15 +260,15 @@ describe('📐 GET /internal/economy/params — parâmetros de balanceamento (Zi
     expect(params['daily.DAILY_MIN_BASE_AMOUNT']).toBe(100);
     expect(params['daily.WISHLIST_DAILY_BONUS_DIVISOR']).toBe(1000);
     expect(params['daily.WISHLIST_DAILY_MULTIPLIER_CAP']).toBe(2);
-    expect(params['divorce.RANK_MULTIPLIER_MAX']).toBe(7);
+    expect(params['divorce.RANK_MULTIPLIER_MAX']).toBe(5);
     expect(params['divorce.RANK_MULTIPLIER_EXPONENT']).toBe(3);
-    // Curva do multiplicador de rank igual à fórmula antiga (1 + 6 · ratio³, piso 1, posição 1 = 7).
+    // Curva do multiplicador de rank igual à fórmula parametrizada (1 + 4 · ratio³, piso 1, posição 1 = 5).
     const old = (position: number, total: number) => {
       if (!total || total <= 1 || !position || position < 1) return 1.0;
-      if (position === 1) return 7.0;
+      if (position === 1) return 5.0;
       if (position >= total) return 1.0;
       const ratio = Math.max(0, 1.0 - (position - 1) / total);
-      return Number(Math.max(1.0, 1.0 + 6.0 * Math.pow(ratio, 3)).toFixed(4));
+      return Number(Math.max(1.0, 1.0 + 4.0 * Math.pow(ratio, 3)).toFixed(4));
     };
     for (const total of [0, 1, 2, 10, 137, 1000]) {
       for (let p = 0; p <= total + 1; p++) expect(rarity.calculateRankMultiplier(p, total)).toBe(old(p, total));
