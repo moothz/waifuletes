@@ -99,7 +99,7 @@ export interface DivorceRefundOptions {
  * - Top 50% (mediana): ~1.75x
  * - Posições inferiores têm piso mínimo garantido em 1.0x (não desvaloriza abaixo do valor base).
  */
-export const RANK_MULTIPLIER_MAX = 7.0; // multiplicador da posição 1 da raridade
+export const RANK_MULTIPLIER_MAX = config.RANK_MULTIPLIER_MAX; // multiplicador da posição 1 da raridade
 export const RANK_MULTIPLIER_EXPONENT = 3; // curva cúbica: concentra o multiplicador no topo
 
 export function calculateRankMultiplier(position: number, total: number): number {

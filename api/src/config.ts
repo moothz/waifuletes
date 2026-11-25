@@ -119,6 +119,9 @@ const envSchema = z.object({
   COTA_DAYS_EPIC: z.coerce.number().optional(),
   COTA_DAYS_LEGENDARY: z.coerce.number().optional(),
   COTA_MARRIED_PROGRESSION_WEIGHTS: z.string().default('0.35,0.40,0.50,0.55,0.65,0.75,0.85,0.95,1.00'),
+  COTA_INFLATION_ALPHA: z.coerce.number().min(0).default(0.25),
+  COTA_SCARCITY_BETAS: z.string().default('1.0,1.0,1.5,1.5,2.5'),
+  RANK_MULTIPLIER_MAX: z.coerce.number().min(1).default(5.0),
   SOULMATE_RANKING_SCORE: z.coerce.number().default(2100),
 });
 
@@ -280,5 +283,29 @@ export const marriedProgressionWeights: number[] = parseMarriedProgressionWeight
   config.COTA_MARRIED_PROGRESSION_WEIGHTS,
   defaultMarriedProgressionWeights
 );
+
+export function parseScarcityBetas(csv: string): Record<Rarity, number> {
+  const defaults: Record<Rarity, number> = {
+    COMMON: 1.0,
+    UNCOMMON: 1.0,
+    RARE: 1.5,
+    EPIC: 1.5,
+    LEGENDARY: 2.5,
+  };
+  if (!csv || typeof csv !== 'string') return defaults;
+  const parts = csv.split(',').map((p) => parseFloat(p.trim()));
+  if (parts.length < 5 || parts.some((n) => isNaN(n) || n < 0)) {
+    return defaults;
+  }
+  return {
+    COMMON: parts[0],
+    UNCOMMON: parts[1],
+    RARE: parts[2],
+    EPIC: parts[3],
+    LEGENDARY: parts[4],
+  };
+}
+
+export const cotaScarcityBetas: Record<Rarity, number> = parseScarcityBetas(config.COTA_SCARCITY_BETAS);
 
 export type Config = typeof config;
