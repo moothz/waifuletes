@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const res = await fetch(`/characters?search=${encodeURIComponent(q)}&limit=8`);
         const json = await res.json();
-        const list = json?.data?.characters || json?.data?.items || [];
+        const list = json?.data?.data || json?.data?.characters || json?.data?.items || [];
         if (!list.length) {
           els.searchResults.style.display = 'none';
           return;
