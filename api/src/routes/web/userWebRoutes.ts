@@ -1334,7 +1334,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           gender: { type: 'string', enum: ['ALL', 'FEMALE', 'MALE'] },
           excludeCharacterIds: {
             type: 'array',
-            items: { type: 'string', maxLength: 64 },
+            items: { type: 'string', maxLength: 256 },
             maxItems: 50,
           },
         },

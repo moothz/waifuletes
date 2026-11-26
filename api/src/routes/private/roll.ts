@@ -41,7 +41,7 @@ export const privateRollRoutes: FastifyPluginAsync = async (fastify) => {
           gender: { type: 'string', enum: ['FEMALE', 'MALE', 'OTHER'] },
           excludeCharacterIds: {
             type: 'array',
-            items: { type: 'string', maxLength: 64 },
+            items: { type: 'string', maxLength: 256 },
             maxItems: 100,
             description: 'IDs de personagens a serem excluídos do sorteio (evita repetições em multi-rolls)',
           },
