@@ -98,10 +98,16 @@ export class HostingFeeService {
    * - Falha de um jogador não interrompe os demais.
    * - Personagens Míticos não pagam taxa nem são confiscados (assim como não podem ser divorciados).
    */
-  async runDailyFee(options: { dryRun?: boolean; force?: boolean } = {}): Promise<DailyFeeSummary> {
+  async runDailyFee(
+    options: { dryRun?: boolean; force?: boolean; targetDate?: Date; skipNotifications?: boolean } = {}
+  ): Promise<DailyFeeSummary> {
     return withBusinessSpan(
       'hosting_fee run',
-      { 'waifu.hosting.dry_run': Boolean(options.dryRun), 'waifu.hosting.force': Boolean(options.force) },
+      {
+        'waifu.hosting.dry_run': Boolean(options.dryRun),
+        'waifu.hosting.force': Boolean(options.force),
+        'waifu.hosting.retroactive': Boolean(options.targetDate),
+      },
       async () => {
         const summary = await this.runDailyFeeImpl(options);
         setAttrs({
@@ -116,9 +122,12 @@ export class HostingFeeService {
     );
   }
 
-  private async runDailyFeeImpl(options: { dryRun?: boolean; force?: boolean } = {}): Promise<DailyFeeSummary> {
-    const { dryRun = false, force = false } = options;
-    const now = new Date();
+  private async runDailyFeeImpl(
+    options: { dryRun?: boolean; force?: boolean; targetDate?: Date; skipNotifications?: boolean } = {}
+  ): Promise<DailyFeeSummary> {
+    const { dryRun = false, force = false, targetDate, skipNotifications = false } = options;
+    const isRetroactive = Boolean(targetDate);
+    const now = targetDate ?? new Date();
     const dateStr = now.toISOString().slice(0, 10);
     const lockKey = `hosting:fee:lock:${dateStr}`;
 
@@ -175,6 +184,7 @@ export class HostingFeeService {
             confiscoRatio,
             inflationMultiplier,
             dryRun,
+            isRetroactive,
           });
 
           if (result.alreadyCharged) {
@@ -188,7 +198,7 @@ export class HostingFeeService {
           summary.totalZinthosCollected += result.debited;
           summary.totalWaifusConfiscated += result.confiscated.length;
 
-          if (!dryRun) {
+          if (!dryRun && !skipNotifications) {
             await this.notifyUser(candidate.id, result).catch((err: any) => {
               console.error(`[HostingFee] Falha ao notificar ${candidate.id}:`, err?.message);
             });
@@ -222,12 +232,15 @@ export class HostingFeeService {
       confiscoRatio: number;
       inflationMultiplier: number;
       dryRun: boolean;
+      isRetroactive?: boolean;
     }
   ): Promise<UserFeeResult> {
     const run = async (tx: Prisma.TransactionClient): Promise<UserFeeResult> => {
       // Trava a linha do usuário: serializa com outras operações de saldo durante a cobrança
-      const locked = await tx.$queryRaw<Array<{ kakera: number; last_active_at: Date | null; updatedAt: Date }>>`
-        SELECT kakera, last_active_at, "updatedAt" FROM users WHERE id = ${userId} FOR UPDATE
+      const locked = await tx.$queryRaw<
+        Array<{ kakera: number; last_active_at: Date | null; updatedAt: Date; createdAt: Date }>
+      >`
+        SELECT kakera, last_active_at, "updatedAt", "createdAt" FROM users WHERE id = ${userId} FOR UPDATE
       `;
       const userRow = locked[0];
       const empty: UserFeeResult = {
@@ -243,6 +256,7 @@ export class HostingFeeService {
         confiscated: [],
       };
       if (!userRow) return empty;
+      if (ctx.isRetroactive && new Date(userRow.createdAt) > ctx.now) return empty;
 
       if (!ctx.dryRun) {
         const already = await tx.kakeraTransaction.findFirst({
@@ -257,7 +271,11 @@ export class HostingFeeService {
       }
 
       const harem = await tx.haremEntry.findMany({
-        where: { userId, character: { isMythic: false } },
+        where: {
+          userId,
+          character: { isMythic: false },
+          ...(ctx.isRetroactive ? { claimedAt: { lte: ctx.now } } : {}),
+        },
         select: {
           id: true,
           characterId: true,
@@ -269,6 +287,9 @@ export class HostingFeeService {
       if (harem.length === 0) return empty;
 
       const lastActive = userRow.last_active_at ?? userRow.updatedAt;
+      // Se o jogador nunca teve lastActiveAt explícito, congela o updatedAt anterior antes que o débito o sobrescreva.
+      const preserveLastActive = userRow.last_active_at === null ? { lastActiveAt: userRow.updatedAt } : {};
+      const txTimestamp = ctx.isRetroactive ? { createdAt: ctx.now } : {};
       const offlineMs = Math.max(0, ctx.now.getTime() - new Date(lastActive).getTime());
       const isInactive = offlineMs > ctx.graceMs;
       let multiplier = 1.0;
@@ -336,11 +357,11 @@ export class HostingFeeService {
       if (balance >= totalFee) {
         const debited = await tx.user.updateMany({
           where: { id: userId, kakera: { gte: totalFee } },
-          data: { kakera: { decrement: totalFee } },
+          data: { kakera: { decrement: totalFee }, ...preserveLastActive },
         });
         if (debited.count !== 1) throw new Error('Saldo alterado durante a cobrança');
         await tx.kakeraTransaction.create({
-          data: { userId, amount: -totalFee, reason: 'HOSTING_FEE', metadata: feeMeta as any },
+          data: { userId, amount: -totalFee, reason: 'HOSTING_FEE', metadata: feeMeta as any, ...txTimestamp },
         });
         return { ...base, debited: totalFee, finalBalance: balance - totalFee };
       }
@@ -349,7 +370,7 @@ export class HostingFeeService {
       if (balance > 0) {
         const debited = await tx.user.updateMany({
           where: { id: userId, kakera: { gte: balance } },
-          data: { kakera: { decrement: balance } },
+          data: { kakera: { decrement: balance }, ...preserveLastActive },
         });
         if (debited.count !== 1) throw new Error('Saldo alterado durante a cobrança');
         await tx.kakeraTransaction.create({
@@ -358,6 +379,7 @@ export class HostingFeeService {
             amount: -balance,
             reason: 'HOSTING_FEE',
             metadata: { ...feeMeta, partialDeduction: true, shortfall: totalFee - balance } as any,
+            ...txTimestamp,
           },
         });
       }
@@ -424,6 +446,7 @@ export class HostingFeeService {
             userId,
             amount: recoveredValue,
             reason: 'HOSTING_FEE_WAIFU',
+            ...txTimestamp,
             metadata: {
               feeDate: ctx.dateStr,
               characterId: entry.character.id,
@@ -444,7 +467,7 @@ export class HostingFeeService {
       let finalBalance = 0;
       if (remainingDebt < 0) {
         const surplus = Math.abs(remainingDebt);
-        await tx.user.update({ where: { id: userId }, data: { kakera: { increment: surplus } } });
+        await tx.user.update({ where: { id: userId }, data: { kakera: { increment: surplus }, ...preserveLastActive } });
         finalBalance = surplus;
       }
 
