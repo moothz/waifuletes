@@ -1684,6 +1684,25 @@ function createPrivateHaremCard(entry, options = {}) {
 
 const divorcePreviewCache = new Map();
 
+function updateSellModalKeysWarning(keys, isSoulmate = false) {
+  const warnEl = document.getElementById('sell-modal-keys-warning');
+  if (!warnEl) return;
+  const count = Number(keys || 0);
+  if (count > 1) {
+    const soulmateNote = (isSoulmate || count >= 10)
+      ? ' e o vínculo de Soulmate serão perdidos'
+      : ' não são transferidas';
+    warnEl.innerHTML = `
+      <div class="sell-keys-warning-title">⚠️ ATENÇÃO! Você tem ${count} chaves deste personagem que está anunciando</div>
+      <div class="sell-keys-warning-desc">Se alguém comprar ou trocar por este anúncio, a pessoa receberá o personagem com apenas <strong>1 chave</strong> (suas chaves extras${soulmateNote}).</div>
+    `;
+    warnEl.classList.remove('hidden');
+  } else {
+    warnEl.innerHTML = '';
+    warnEl.classList.add('hidden');
+  }
+}
+
 function formatZinthosValue(val) {
   return Number(val || 0).toLocaleString('pt-BR') + 'z';
 }
@@ -5564,6 +5583,10 @@ function openSellModal(characterId, characterName, imageUrl, series) {
   document.getElementById('sell-modal-char-img').src = getCharImg(imageUrl);
   const interestInput = document.getElementById('sell-modal-interest');
 
+  const initialKeys = Number(entry?.keys ?? char?.keys ?? 1);
+  const initialSoulmate = Boolean(entry?.isSoulmate ?? char?.isSoulmate ?? initialKeys >= 10);
+  updateSellModalKeysWarning(initialKeys, initialSoulmate);
+
   const auth = typeof getActiveAuthUser === 'function' ? getActiveAuthUser() : { isOwner: true, token: userSessionData?.token, publicId: userPublicId };
   const token = auth?.token || userSessionToken;
   const pId = auth?.publicId || userPublicId || 'token-session';
@@ -5581,16 +5604,20 @@ function openSellModal(characterId, characterName, imageUrl, series) {
           if (res && res.success && res.data) {
             const val = res.data.refundedKakera ?? res.data.fullRefundKakera ?? 0;
             divorcePreviewCache.set(characterId, val);
+            if (activeSellCharacter?.id !== characterId) return;
+            const currentKeys = Number(res.data.currentKeys ?? initialKeys);
+            const isSoulmate = Boolean(res.data.isSoulmate || initialSoulmate || currentKeys >= 10);
+            updateSellModalKeysWarning(currentKeys, isSoulmate);
             if (interestInput.value === 'Valor mínimo: calculando...' || interestInput.value === '') {
               interestInput.value = val > 0 ? `Valor mínimo: ${Number(val).toLocaleString('pt-BR')}z` : '';
               if (interestInput.value) interestInput.select();
             }
-          } else if (interestInput.value === 'Valor mínimo: calculando...') {
+          } else if (activeSellCharacter?.id === characterId && interestInput.value === 'Valor mínimo: calculando...') {
             interestInput.value = '';
           }
         })
         .catch(() => {
-          if (interestInput.value === 'Valor mínimo: calculando...') {
+          if (activeSellCharacter?.id === characterId && interestInput.value === 'Valor mínimo: calculando...') {
             interestInput.value = '';
           }
         });
