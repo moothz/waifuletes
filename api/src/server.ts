@@ -18,6 +18,7 @@ import { activeSpan, recordError, tagRequestIds } from './telemetry.js';
 import { CooldownService } from './services/CooldownService.js';
 import { CharacterService } from './services/CharacterService.js';
 import { RollService } from './services/RollService.js';
+import { startHostingFeeScheduler, SchedulerHandle } from './jobs/hostingFeeScheduler.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -373,11 +374,14 @@ async function start() {
       server.log.warn({ err: tgErr.message }, 'Falha ao registrar webhook inicial do Telegram');
     }
 
+    let hostingFeeScheduler: SchedulerHandle | null = null;
+
     // Encerramento gracioso
     const closeSignals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
     for (const signal of closeSignals) {
       process.on(signal, async () => {
         server.log.info(`Recebido sinal ${signal}. Encerrando servidor graciosamente...`);
+        hostingFeeScheduler?.stop();
         try {
           await server.close();
           process.exit(0);
@@ -393,6 +397,11 @@ async function start() {
     });
 
     await server.listen({ port: config.PORT, host: config.HOST });
+    hostingFeeScheduler = startHostingFeeScheduler({
+      prisma: server.prisma,
+      redis: server.redis,
+      logger: server.log,
+    });
     console.log(`🚀 Servidor Waifuletes rodando em http://${config.HOST}:${config.PORT}`);
     if (config.ENABLE_SWAGGER) {
       console.log(`📚 Documentação OpenAPI / Swagger disponível em http://${config.HOST}:${config.PORT}/docs`);

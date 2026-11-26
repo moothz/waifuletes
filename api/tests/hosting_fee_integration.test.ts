@@ -147,4 +147,51 @@ describe.skipIf(!DATABASE_URL || !REDIS_URL)('🏠 Taxa de hospedagem — integr
       await isolatedRedis.quit();
     }
   });
+
+  it('cobrança retroativa grava createdAt passado, ignora waifus futuras e preserva lastActiveAt nulo', async () => {
+    const retroId = `test_host_retro_${SUFFIX}`;
+    const retroDate = new Date('2026-11-15T07:00:00.000Z');
+    const oldUpdatedAt = new Date('2026-10-01T07:00:00.000Z');
+    const futureClaim = new Date('2026-11-20T07:00:00.000Z');
+
+    await prisma.user.create({
+      data: { id: retroId, name: retroId, kakera: 5_000, lastActiveAt: null, createdAt: oldUpdatedAt },
+    });
+    await prisma.$executeRaw`UPDATE users SET "updatedAt" = ${oldUpdatedAt} WHERE id = ${retroId}`;
+    await prisma.haremEntry.create({
+      data: { userId: retroId, characterId: charIds[0], claimedInGroup: 'test_group_host', claimedAt: oldUpdatedAt },
+    });
+    await prisma.haremEntry.create({
+      data: { userId: retroId, characterId: charIds[1], claimedInGroup: 'test_group_host', claimedAt: futureClaim },
+    });
+
+    try {
+      const result = await (service as any).chargeUser(retroId, {
+        now: retroDate,
+        dateStr: '2026-11-15',
+        graceMs: 72 * 3600 * 1000,
+        confiscoRatio: 0.3,
+        inflationMultiplier: 1,
+        dryRun: false,
+        isRetroactive: true,
+      });
+
+      expect(result.charged).toBe(true);
+      expect(result.isInactive).toBe(true);
+      expect(result.waifusCount).toBe(1); // ignora charIds[1] (claimedAt > retroDate)
+
+      const tx = await prisma.kakeraTransaction.findFirst({
+        where: { userId: retroId, reason: 'HOSTING_FEE' },
+      });
+      expect(tx).not.toBeNull();
+      expect(tx!.createdAt.toISOString()).toBe(retroDate.toISOString());
+
+      const updatedUser = await prisma.user.findUnique({ where: { id: retroId } });
+      expect(updatedUser!.lastActiveAt?.toISOString()).toBe(oldUpdatedAt.toISOString());
+    } finally {
+      await prisma.haremEntry.deleteMany({ where: { userId: retroId } });
+      await prisma.kakeraTransaction.deleteMany({ where: { userId: retroId } });
+      await prisma.user.deleteMany({ where: { id: retroId } });
+    }
+  });
 });
