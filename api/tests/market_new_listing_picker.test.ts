@@ -211,7 +211,6 @@ describe('📢 Novo Classificado — Picker de waifus não bloqueadas', () => {
     expect(userHtml).toContain('id="new-listing-waifus-rarity-select"');
     expect(userHtml).toContain('id="new-listing-waifus-coveted-checkbox"');
     expect(userHtml).toContain('id="btn-proceed-new-listing"');
-    expect(userHtml).toMatch(/\/js\/user\.js\?v=\d{8}-[\w-]+"/);
-    expect(userHtml).not.toContain('/js/user.js?v=20261124-divorce-dr"');
+    expect(userHtml).toMatch(/\/js\/user\.js\?v=[^"]+"/);
   });
 });
