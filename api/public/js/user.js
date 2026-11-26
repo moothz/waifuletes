@@ -1610,7 +1610,6 @@ function createPrivateHaremCard(entry, options = {}) {
 }
 
 const divorcePreviewCache = new Map();
-const sellKeysPreviewCache = new Map();
 
 function updateSellModalKeysWarning(keys, isSoulmate = false) {
   const warnEl = document.getElementById('sell-modal-keys-warning');
@@ -5491,9 +5490,8 @@ function openSellModal(characterId, characterName, imageUrl, series) {
   document.getElementById('sell-modal-char-img').src = getCharImg(imageUrl);
   const interestInput = document.getElementById('sell-modal-interest');
 
-  const cachedKeyInfo = sellKeysPreviewCache.get(characterId);
-  const initialKeys = Number(cachedKeyInfo?.keys ?? entry?.keys ?? char?.keys ?? 1);
-  const initialSoulmate = Boolean(cachedKeyInfo?.isSoulmate ?? entry?.isSoulmate ?? char?.isSoulmate ?? initialKeys >= 10);
+  const initialKeys = Number(entry?.keys ?? char?.keys ?? 1);
+  const initialSoulmate = Boolean(entry?.isSoulmate ?? char?.isSoulmate ?? initialKeys >= 10);
   updateSellModalKeysWarning(initialKeys, initialSoulmate);
 
   const auth = typeof getActiveAuthUser === 'function' ? getActiveAuthUser() : { isOwner: true, token: userSessionData?.token, publicId: userPublicId };
@@ -5513,20 +5511,20 @@ function openSellModal(characterId, characterName, imageUrl, series) {
           if (res && res.success && res.data) {
             const val = res.data.refundedKakera ?? res.data.fullRefundKakera ?? 0;
             divorcePreviewCache.set(characterId, val);
+            if (activeSellCharacter?.id !== characterId) return;
             const currentKeys = Number(res.data.currentKeys ?? initialKeys);
             const isSoulmate = Boolean(res.data.isSoulmate || initialSoulmate || currentKeys >= 10);
-            sellKeysPreviewCache.set(characterId, { keys: currentKeys, isSoulmate });
             updateSellModalKeysWarning(currentKeys, isSoulmate);
             if (interestInput.value === 'Valor mínimo: calculando...' || interestInput.value === '') {
               interestInput.value = val > 0 ? `Valor mínimo: ${Number(val).toLocaleString('pt-BR')}z` : '';
               if (interestInput.value) interestInput.select();
             }
-          } else if (interestInput.value === 'Valor mínimo: calculando...') {
+          } else if (activeSellCharacter?.id === characterId && interestInput.value === 'Valor mínimo: calculando...') {
             interestInput.value = '';
           }
         })
         .catch(() => {
-          if (interestInput.value === 'Valor mínimo: calculando...') {
+          if (activeSellCharacter?.id === characterId && interestInput.value === 'Valor mínimo: calculando...') {
             interestInput.value = '';
           }
         });

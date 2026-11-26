@@ -187,6 +187,7 @@
         fetch(`/api/web/user/${pId}/divorce/preview/${encodeURIComponent(char.id)}?token=${token}`)
           .then(r => r.json())
           .then(res => {
+            if (this._activeCharacter?.id !== char.id) return;
             if (res && res.success && res.data) {
               const currentKeys = Number(res.data.currentKeys ?? initialKeys);
               const isSoulmate = Boolean(res.data.isSoulmate || initialSoulmate || currentKeys >= 10);
@@ -201,7 +202,7 @@
             }
           })
           .catch(() => {
-            if (inputEl.value === 'Valor mínimo: calculando...') {
+            if (this._activeCharacter?.id === char.id && inputEl.value === 'Valor mínimo: calculando...') {
               inputEl.value = '';
             }
           });
