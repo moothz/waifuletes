@@ -3432,6 +3432,8 @@ body.dark-mode .sell-keys-warning-badge {
 body.dark-mode .sell-keys-warning-title {
   background: #ef4444;
   color: #ffffff;
+}
+
 /* Links de filtro por série e perfil de cônjuge */
 .card-series a.series-filter-link {
   color: inherit;
