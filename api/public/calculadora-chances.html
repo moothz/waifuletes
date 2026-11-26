@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waifuletes ✨ Calculadora de Chances &amp; Soulmates</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/retro-theme.css?v=20261124-sell-keys-warning">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    .calc-section {
+      background: var(--bg-card);
+      border: var(--border-retro);
+      box-shadow: var(--shadow-retro);
+      border-radius: var(--radius-retro);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .calc-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin: 0 0 14px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 2px dashed var(--border-retro);
+      padding-bottom: 8px;
+    }
+    .calc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 16px;
+    }
+    .field-card {
+      background: var(--bg-retro-accent);
+      border: var(--border-retro);
+      border-radius: var(--radius-retro);
+      padding: 12px 14px;
+    }
+    .field-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 800;
+      font-size: 0.92rem;
+      margin-bottom: 6px;
+    }
+    .field-value {
+      font-family: monospace;
+      font-size: 0.95rem;
+      color: var(--primary-retro);
+      font-weight: 800;
+    }
+    .field-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+    .calc-input, .calc-select {
+      width: 100%;
+      padding: 8px 10px;
+      border: var(--border-retro);
+      border-radius: 6px;
+      background: var(--bg-card);
+      color: var(--text-main);
+      font-weight: 700;
+      box-sizing: border-box;
+    }
+    .calc-range {
+      width: 100%;
+      accent-color: #e11d48;
+      cursor: pointer;
+    }
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .preset-btn {
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border: 1px solid var(--text-main);
+      border-radius: 4px;
+      background: var(--bg-card);
+      color: var(--text-main);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .preset-btn:hover {
+      background: var(--primary-retro);
+      color: #fff;
+    }
+    .search-box {
+      position: relative;
+    }
+    .search-results {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      background: var(--bg-card);
+      border: var(--border-retro);
+      border-radius: 6px;
+      max-height: 260px;
+      overflow-y: auto;
+      display: none;
+      box-shadow: var(--shadow-retro);
+    }
+    .search-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      border-bottom: 1px dotted var(--border-retro);
+    }
+    .search-item:hover {
+      background: var(--bg-retro-accent);
+    }
+    .search-item img {
+      width: 36px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--text-main);
+    }
+    .equation-box {
+      background: #111827;
+      color: #f8fafc;
+      border: 2px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.9rem;
+      line-height: 1.65;
+      overflow-x: auto;
+    }
+    .eq-hl { color: #fbbf24; font-weight: 800; }
+    .eq-ok { color: #34d399; font-weight: 800; }
+    .eq-pink { color: #f472b6; font-weight: 800; }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .stat-box {
+      background: var(--bg-retro-accent);
+      border: var(--border-retro);
+      border-radius: var(--radius-retro);
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 1.45rem;
+      font-weight: 900;
+      color: var(--primary-retro);
+      margin: 4px 0;
+    }
+    .const-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    .const-table th, .const-table td {
+      border: 1px solid var(--text-main);
+      padding: 7px 10px;
+      text-align: left;
+    }
+    .const-table th {
+      background: var(--bg-retro-accent);
+      font-weight: 800;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="retro-header">
+      <a href="/" class="logo-area">
+        <div class="logo-icon">🧮</div>
+        <div class="logo-text">
+          <h1>Waifuletes</h1>
+          <span>Calculadora de Chances &amp; Soulmates</span>
+        </div>
+      </a>
+      <div class="header-actions">
+        <a href="/" class="btn-retro btn-sm"><i class="fas fa-home"></i> Início</a>
+        <a href="/sobre.html" class="btn-retro btn-sm"><i class="fas fa-book"></i> Sobre</a>
+        <button id="btn-toggle-theme" class="btn-retro btn-sm" title="Alternar tema" aria-label="Alternar tema"><i class="fas fa-moon"></i></button>
+      </div>
+    </header>
+
+    <main style="margin-top: 20px;">
+      <!-- 1. Alvo -->
+      <section class="calc-section">
+        <h2 class="calc-title"><i class="fas fa-crosshairs" style="color: #e11d48;"></i> 1. Personagem Alvo e Objetivo</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0;">
+          Busque um personagem do catálogo para preencher raridade e rank, ou ajuste manualmente. A conta considera o personagem livre.
+        </p>
+
+        <div class="calc-grid">
+          <div class="field-card search-box">
+            <div class="field-label"><span>Buscar personagem (opcional)</span></div>
+            <input id="char-search" type="text" class="calc-input" placeholder="Ex: Frieren, Makima, Saber..." autocomplete="off">
+            <div id="char-search-results" class="search-results"></div>
+            <div id="selected-char-info" class="field-hint">Nenhum personagem selecionado (modo manual).</div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label"><span>Raridade</span></div>
+            <select id="rarity" class="calc-select">
+              <option value="COMMON">⚪ Comum</option>
+              <option value="UNCOMMON">🟢 Incomum</option>
+              <option value="RARE">🔵 Raro</option>
+              <option value="EPIC">🟣 Épico</option>
+              <option value="LEGENDARY" selected>⭐ Lendário</option>
+            </select>
+            <div id="rarity-pool-info" class="field-hint">Carregando pool...</div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label">
+              <span>Posição no Rank da Raridade</span>
+              <span id="rank-pos-val" class="field-value">#1</span>
+            </div>
+            <input id="rank-pos" type="range" class="calc-range" min="1" max="4300" value="1">
+            <div id="rank-mult-info" class="field-hint">Multiplicador de divórcio/cota: — | Dificuldade no roll: —</div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label"><span>Objetivo</span></div>
+            <select id="goal-mode" class="calc-select">
+              <option value="acquire">Adquirir personagem livre (0 → 1 chave)</option>
+              <option value="evolve" selected>Evoluir chaves (ex: 1 → 10 Soulmate)</option>
+            </select>
+            <div id="keys-row" style="display: flex; gap: 8px; margin-top: 8px;">
+              <div style="flex:1;">
+                <label style="font-size: 0.78rem; font-weight: 700;">Chaves atuais</label>
+                <input id="keys-current" type="number" class="calc-input" min="1" max="9" value="1">
+              </div>
+              <div style="flex:1;">
+                <label style="font-size: 0.78rem; font-weight: 700;">Chaves destino</label>
+                <input id="keys-target" type="number" class="calc-input" min="2" max="10" value="10">
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. O que o jogador tem -->
+      <section class="calc-section">
+        <h2 class="calc-title"><i class="fas fa-sliders" style="color: #2563eb;"></i> 2. Seus Bônus, Cotas e Ritmo de Jogo</h2>
+        <div class="calc-grid">
+          <div class="field-card">
+            <div class="field-label">
+              <span>Cotas parciais investidas</span>
+              <span id="shares-val" class="field-value">3 cotas (25x)</span>
+            </div>
+            <input id="shares" type="range" class="calc-range" min="0" max="3" value="3">
+            <div class="field-hint">0 = 1x | 1 cota = 4x | 2 cotas = 10x | 3 cotas = 25x peso no roll.</div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label">
+              <span>Apoio / Doação (R$)</span>
+              <span id="donor-val" class="field-value">R$ 0</span>
+            </div>
+            <input id="donor-reais" type="range" class="calc-range" min="0" max="1000" step="5" value="0">
+            <div id="donor-info" class="field-hint">Tetos: Super Wishlist 20x aos R$ 250 | Raridade 10x aos R$ 450 | +1 roll/R$ 10.</div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label">
+              <span>Tamanho da Wishlist</span>
+              <span id="wish-size-val" class="field-value">1.000</span>
+            </div>
+            <input id="wish-size" type="range" class="calc-range" min="0" max="1000" step="10" value="1000">
+            <div id="wish-size-info" class="field-hint">1.000 itens dobram fragmentos (2,0x) e entram no pool de especiais.</div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label"><span>Filtros e Modificadores</span></div>
+            <label class="checkbox-row">
+              <input id="in-wishlist" type="checkbox" checked>
+              Personagem está na minha Wishlist
+            </label>
+            <div style="margin-top: 8px;">
+              <label style="font-size: 0.8rem; font-weight: 700;">Filtro de gênero no roll</label>
+              <select id="gender-filter" class="calc-select" style="margin-top: 4px;">
+                <option value="ALL">Sem filtro (!mu-roll)</option>
+                <option value="FEMALE">Apenas Femininos (!mu-rollf)</option>
+                <option value="MALE">Apenas Masculinos (!mu-rollm)</option>
+              </select>
+            </div>
+            <div id="weekly-leg-wrap" style="margin-top: 8px;">
+              <div class="field-label" style="margin-bottom: 2px;">
+                <span style="font-size: 0.8rem;">Lendárias pegas na semana</span>
+                <span id="weekly-leg-val" class="field-value">0 / 8</span>
+              </div>
+              <input id="weekly-leg" type="range" class="calc-range" min="0" max="8" value="0">
+            </div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label">
+              <span>Rolls por dia</span>
+              <span id="rolls-day-val" class="field-value">150</span>
+            </div>
+            <input id="rolls-day" type="number" class="calc-input" min="1" max="2000" value="150">
+            <div class="preset-row">
+              <button type="button" class="preset-btn" data-target="rolls-day" data-val="40">Casual (40)</button>
+              <button type="button" class="preset-btn" data-target="rolls-day" data-val="150">Ativo (150)</button>
+              <button type="button" class="preset-btn" data-target="rolls-day" data-val="350">Hardcore (350)</button>
+            </div>
+          </div>
+
+          <div class="field-card">
+            <div class="field-label">
+              <span>Zinthos ganhos por dia</span>
+              <span id="zinthos-day-val" class="field-value">500.000</span>
+            </div>
+            <input id="zinthos-day" type="number" class="calc-input" min="1000" max="50000000" step="10000" value="500000">
+            <div class="preset-row">
+              <button type="button" class="preset-btn" data-target="zinthos-day" data-val="50000">Básico (50k)</button>
+              <button type="button" class="preset-btn" data-target="zinthos-day" data-val="250000">Ativo (250k)</button>
+              <button type="button" class="preset-btn" data-target="zinthos-day" data-val="500000">Assíduo (500k)</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Resultado -->
+      <section class="calc-section">
+        <h2 class="calc-title"><i class="fas fa-chart-line" style="color: #16a34a;"></i> 3. Resultado da Simulação</h2>
+        <div class="result-grid">
+          <div class="stat-box">
+            <div>Chance em <strong>1 roll</strong></div>
+            <div id="res-p1" class="stat-num">—</div>
+            <div id="res-avg-rolls" class="field-hint">—</div>
+          </div>
+          <div class="stat-box">
+            <div>Chance em <strong>1 dia</strong> / <strong>7 dias</strong></div>
+            <div id="res-pday" class="stat-num">—</div>
+            <div id="res-p30" class="field-hint">—</div>
+          </div>
+          <div class="stat-box">
+            <div>Custo via <strong>Cotas (Zinthos)</strong></div>
+            <div id="res-cost" class="stat-num">—</div>
+            <div id="res-days" class="field-hint">—</div>
+          </div>
+          <div class="stat-box">
+            <div><strong>Combinado</strong> (Cotas + Roll)</div>
+            <div id="res-hybrid" class="stat-num">—</div>
+            <div id="res-hybrid-hint" class="field-hint">—</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Equação Bonita -->
+      <section class="calc-section">
+        <h2 class="calc-title"><i class="fas fa-square-root-variable" style="color: #9333ea;"></i> 4. Equação Aplicada em Tempo Real</h2>
+        <div id="equation-box" class="equation-box">Carregando fórmula...</div>
+      </section>
+
+      <!-- 5. Constantes do Servidor -->
+      <section class="calc-section">
+        <h2 class="calc-title"><i class="fas fa-database" style="color: #f59e0b;"></i> 5. Constantes Atuais do Servidor</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0;">
+          Valores carregados da API pública agora e o motivo de cada regra:
+        </p>
+        <div style="overflow-x: auto;">
+          <table class="const-table">
+            <thead>
+              <tr>
+                <th>Constante / Regra</th>
+                <th>Valor Atual</th>
+                <th>Resumo e Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="constants-tbody">
+              <tr><td colspan="3">Carregando constantes...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="retro-footer">
+      Waifuletes • Calculadora de Chances
+    </footer>
+  </div>
+
+  <script src="/js/api.js?v=20261125-calculadora-v3"></script>
+  <script src="/js/calculadora-chances.js?v=20261125-calculadora-v3"></script>
+</body>
+</html>

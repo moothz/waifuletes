@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { CharacterService } from '../../services/CharacterService.js';
 import { isTrustedRequest } from '../../plugins/auth.js';
 import { config } from '../../config.js';
+import { SOULMATE_RANKING_SCORES } from '../../utils/rarityCalculator.js';
 
 export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
   const characterService = new CharacterService(fastify.prisma, fastify.redis);
@@ -227,7 +228,22 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
               count(h.id) FILTER (WHERE c."baseRarity" = 'EPIC' AND c.is_mythic IS NOT TRUE)::int as "epicCount",
               count(h.id) FILTER (WHERE c."baseRarity" = 'LEGENDARY' AND c.is_mythic IS NOT TRUE)::int as "legendaryCount",
               coalesce(sum(h.keys) FILTER (WHERE c.is_mythic IS NOT TRUE), 0)::int as "totalKeys",
-              (SELECT count(*)::int FROM soulmates s WHERE s."userId" = u.id) as "totalSoulmates"
+              (SELECT count(*)::int FROM soulmates s WHERE s."userId" = u.id) as "totalSoulmates",
+              (
+                SELECT coalesce(sum(
+                  CASE sc."baseRarity"::text
+                    WHEN 'LEGENDARY' THEN ${SOULMATE_RANKING_SCORES.LEGENDARY}
+                    WHEN 'EPIC' THEN ${SOULMATE_RANKING_SCORES.EPIC}
+                    WHEN 'RARE' THEN ${SOULMATE_RANKING_SCORES.RARE}
+                    WHEN 'UNCOMMON' THEN ${SOULMATE_RANKING_SCORES.UNCOMMON}
+                    WHEN 'COMMON' THEN ${SOULMATE_RANKING_SCORES.COMMON}
+                    ELSE 0
+                  END
+                ), 0)::int
+                FROM soulmates s
+                JOIN characters sc ON sc.id = s."characterId"
+                WHERE s."userId" = u.id AND sc.is_mythic IS NOT TRUE
+              ) as "soulmatePoints"
             FROM users u
             JOIN harem_entries h ON h."userId" = u.id
             JOIN characters c ON c.id = h."characterId"
@@ -274,9 +290,9 @@ export const publicLeaderboardRoutes: FastifyPluginAsync = async (fastify) => {
               -- Lendário SEM Diminishing Returns (200 pts integrais sempre)
               "legendaryCount" * 200 +
 
-              -- Chaves e Soulmates (pontuação reduzida em 30%: 2.100 pts)
+              -- Chaves e Soulmates escaladas por raridade
               "totalKeys" * 1 +
-              "totalSoulmates" * ${config.SOULMATE_RANKING_SCORE ?? 2100}
+              "soulmatePoints"
             )::int as "collectionPoints"
           FROM user_harem_stats
           ORDER BY "collectionPoints" DESC, "totalMarriages" DESC
