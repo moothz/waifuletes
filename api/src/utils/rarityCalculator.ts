@@ -88,6 +88,7 @@ export interface DivorceRefundOptions {
   inflationMultiplier?: number;
   dailyDivorceRate?: number;
   rankMultiplier?: number;
+  payoutMultiplier?: number;
 }
 
 /**
@@ -323,6 +324,7 @@ export function calculateDivorceRefund(
   let inflationMultiplier = 1.0;
   let dailyDivorceRate = 1.0;
   let rankMultiplier = 1.0;
+  let payoutMultiplier = 1.0;
 
   if (typeof optionsOrIsSoulmate === 'boolean') {
     isSoulmate = optionsOrIsSoulmate;
@@ -340,6 +342,9 @@ export function calculateDivorceRefund(
     if (typeof optionsOrIsSoulmate.rankMultiplier === 'number' && optionsOrIsSoulmate.rankMultiplier > 0) {
       rankMultiplier = optionsOrIsSoulmate.rankMultiplier;
     }
+    if (typeof optionsOrIsSoulmate.payoutMultiplier === 'number' && optionsOrIsSoulmate.payoutMultiplier > 0) {
+      payoutMultiplier = optionsOrIsSoulmate.payoutMultiplier;
+    }
   }
 
   const rarityBase = RARITY_DIVORCE_VALUES[baseRarity] ?? 50;
@@ -355,7 +360,20 @@ export function calculateDivorceRefund(
   const rawBeforeInflation = isSoulmate
     ? baseValue + (rarityBase + keysBonus) * rankMultiplier
     : (baseValue + keysBonus) * rankMultiplier;
-  const rawValue = Math.round(rawBeforeInflation * inflationMultiplier);
+  let rawValue = Math.round(rawBeforeInflation * inflationMultiplier * payoutMultiplier);
+
+  // Trava anti-exploit: o retorno bruto do divórcio nunca pode superar 75% do custo mínimo
+  // de reposição das cotas (casamento inicial + evoluções com pesos progressivos).
+  if (isSoulmate) {
+    const evolutionCount = Math.max(0, Math.min(keys - 1, MARRIED_KEY_PROGRESSION_WEIGHTS.length));
+    let replacementWeight = 1.0;
+    for (let i = 0; i < evolutionCount; i++) {
+      replacementWeight += MARRIED_KEY_PROGRESSION_WEIGHTS[i] ?? 1.0;
+    }
+    const minReplacementCost = (SOULMATE_DIVORCE_VALUES[baseRarity] ?? 315000) * replacementWeight * inflationMultiplier;
+    const maxAllowedRawValue = Math.round(minReplacementCost * 0.75);
+    rawValue = Math.min(rawValue, maxAllowedRawValue);
+  }
 
   // 5% penalty on refund (penalidade arredondada para cima conforme regra de divórcio por rank)
   const fullNetKakera = Math.floor(rawValue * (1 - DIVORCE_PENALTY_RATE));

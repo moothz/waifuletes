@@ -94,4 +94,14 @@ describe('💔 Divorce Refund Calculations (Normal vs Soulmate vs Inflation)', (
     expect(resSm.baseValue).toBe(1680000);
     expect(resSm.netKakera).toBe(1643832);
   });
+
+  it('deve aplicar payoutMultiplier apenas quando informado (sem afetar cotas)', () => {
+    const base = calculateDivorceRefund('LEGENDARY', 1, { inflationMultiplier: 1.2 });
+    const boosted = calculateDivorceRefund('LEGENDARY', 1, {
+      inflationMultiplier: 1.2,
+      payoutMultiplier: 1.65,
+    });
+    expect(boosted.rawValue).toBe(Math.round(76500 * 1.2 * 1.65));
+    expect(boosted.netKakera).toBeGreaterThan(base.netKakera);
+  });
 });

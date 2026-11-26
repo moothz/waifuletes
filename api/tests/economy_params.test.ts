@@ -212,6 +212,7 @@ describe('📐 GET /internal/economy/params — parâmetros de balanceamento (Zi
       'divorce.DAILY_DIVORCE_MIN_RATE': rarity.DAILY_DIVORCE_MIN_RATE,
       'divorce.RANK_MULTIPLIER_MAX': rarity.RANK_MULTIPLIER_MAX,
       'divorce.RANK_MULTIPLIER_EXPONENT': rarity.RANK_MULTIPLIER_EXPONENT,
+      'divorce.DIVORCE_PAYOUT_MULTIPLIER': config.DIVORCE_PAYOUT_MULTIPLIER,
       'market.BASE_DAILY_ZINTHOS': market.BASE_DAILY_ZINTHOS,
       ...flat('market.RARITY_DAYS', market.RARITY_DAYS),
       'market.BASE_MONEY_SUPPLY': market.BASE_MONEY_SUPPLY,

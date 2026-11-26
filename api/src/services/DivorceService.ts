@@ -306,6 +306,7 @@ export class DivorceService {
       inflationMultiplier,
       dailyDivorceRate: refundRate,
       rankMultiplier,
+      payoutMultiplier: config.DIVORCE_PAYOUT_MULTIPLIER,
     });
 
     const cycle = this.getDailyCycleInfo();
@@ -424,6 +425,7 @@ export class DivorceService {
       inflationMultiplier,
       dailyDivorceRate: refundRate,
       rankMultiplier,
+      payoutMultiplier: config.DIVORCE_PAYOUT_MULTIPLIER,
     });
     setAttrs({
       'waifu.character.rarity': character.baseRarity,

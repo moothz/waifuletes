@@ -66,6 +66,7 @@ function recoveredValue(entry: ProjectedHaremEntry, inflationMultiplier: number)
     isSoulmate: entry.isSoulmate,
     inflationMultiplier,
     dailyDivorceRate: 1.0,
+    payoutMultiplier: config.DIVORCE_PAYOUT_MULTIPLIER,
   });
   return Math.max(1, Math.floor(refund.fullNetKakera * confiscoRatio()));
 }

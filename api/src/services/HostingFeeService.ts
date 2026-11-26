@@ -410,6 +410,7 @@ export class HostingFeeService {
           isSoulmate,
           inflationMultiplier: ctx.inflationMultiplier,
           dailyDivorceRate: 1.0,
+          payoutMultiplier: config.DIVORCE_PAYOUT_MULTIPLIER,
         });
         const recoveredValue = Math.max(1, Math.floor(refund.fullNetKakera * ctx.confiscoRatio));
 
