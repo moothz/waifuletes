@@ -874,9 +874,27 @@ function setupEventListeners() {
     });
   });
 
-  // Botão de ir para o harém criar anúncio
+  // Botões de abrir picker de Novo Classificado
+  document.getElementById('btn-market-new-listing')?.addEventListener('click', () => {
+    openNewMarketListingPicker();
+  });
   document.getElementById('btn-market-new-from-harem')?.addEventListener('click', () => {
-    switchTab('tab-harem');
+    openNewMarketListingPicker();
+  });
+  document.getElementById('new-listing-waifus-search-input')?.addEventListener('input', () => {
+    filterNewListingWaifus();
+  });
+  document.getElementById('btn-clear-new-listing-search')?.addEventListener('click', () => {
+    clearNewListingWaifusSearch();
+  });
+  document.getElementById('new-listing-waifus-rarity-select')?.addEventListener('change', () => {
+    filterNewListingWaifus();
+  });
+  document.getElementById('new-listing-waifus-coveted-checkbox')?.addEventListener('change', () => {
+    filterNewListingWaifus();
+  });
+  document.getElementById('btn-proceed-new-listing')?.addEventListener('click', () => {
+    proceedNewMarketListing();
   });
 
   // Busca nos classificados globais
@@ -5592,6 +5610,10 @@ async function confirmPublishListing() {
     });
 
     if (res.success) {
+      activeMyListingsCharIds.add(activeSellCharacter.id);
+      if (Array.isArray(userSessionData?.listedCharacterIds) && !userSessionData.listedCharacterIds.includes(activeSellCharacter.id)) {
+        userSessionData.listedCharacterIds.push(activeSellCharacter.id);
+      }
       closeModal('modal-market-sell');
       Api.showToast('Personagem anunciado nos classificados com sucesso!', '✨');
       loadMyListings();
@@ -5697,6 +5719,8 @@ function createMyListingCard(listing) {
   return card;
 }
 
+let activeMyListingsCharIds = new Set();
+
 async function loadMyListings() {
   const grid = document.getElementById('my-listings-grid');
   if (!grid) return;
@@ -5706,9 +5730,16 @@ async function loadMyListings() {
   try {
     const res = await Api.get(`/api/web/user/${encodeURIComponent(userPublicId)}/market/my-listings?token=${encodeURIComponent(userSessionToken)}`);
     if (!res.success || !Array.isArray(res.data) || res.data.length === 0) {
+      activeMyListingsCharIds = new Set();
+      if (userSessionData) userSessionData.listedCharacterIds = [];
       if (countBadge) countBadge.textContent = '0';
-      grid.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--text-muted); background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro);">Você não possui nenhum anúncio ativo no momento. Vá ao seu Harém e clique em "Vender" para anunciar!</div>';
+      grid.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--text-muted); background: var(--bg-card); border: var(--border-retro); border-radius: var(--radius-retro);">Você não possui nenhum anúncio ativo no momento. Clique em "Novo Classificado" acima para selecionar uma waifu do seu harém!</div>';
       return;
+    }
+
+    activeMyListingsCharIds = new Set(res.data.map(l => l.characterId || l.character?.id).filter(Boolean));
+    if (userSessionData) {
+      userSessionData.listedCharacterIds = Array.from(activeMyListingsCharIds);
     }
 
     if (countBadge) countBadge.textContent = res.data.length;
@@ -6416,13 +6447,7 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
 
   // 1. Popula Waifus disponíveis do harém do comprador (exceto Míticos e Bloqueadas), ordenado por Raridade > Chaves
   const waifusList = document.getElementById('offer-waifus-list');
-  const harem = sortHaremCards(
-    (buyerData?.harem || []).filter(item => {
-      const c = item.character;
-      const isLocked = Boolean(item.isLocked || item.collection?.isLocked);
-      return !isLocked && !c?.isMythic && c?.rarity !== 'MYTHIC' && c?.baseRarity !== 'MYTHIC';
-    })
-  );
+  const harem = getEligibleUnlockedHaremEntries(buyerData?.harem || []);
 
   const offerSearchInput = document.getElementById('offer-waifus-search-input');
   if (offerSearchInput) offerSearchInput.value = '';
@@ -6606,13 +6631,29 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
   }
 }
 
-function filterOfferWaifus() {
-  const searchInput = document.getElementById('offer-waifus-search-input');
-  const raritySelect = document.getElementById('offer-waifus-rarity-select');
-  const covetedCheckbox = document.getElementById('offer-waifus-coveted-checkbox');
-  const clearBtn = document.getElementById('btn-clear-offer-waifus-search');
-  const emptyEl = document.getElementById('offer-waifus-empty-search');
-  const listEl = document.getElementById('offer-waifus-list');
+let selectedNewListingChar = null;
+
+function getEligibleUnlockedHaremEntries(haremEntries, excludedCharIds = null) {
+  return sortHaremCards(
+    (haremEntries || []).filter(item => {
+      const c = item?.character;
+      if (!c?.id) return false;
+      const isLocked = Boolean(item.isLocked || item.collection?.isLocked);
+      const isMythic = Boolean(c.isMythic || c.rarity === 'MYTHIC' || c.baseRarity === 'MYTHIC');
+      if (isLocked || isMythic) return false;
+      if (excludedCharIds && excludedCharIds.has(c.id)) return false;
+      return true;
+    })
+  );
+}
+
+function filterWaifuPickerGrid({ searchInputId, raritySelectId, covetedCheckboxId, clearBtnId, emptyElId, listElId, cardSelector = '.offer-waifu-card' }) {
+  const searchInput = document.getElementById(searchInputId);
+  const raritySelect = document.getElementById(raritySelectId);
+  const covetedCheckbox = document.getElementById(covetedCheckboxId);
+  const clearBtn = document.getElementById(clearBtnId);
+  const emptyEl = document.getElementById(emptyElId);
+  const listEl = document.getElementById(listElId);
   if (!listEl) return;
 
   const query = (searchInput?.value || '').trim();
@@ -6623,7 +6664,7 @@ function filterOfferWaifus() {
     clearBtn.classList.toggle('hidden', !query);
   }
 
-  const cards = listEl.querySelectorAll('.offer-waifu-card');
+  const cards = listEl.querySelectorAll(cardSelector);
   let visibleCount = 0;
 
   cards.forEach(card => {
@@ -6657,6 +6698,17 @@ function filterOfferWaifus() {
   }
 }
 
+function filterOfferWaifus() {
+  filterWaifuPickerGrid({
+    searchInputId: 'offer-waifus-search-input',
+    raritySelectId: 'offer-waifus-rarity-select',
+    covetedCheckboxId: 'offer-waifus-coveted-checkbox',
+    clearBtnId: 'btn-clear-offer-waifus-search',
+    emptyElId: 'offer-waifus-empty-search',
+    listElId: 'offer-waifus-list',
+  });
+}
+
 function clearOfferWaifusSearch() {
   const searchInput = document.getElementById('offer-waifus-search-input');
   if (searchInput) {
@@ -6664,6 +6716,120 @@ function clearOfferWaifusSearch() {
     searchInput.focus();
   }
   filterOfferWaifus();
+}
+
+function openNewMarketListingPicker() {
+  const listEl = document.getElementById('new-listing-waifus-list');
+  if (!listEl) return;
+
+  selectedNewListingChar = null;
+  const proceedBtn = document.getElementById('btn-proceed-new-listing');
+  if (proceedBtn) proceedBtn.disabled = true;
+
+  const searchInput = document.getElementById('new-listing-waifus-search-input');
+  if (searchInput) searchInput.value = '';
+  const raritySelect = document.getElementById('new-listing-waifus-rarity-select');
+  if (raritySelect) raritySelect.value = '';
+  const covCb = document.getElementById('new-listing-waifus-coveted-checkbox');
+  if (covCb) covCb.checked = false;
+  const clearBtn = document.getElementById('btn-clear-new-listing-search');
+  if (clearBtn) clearBtn.classList.add('hidden');
+  const emptyEl = document.getElementById('new-listing-waifus-empty-search');
+  if (emptyEl) emptyEl.classList.add('hidden');
+
+  const listedIds = new Set([
+    ...Array.from(activeMyListingsCharIds || []),
+    ...(Array.isArray(userSessionData?.listedCharacterIds) ? userSessionData.listedCharacterIds : []),
+  ]);
+
+  const rawHarem = Array.isArray(userSessionData?.harem) && userSessionData.harem.length > 0
+    ? userSessionData.harem
+    : Array.from(haremEntryCache.values());
+  const candidates = getEligibleUnlockedHaremEntries(rawHarem, listedIds);
+
+  const searchContainer = document.getElementById('new-listing-search-container');
+  if (searchContainer) {
+    searchContainer.style.display = candidates.length === 0 ? 'none' : 'flex';
+  }
+
+  const infoEl = document.getElementById('new-listing-picker-info');
+  if (infoEl) {
+    infoEl.textContent = candidates.length > 0
+      ? `Selecione uma waifu desbloqueada do seu harém para anunciar (${candidates.length} disponíveis):`
+      : 'Nenhuma waifu desbloqueada disponível para anunciar no momento.';
+  }
+
+  if (candidates.length === 0) {
+    listEl.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; font-size: 12px; color: var(--text-muted); padding: 16px;">Todas as suas waifus elegíveis estão bloqueadas ou já anunciadas nos classificados.</div>';
+  } else {
+    listEl.innerHTML = candidates.map(item => {
+      const char = item.character;
+      const k = item.keys || 1;
+      const sm = k >= 10;
+      const r = (char.baseRarity || char.rarity || 'COMMON').toUpperCase();
+      const covetsCount = Number(item.activeCovetsCount || item.unseenCovetsCount || 0);
+      const isCoveted = covetsCount > 0 ? '1' : '0';
+      return `
+        <label class="offer-waifu-card" data-char-id="${escapeHtml(char.id)}" title="${escapeHtml(char.name)} (${sm ? '💖' : '🔑'} ${k})" data-name="${escapeHtml(char.name || '')}" data-series="${escapeHtml(char.series || '')}" data-rarity="${r}" data-coveted="${isCoveted}" ondblclick="selectNewListingCandidate('${escapeHtml(char.id)}'); proceedNewMarketListing();">
+          <img decoding="async" src="${getCharImg(char)}" class="offer-waifu-img" onerror="handleImgError(this)" loading="lazy">
+          <input type="radio" name="new-listing-waifu-rb" value="${escapeHtml(char.id)}" style="display: none;" onchange="selectNewListingCandidate('${escapeHtml(char.id)}')">
+          <div class="offer-waifu-overlay">
+            <span class="offer-waifu-name">${escapeHtml(char.name)}</span>
+            <span class="offer-waifu-keys" style="color: ${sm ? '#f472b6' : '#fde047'};">${covetsCount > 0 ? `👀${covetsCount} ` : ''}${sm ? '💖' : '🔑'}${k}</span>
+          </div>
+          <div class="offer-waifu-check">✓</div>
+        </label>
+      `;
+    }).join('');
+  }
+
+  openModal('modal-market-new-listing-picker');
+}
+
+function selectNewListingCandidate(charId) {
+  const entry = haremEntryCache?.get(charId) || (userSessionData?.harem || []).find(item => (item.character?.id || item.characterId) === charId);
+  const char = entry?.character || null;
+  selectedNewListingChar = char ? { id: char.id, name: char.name, imageUrl: char.imageUrl, imageUrls: char.imageUrls, series: char.series || '' } : { id: charId, name: charId, imageUrl: '/media/characters/default.jpg', series: '' };
+
+  const listEl = document.getElementById('new-listing-waifus-list');
+  if (listEl) {
+    listEl.querySelectorAll('.offer-waifu-card').forEach(card => {
+      card.classList.toggle('is-selected', card.dataset.charId === charId);
+    });
+  }
+
+  const proceedBtn = document.getElementById('btn-proceed-new-listing');
+  if (proceedBtn) proceedBtn.disabled = false;
+}
+
+function filterNewListingWaifus() {
+  filterWaifuPickerGrid({
+    searchInputId: 'new-listing-waifus-search-input',
+    raritySelectId: 'new-listing-waifus-rarity-select',
+    covetedCheckboxId: 'new-listing-waifus-coveted-checkbox',
+    clearBtnId: 'btn-clear-new-listing-search',
+    emptyElId: 'new-listing-waifus-empty-search',
+    listElId: 'new-listing-waifus-list',
+  });
+}
+
+function clearNewListingWaifusSearch() {
+  const searchInput = document.getElementById('new-listing-waifus-search-input');
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.focus();
+  }
+  filterNewListingWaifus();
+}
+
+function proceedNewMarketListing() {
+  if (!selectedNewListingChar?.id) {
+    Api.showToast('Selecione uma waifu para anunciar nos classificados.', '⚠️');
+    return;
+  }
+  const target = selectedNewListingChar;
+  closeModal('modal-market-new-listing-picker');
+  openSellModal(target.id, target.name, getCharImg(target), target.series || '');
 }
 
 function adjustOfferBuffGroupQty(idx, delta, max) {
