@@ -115,17 +115,25 @@ function createDomEnv(urlString: string) {
     removeItem: (k: string) => storage.delete(k),
   };
 
+  const location: any = {
+    href: urlObj.href,
+    origin: urlObj.origin,
+    pathname: urlObj.pathname,
+    search: urlObj.search,
+    hash: urlObj.hash,
+    replace: (u: string) => replacedUrls.push(u),
+  };
   const windowObj: any = {
-    location: {
-      href: urlObj.href,
-      origin: urlObj.origin,
-      pathname: urlObj.pathname,
-      search: urlObj.search,
-      hash: urlObj.hash,
-      replace: (u: string) => replacedUrls.push(u),
-    },
+    location,
     history: {
-      replaceState: (_s: any, _t: string, u: string) => replacedUrls.push(u),
+      replaceState: (_s: any, _t: string, u: string) => {
+        replacedUrls.push(u);
+        const next = new URL(u, location.href);
+        location.href = next.href;
+        location.pathname = next.pathname;
+        location.search = next.search;
+        location.hash = next.hash;
+      },
     },
     addEventListener: () => {},
     scrollTo: () => {},
@@ -340,17 +348,182 @@ describe('🔗 Filtros de busca por série via links & Links para cônjuge', () 
     expect(env.getEl('modal-waifu-preview').classList.contains('hidden')).toBe(true);
   });
 
-  it('arquivos HTML possuem cachebusters atualizados para retro-theme.css, home.js, character.js e user.js', () => {
-    const version = '20261124-series-spouse-links';
-    const indexHtml = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf-8');
-    const characterHtml = fs.readFileSync(path.join(publicDir, 'character.html'), 'utf-8');
-    const userHtml = fs.readFileSync(path.join(publicDir, 'user.html'), 'utf-8');
 
-    expect(indexHtml).toContain(`/css/retro-theme.css?v=${version}`);
-    expect(indexHtml).toContain(`/js/home.js?v=${version}`);
-    expect(characterHtml).toContain(`/css/retro-theme.css?v=${version}`);
-    expect(characterHtml).toContain(`/js/character.js?v=${version}`);
-    expect(userHtml).toContain(`/css/retro-theme.css?v=${version}`);
-    expect(userHtml).toContain(`/js/user.js?v=${version}`);
+  it('arquivos HTML usam a mesma versão de cachebuster para retro-theme.css, home.js, character.js e user.js', () => {
+    const assets = ['/css/retro-theme.css', '/js/home.js', '/js/character.js', '/js/user.js'];
+    const versions = new Map<string, Set<string>>();
+    for (const file of fs.readdirSync(publicDir).filter((f) => f.endsWith('.html'))) {
+      const html = fs.readFileSync(path.join(publicDir, file), 'utf-8');
+      for (const m of html.matchAll(/(?:src|href)="(\/[^"?#]+)\?v=([^"&#]+)"/g)) {
+        if (!versions.has(m[1])) versions.set(m[1], new Set());
+        versions.get(m[1])!.add(m[2]);
+      }
+    }
+    for (const asset of assets) {
+      expect([...(versions.get(asset) ?? [])], asset).toHaveLength(1);
+    }
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
+const emptyPage = (total = 0) => ({ success: true, data: { data: [], total, totalPages: 1, page: 1 } });
+
+function loadScript(file: string, env: ReturnType<typeof createDomEnv>, get: (url: string) => Promise<any>, overrides: Record<string, any> = {}) {
+  const ctx = vm.createContext({
+    window: env.windowObj,
+    document: env.document,
+    localStorage: env.localStorage,
+    history: env.windowObj.history,
+    navigator: { userAgent: 'vitest' },
+    Notification: { permission: 'default' },
+    URLSearchParams,
+    URL,
+    console: { ...console, error: () => {} },
+    setTimeout,
+    clearTimeout,
+    Api: {
+      get,
+      getShareUrl: (p: string) => p,
+      showToast: () => {},
+      centerActiveTab: () => {},
+      escapeHtml: mockEscapeHtml,
+    },
+    escapeHtml: mockEscapeHtml,
+    ...overrides,
+  });
+  vm.runInContext(fs.readFileSync(path.join(publicDir, file), 'utf-8'), ctx);
+  return ctx;
+}
+
+const searchOf = (url: string) => new URLSearchParams(url.split('?')[1]).get('search');
+
+describe('🔗 Filtros por série: URL, corrida de carregamento e armazenamento bloqueado', () => {
+  it('user.js tira q/search/serie/series da URL depois de ler, mantendo token e hash, e o F5 seguinte respeita o hash', async () => {
+    const env = createDomEnv('https://waifuletes.test/user/pub_me?token=tok_fake&q=Naruto&serie=Bleach#harem/casados');
+    const ctx = loadScript('js/user.js', env, async () => emptyPage());
+    env.document.triggerDOMContentLoaded();
+    await flush();
+
+    expect(vm.runInContext('catalogState.search', ctx)).toBe('Naruto');
+    const url = new URL(env.windowObj.location.href);
+    expect(['q', 'search', 'serie', 'series'].filter((k) => url.searchParams.has(k))).toEqual([]);
+    expect(url.searchParams.get('token')).toBe('tok_fake');
+    expect(url.hash).toBe('#harem/casados');
+
+    const reload = createDomEnv(env.windowObj.location.href);
+    const ctx2 = loadScript('js/user.js', reload, async () => emptyPage());
+    reload.document.triggerDOMContentLoaded();
+    await flush();
+    expect(vm.runInContext('catalogState.search', ctx2)).toBe('');
+    expect(vm.runInContext('hasInitialCatalogSearch', ctx2)).toBe(false);
+  });
+
+  it('user.js refaz a busca quando a série é clicada com o catálogo ainda carregando', async () => {
+    const env = createDomEnv('https://waifuletes.test/user/pub_me');
+    const calls: Array<{ url: string; d: ReturnType<typeof deferred<any>> }> = [];
+    const ctx = loadScript('js/user.js', env, (url: string) => {
+      if (!url.startsWith('/characters?')) return Promise.resolve(emptyPage());
+      const d = deferred<any>();
+      calls.push({ url, d });
+      return d.promise;
+    });
+
+    vm.runInContext('catalogState.page = 3; loadCatalogCharacters()', ctx);
+    vm.runInContext(`filterCatalogBySeries('Naruto')`, ctx);
+    expect(calls.length).toBe(1);
+
+    calls[0].d.resolve({ success: true, data: { data: [], total: 999, totalPages: 50, page: 3 } });
+    await flush();
+    expect(calls.length).toBe(2);
+    expect(searchOf(calls[1].url)).toBe('Naruto');
+    expect(new URLSearchParams(calls[1].url.split('?')[1]).get('page')).toBe('1');
+
+    calls[1].d.resolve(emptyPage(7));
+    await flush();
+    expect(vm.runInContext('catalogState.total', ctx)).toBe(7);
+    expect(calls.length).toBe(2);
+  });
+
+  it('home.js refaz a busca quando o filtro muda com a lista ainda carregando', async () => {
+    const env = createDomEnv('https://waifuletes.test/');
+    const calls: Array<{ url: string; d: ReturnType<typeof deferred<any>> }> = [];
+    const ctx = loadScript('js/home.js', env, (url: string) => {
+      if (!url.startsWith('/characters?')) return Promise.resolve({ success: true, data: {} });
+      const d = deferred<any>();
+      calls.push({ url, d });
+      return d.promise;
+    });
+    env.document.triggerDOMContentLoaded();
+    expect(calls.length).toBe(1);
+    vm.runInContext(`state.page = 3`, ctx);
+
+    vm.runInContext(`state.search = 'Bleach'; state.page = 1; loadCharacters();`, ctx);
+    expect(calls.length).toBe(1);
+
+    calls[0].d.resolve({ success: true, data: { data: [], total: 999, totalPages: 50, page: 3 } });
+    await flush();
+    expect(calls.length).toBe(2);
+    expect(searchOf(calls[1].url)).toBe('Bleach');
+    expect(new URLSearchParams(calls[1].url.split('?')[1]).get('page')).toBe('1');
+
+    calls[1].d.resolve(emptyPage(3));
+    await flush();
+    expect(vm.runInContext('state.total', ctx)).toBe(3);
+    expect(calls.length).toBe(2);
+  });
+
+  it('home.js mantém ?q= da URL igual à busca: normaliza apelidos e remove ao apagar o campo', async () => {
+    const env = createDomEnv('https://waifuletes.test/?serie=Bleach&stay=1');
+    const ctx = loadScript('js/home.js', env, async () => emptyPage());
+    env.document.triggerDOMContentLoaded();
+    await flush();
+    let url = new URL(env.windowObj.location.href);
+    expect(url.searchParams.get('q')).toBe('Bleach');
+    expect(url.searchParams.has('serie')).toBe(false);
+    expect(url.searchParams.get('stay')).toBe('1');
+
+    env.getEl('search-input').dispatchEvent({ type: 'input', target: { value: '  ' } });
+    await new Promise((r) => setTimeout(r, 350));
+    url = new URL(env.windowObj.location.href);
+    expect(url.searchParams.has('q')).toBe(false);
+    expect(vm.runInContext('state.search', ctx)).toBe('');
+
+    env.getEl('search-input').dispatchEvent({ type: 'input', target: { value: 'One Piece' } });
+    await new Promise((r) => setTimeout(r, 350));
+    expect(new URL(env.windowObj.location.href).searchParams.get('q')).toBe('One Piece');
+  });
+
+  it('home.js carrega o catálogo mesmo com o armazenamento do navegador bloqueado', async () => {
+    const env = createDomEnv('https://waifuletes.test/?q=Naruto');
+    const blocked = {
+      getItem: () => {
+        throw new Error('SecurityError: The operation is insecure.');
+      },
+      setItem: () => {
+        throw new Error('SecurityError: The operation is insecure.');
+      },
+      removeItem: () => {},
+    };
+    const calls: string[] = [];
+    loadScript(
+      'js/home.js',
+      env,
+      async (url: string) => {
+        calls.push(url);
+        return emptyPage();
+      },
+      { localStorage: blocked }
+    );
+    expect(() => env.document.triggerDOMContentLoaded()).not.toThrow();
+    await flush();
+    const charCalls = calls.filter((u) => u.startsWith('/characters?'));
+    expect(charCalls.length).toBe(1);
+    expect(searchOf(charCalls[0])).toBe('Naruto');
   });
 });

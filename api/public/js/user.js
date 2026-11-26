@@ -245,6 +245,20 @@ function filterCatalogBySeries(seriesName) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function removeSearchParamsFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    const keys = ['q', 'search', 'serie', 'series'].filter((key) => url.searchParams.has(key));
+    if (!keys.length) return;
+    keys.forEach((key) => url.searchParams.delete(key));
+    window.history.replaceState(null, '', url.toString());
+  } catch (_) {}
+}
+
+function catalogRequestKey() {
+  return JSON.stringify([catalogState.search, catalogState.gender, catalogState.maritalStatus, catalogState.rarity, catalogState.sort, catalogState.page, catalogState.limit]);
+}
+
 function handleSeriesFilterLinkClick(event, anchorEl) {
   if (event) event.stopPropagation();
   const series = anchorEl?.dataset?.series || '';
@@ -307,6 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const catalogSearchInput = document.getElementById('catalog-search-input');
     if (catalogSearchInput) catalogSearchInput.value = initialSearch;
   }
+  removeSearchParamsFromUrl();
 
   setupEventListeners();
   loadUserData();
@@ -3719,6 +3734,7 @@ async function handlePublicOfferClick(listingId, charName, charImg, interest) {
 async function loadCatalogCharacters() {
   if (catalogState.loading) return;
   catalogState.loading = true;
+  const requestKey = catalogRequestKey();
 
   const grid = document.getElementById('catalog-grid');
   const totalCountEl = document.getElementById('catalog-total-count');
@@ -3742,6 +3758,7 @@ async function loadCatalogCharacters() {
 
   try {
     const res = await Api.get(`/characters?${params.toString()}`);
+    if (catalogRequestKey() !== requestKey) return;
     const resultData = res?.data;
     let characters = resultData?.data || [];
 
@@ -3875,6 +3892,7 @@ async function loadCatalogCharacters() {
     grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; color: #ef4444;">Erro ao carregar catálogo.</div>';
   } finally {
     catalogState.loading = false;
+    if (catalogRequestKey() !== requestKey) loadCatalogCharacters();
   }
 }
 

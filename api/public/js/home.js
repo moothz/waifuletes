@@ -31,12 +31,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = initialSearch;
   }
+  syncSearchToUrl();
 
   bindHomeEvents();
   if (checkLoggedInUser()) return;
   loadCharacters();
   fetchRavenaContact();
 });
+
+function readStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+function syncSearchToUrl() {
+  try {
+    const url = new URL(window.location.href);
+    ['search', 'serie', 'series'].forEach((key) => url.searchParams.delete(key));
+    if (state.search) url.searchParams.set('q', state.search);
+    else url.searchParams.delete('q');
+    if (url.href !== window.location.href) window.history.replaceState({}, '', url.toString());
+  } catch (_) {}
+}
+
+function homeRequestKey() {
+  return JSON.stringify([state.search, state.gender, state.maritalStatus, state.rarity, state.sortBy, state.page, state.limit]);
+}
 
 function getCookie(name) {
   const nameEQ = name + '=';
@@ -53,8 +76,8 @@ function checkLoggedInUser() {
   const sp = new URLSearchParams(window.location.search);
   const allowStay = sp.has('stay') || sp.has('home') || sp.has('noredirect');
 
-  let publicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id') || localStorage.getItem('waifu_public_id');
-  const token = getCookie('waifu_session') || localStorage.getItem('waifu_session');
+  let publicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || readStorage('waifu_user_public_id') || readStorage('waifu_public_id');
+  const token = getCookie('waifu_session') || readStorage('waifu_session');
 
   if (publicId) {
     publicId = publicId.replace(/^=+/, '').trim();
@@ -140,6 +163,7 @@ function bindHomeEvents() {
     searchTimeout = setTimeout(() => {
       state.search = e.target.value.trim();
       state.page = 1;
+      syncSearchToUrl();
       loadCharacters();
     }, 300);
   });
@@ -238,6 +262,7 @@ function bindHomeEvents() {
 async function loadCharacters() {
   if (state.loading) return;
   state.loading = true;
+  const requestKey = homeRequestKey();
 
   const grid = document.getElementById('waifu-grid');
   const totalCountEl = document.getElementById('total-count');
@@ -259,6 +284,7 @@ async function loadCharacters() {
     if (state.sortBy) params.append('sort', state.sortBy);
 
     const res = await Api.get(`/characters?${params.toString()}`);
+    if (homeRequestKey() !== requestKey) return;
     const resultData = res?.data;
     let characters = resultData?.data || [];
 
@@ -304,6 +330,7 @@ async function loadCharacters() {
     `;
   } finally {
     state.loading = false;
+    if (homeRequestKey() !== requestKey) loadCharacters();
   }
 }
 
@@ -386,11 +413,7 @@ function createWaifuCard(char) {
         if (searchInput) searchInput.value = cleanSeries;
         state.search = cleanSeries;
         state.page = 1;
-        try {
-          const url = new URL(window.location.href);
-          url.searchParams.set('q', cleanSeries);
-          window.history.replaceState({}, '', url.toString());
-        } catch (_) {}
+        syncSearchToUrl();
         loadCharacters();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
@@ -442,8 +465,8 @@ async function loadRankings(searchTerm = '') {
       Api.get(`/leaderboard/harem?limit=25${searchParam}`),
     ]);
 
-    const token = getCookie('waifu_session') || localStorage.getItem('waifu_session');
-    const userPubId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id');
+    const token = getCookie('waifu_session') || readStorage('waifu_session');
+    const userPubId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || readStorage('waifu_user_public_id');
     const isAuthenticated = Boolean(token && userPubId);
 
     // 1. Ranking por Zinthos
