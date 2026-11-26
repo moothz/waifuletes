@@ -211,6 +211,67 @@ let catalogState = {
   totalPages: 1,
   loading: false
 };
+let hasInitialCatalogSearch = false;
+
+function renderSeriesFilterLinkHtml(series, emptyLabel = 'Sem série') {
+  const clean = String(series || '').trim();
+  if (!clean) return escapeHtml(emptyLabel);
+  const href = `/?q=${encodeURIComponent(clean)}`;
+  return `<a href="${href}" class="series-filter-link" data-series="${escapeHtml(clean)}" title="Filtrar catálogo por ${escapeHtml(clean)}" onclick="return handleSeriesFilterLinkClick(event, this);">${escapeHtml(clean)}</a>`;
+}
+
+function filterCatalogBySeries(seriesName) {
+  const clean = String(seriesName || '').trim();
+  if (!clean) return;
+
+  if (typeof closeModal === 'function') {
+    closeModal('modal-waifu-preview');
+    closeModal('modal-card-options');
+  } else {
+    document.getElementById('modal-waifu-preview')?.classList.add('hidden');
+    document.getElementById('modal-card-options')?.classList.add('hidden');
+  }
+
+  activateMainTab('tab-catalog', false);
+  activateSubTab('catalog-subtabs', 'subtab-catalog-characters', true);
+
+  const catalogSearchInput = document.getElementById('catalog-search-input');
+  if (catalogSearchInput) {
+    catalogSearchInput.value = clean;
+  }
+  catalogState.search = clean;
+  catalogState.page = 1;
+  loadCatalogCharacters();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function removeSearchParamsFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    const keys = ['q', 'search', 'serie', 'series'].filter((key) => url.searchParams.has(key));
+    if (!keys.length) return;
+    keys.forEach((key) => url.searchParams.delete(key));
+    window.history.replaceState(null, '', url.toString());
+  } catch (_) {}
+}
+
+function catalogRequestKey() {
+  return JSON.stringify([catalogState.search, catalogState.gender, catalogState.maritalStatus, catalogState.rarity, catalogState.sort, catalogState.page, catalogState.limit]);
+}
+
+function handleSeriesFilterLinkClick(event, anchorEl) {
+  if (event) event.stopPropagation();
+  const series = anchorEl?.dataset?.series || '';
+  if (!series) return true;
+  const isPrivateVisible = !document.getElementById('private-panel')?.classList.contains('hidden');
+  const isPlainLeftClick = event && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0;
+  if (isPrivateVisible && isPlainLeftClick) {
+    event.preventDefault();
+    filterCatalogBySeries(series);
+    return false;
+  }
+  return true;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   // Extrai publicId da URL (/user/:publicId)
@@ -252,6 +313,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('user-title').textContent = 'Usuário não especificado';
     return;
   }
+
+  const initialSearch = (params.get('q') || params.get('search') || params.get('serie') || params.get('series') || '').trim();
+  if (initialSearch) {
+    hasInitialCatalogSearch = true;
+    catalogState.search = initialSearch;
+    const catalogSearchInput = document.getElementById('catalog-search-input');
+    if (catalogSearchInput) catalogSearchInput.value = initialSearch;
+  }
+  removeSearchParamsFromUrl();
 
   setupEventListeners();
   loadUserData();
@@ -1167,7 +1237,10 @@ async function loadUserData() {
       updateMarketPendingBadge();
 
       // Navegação por Hash inicial (restauração de rota salva, favorito ou F5)
-      if (window.location.hash) {
+      if (hasInitialCatalogSearch) {
+        activateMainTab('tab-catalog', false);
+        activateSubTab('catalog-subtabs', 'subtab-catalog-characters', true);
+      } else if (window.location.hash) {
         navigateToHash(window.location.hash);
       } else {
         updateUrlHash('catalogo', 'personagens');
@@ -1543,7 +1616,7 @@ function createPrivateHaremCard(entry, options = {}) {
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="mythic-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="🔮 Personagem Mítico">🔮 Mítico</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
           <button class="btn-retro btn-sm btn-gold" style="width: 100%; font-weight: 800;" onclick="openCardOptionsModal('${char.id}')">
             ⚙️ Opções
@@ -1560,7 +1633,7 @@ function createPrivateHaremCard(entry, options = {}) {
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="soulmate-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="💖 Alma Gêmea (Vínculo Máximo)">💖 Soulmate</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
           ${colBtnHtml}
           <button class="btn-retro btn-sm btn-gold" style="width: 100%; font-weight: 800;" onclick="openCardOptionsModal('${char.id}')">
@@ -1582,7 +1655,7 @@ function createPrivateHaremCard(entry, options = {}) {
       </div>
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
         <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
           ${colBtnHtml}
           <button class="btn-retro btn-sm btn-gold" style="width: 100%; font-weight: 800;" onclick="openCardOptionsModal('${char.id}')">
@@ -1693,7 +1766,7 @@ function openCardOptionsModal(charId) {
   const listEl = document.getElementById('card-options-buttons-list');
 
   if (nameEl) nameEl.textContent = char.name;
-  if (seriesEl) seriesEl.textContent = char.series || 'Sem série';
+  if (seriesEl) seriesEl.innerHTML = renderSeriesFilterLinkHtml(char.series);
   if (imgEl) imgEl.src = char.imageUrl || '/media/characters/default.jpg';
 
   if (char.isMythic || char.baseRarity === 'MYTHIC' || char.rarity === 'MYTHIC') {
@@ -2623,11 +2696,21 @@ function renderPrivateWishlist(wishlist) {
           </div>
         `;
       } else if (isMarried) {
-        marriedBadgeHtml = `
-          <div class="badge-married-alert" title="Casada(o) com ${escapeHtml(spouse || 'outro jogador')}">
-            💍 Casada ${spouse ? `(${escapeHtml(spouse)})` : ''}
-          </div>
-        `;
+        const spousePublicId = entry.marriedToPublicId || char.marriedToPublicId || null;
+        if (spousePublicId) {
+          const spouseHref = typeof Api !== 'undefined' && Api.getShareUrl ? Api.getShareUrl(`/user/${encodeURIComponent(spousePublicId)}`) : `/user/${encodeURIComponent(spousePublicId)}`;
+          marriedBadgeHtml = `
+            <a href="${escapeHtml(spouseHref)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation();" class="badge-married-alert spouse-profile-link" style="text-decoration: none; cursor: pointer;" title="Casada(o) com ${escapeHtml(spouse || 'outro jogador')} (Clique para abrir perfil público)">
+              💍 Casada ${spouse ? `(${escapeHtml(spouse)})` : ''}
+            </a>
+          `;
+        } else {
+          marriedBadgeHtml = `
+            <div class="badge-married-alert" title="Casada(o) com ${escapeHtml(spouse || 'outro jogador')}">
+              💍 Casada ${spouse ? `(${escapeHtml(spouse)})` : ''}
+            </div>
+          `;
+        }
       }
 
       if (entry.collectionId) {
@@ -2651,7 +2734,7 @@ function renderPrivateWishlist(wishlist) {
         </div>
         <div class="card-info">
           <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
-          <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+          <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
           <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
             ${!isMarried ? `
               <button class="btn-retro btn-sm btn-gold" style="width: 100%; font-weight: 800; border-color: #d97706; color: #92400e; background: #fef3c7;" onclick="openInvestModal('${char.id}')">
@@ -2756,7 +2839,7 @@ function createPublicHaremCard(entry) {
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="mythic-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="🔮 Personagem Mítico">🔮 Mítico</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
       </div>
     `;
   } else if (isSoulmate) {
@@ -2767,7 +2850,7 @@ function createPublicHaremCard(entry) {
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
         <div class="soulmate-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="💖 Alma Gêmea (Vínculo Máximo)">💖 Soulmate</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
       </div>
     `;
   } else {
@@ -2786,7 +2869,7 @@ function createPublicHaremCard(entry) {
       </div>
       <div class="card-info">
         <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
       </div>
     `;
   }
@@ -3577,7 +3660,7 @@ function renderPublicMarketListings(listings) {
       </div>
       <div class="card-info">
         <div class="card-name">${escapeHtml(char.name)}</div>
-        <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+        <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
         ${ageHtml}
         <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 8px 0; border: var(--border-retro); word-break: break-word;">
           <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
@@ -3651,6 +3734,7 @@ async function handlePublicOfferClick(listingId, charName, charImg, interest) {
 async function loadCatalogCharacters() {
   if (catalogState.loading) return;
   catalogState.loading = true;
+  const requestKey = catalogRequestKey();
 
   const grid = document.getElementById('catalog-grid');
   const totalCountEl = document.getElementById('catalog-total-count');
@@ -3674,6 +3758,7 @@ async function loadCatalogCharacters() {
 
   try {
     const res = await Api.get(`/characters?${params.toString()}`);
+    if (catalogRequestKey() !== requestKey) return;
     const resultData = res?.data;
     let characters = resultData?.data || [];
 
@@ -3752,7 +3837,7 @@ async function loadCatalogCharacters() {
         </div>
         <div class="card-info">
           <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
-          <div class="card-series" title="${escapeHtml(char.series || 'Sem série')}">${escapeHtml(char.series || 'Sem série')}</div>
+          <div class="card-series" title="${escapeHtml(char.series || 'Sem série')}">${renderSeriesFilterLinkHtml(char.series)}</div>
           <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
             ${isMythic ? `
               <div style="text-align: center; padding: 6px; background: rgba(168, 85, 247, 0.15); border: 1px solid #a855f7; border-radius: 4px; font-weight: 800; font-size: 12px; color: #facc15;">
@@ -3807,6 +3892,7 @@ async function loadCatalogCharacters() {
     grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 32px; color: #ef4444;">Erro ao carregar catálogo.</div>';
   } finally {
     catalogState.loading = false;
+    if (catalogRequestKey() !== requestKey) loadCatalogCharacters();
   }
 }
 
@@ -4861,7 +4947,10 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
   };
 
   document.getElementById('waifu-preview-name').textContent = cName;
-  document.getElementById('waifu-preview-series').textContent = cSeries ? `Série: ${cSeries}` : '';
+  const previewSeriesEl = document.getElementById('waifu-preview-series');
+  if (previewSeriesEl) {
+    previewSeriesEl.innerHTML = cSeries ? `Série: ${renderSeriesFilterLinkHtml(cSeries, '')}` : '';
+  }
   
   // Linha de Ranks
   const rankLineEl = document.getElementById('waifu-preview-rank-line');
@@ -4908,8 +4997,11 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
       const creator = fullChar?.creator || fullChar?.creatorUser;
       const creatorName = creator?.name || cOwner?.name || 'Apoiador';
       const creatorPublicId = creator?.publicId || cOwner?.publicId || null;
-      const creatorLink = creatorPublicId
-        ? `<a href="/user/${creatorPublicId}" target="_blank" style="color: #facc15; text-decoration: underline; font-weight: 800;">${escapeHtml(creatorName)}</a>`
+      const creatorHref = creatorPublicId
+        ? (typeof Api !== 'undefined' && Api.getShareUrl ? Api.getShareUrl(`/user/${encodeURIComponent(creatorPublicId)}`) : `/user/${encodeURIComponent(creatorPublicId)}`)
+        : null;
+      const creatorLink = creatorHref
+        ? `<a href="${escapeHtml(creatorHref)}" target="_blank" rel="noopener noreferrer" class="spouse-profile-link" title="Abrir perfil público de ${escapeHtml(creatorName)}" style="color: #facc15; text-decoration: underline; font-weight: 800;">${escapeHtml(creatorName)}</a>`
         : `<span style="color: #facc15; font-weight: 800;">${escapeHtml(creatorName)}</span>`;
 
       marriageLineEl.innerHTML = `
@@ -4920,7 +5012,8 @@ async function openWaifuPreview(charId, charName, charImg, series, rarity, gende
       const ownerName = cOwner?.name || (typeof cOwner === 'string' ? cOwner : 'Outro jogador');
       const ownerPublicId = cOwner?.publicId || null;
       if (ownerPublicId) {
-        marriageLineEl.innerHTML = `💍 Casada(o) com <a href="/user/${ownerPublicId}" target="_blank" style="color: #ec4899; text-decoration: underline; font-weight: 800;">${escapeHtml(ownerName)}</a>`;
+        const ownerHref = typeof Api !== 'undefined' && Api.getShareUrl ? Api.getShareUrl(`/user/${encodeURIComponent(ownerPublicId)}`) : `/user/${encodeURIComponent(ownerPublicId)}`;
+        marriageLineEl.innerHTML = `💍 Casada(o) com <a href="${escapeHtml(ownerHref)}" target="_blank" rel="noopener noreferrer" class="spouse-profile-link" title="Abrir perfil público de ${escapeHtml(ownerName)}" style="color: #ec4899; text-decoration: underline; font-weight: 800;">${escapeHtml(ownerName)}</a>`;
       } else {
         marriageLineEl.innerHTML = `💍 Casada(o) com <span style="color: #ec4899; font-weight: 800;">${escapeHtml(ownerName)}</span>`;
       }
@@ -5622,7 +5715,7 @@ function createMyListingCard(listing) {
     </div>
     <div class="card-info">
       <div class="card-name">${escapeHtml(char.name)}</div>
-      <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+      <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
       ${ageHtml}
       <div style="background: var(--bg-retro-accent); padding: 6px 8px; border-radius: 4px; font-size: 12px; margin: 6px 0; border: var(--border-retro);">
         <strong style="color: #f59e0b;"><i class="fas fa-search"></i> Procura:</strong> ${escapeHtml(listing.interest)}
@@ -6087,7 +6180,7 @@ function createMarketListingCard(listing) {
     </div>
     <div class="card-info">
       <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')">${escapeHtml(char.name)}</div>
-      <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+      <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
       <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
         <i class="fas fa-user-tag"></i> Vendedor: <strong>${escapeHtml(sellerName)}</strong>
       </div>
@@ -8020,7 +8113,7 @@ function createMythicCard(char) {
     <div class="card-info">
       <div class="card-name" style="cursor: pointer;" onclick="openWaifuPreview('${char.id}')" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
       <div class="mythic-bottom-badge" onclick="openWaifuPreview('${char.id}')" title="🔮 Personagem Mítico">🔮 Mítico</div>
-      <div class="card-series">${escapeHtml(char.series || 'Sem série')}</div>
+      <div class="card-series">${renderSeriesFilterLinkHtml(char.series)}</div>
       <div class="card-actions" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
         <button class="btn-retro btn-sm btn-gold" style="width: 100%; font-weight: 800;" onclick="openEditMythicModalById('${char.id}')">
           <i class="fas fa-edit"></i> Editar

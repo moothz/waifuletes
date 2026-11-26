@@ -3394,3 +3394,30 @@ body.dark-mode #modal-waifinder-auth .modal-box {
   max-width: 100% !important;
 }
 
+/* Links de filtro por série e perfil de cônjuge */
+.card-series a.series-filter-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card-series a.series-filter-link:hover {
+  color: var(--accent, #ec4899);
+  text-decoration: underline;
+}
+
+#waifu-preview-series a.series-filter-link,
+#char-series a.series-filter-link,
+#card-options-char-series a.series-filter-link {
+  color: var(--accent, #3b82f6);
+  text-decoration: underline;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#waifu-preview-series a.series-filter-link:hover,
+#char-series a.series-filter-link:hover,
+#card-options-char-series a.series-filter-link:hover {
+  opacity: 0.85;
+}
+

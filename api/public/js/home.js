@@ -24,11 +24,42 @@ const state = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  const sp = new URLSearchParams(window.location.search);
+  const initialSearch = (sp.get('q') || sp.get('search') || sp.get('serie') || sp.get('series') || '').trim();
+  if (initialSearch) {
+    state.search = initialSearch;
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = initialSearch;
+  }
+  syncSearchToUrl();
+
   bindHomeEvents();
+  if (checkLoggedInUser()) return;
   loadCharacters();
   fetchRavenaContact();
-  checkLoggedInUser();
 });
+
+function readStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+function syncSearchToUrl() {
+  try {
+    const url = new URL(window.location.href);
+    ['search', 'serie', 'series'].forEach((key) => url.searchParams.delete(key));
+    if (state.search) url.searchParams.set('q', state.search);
+    else url.searchParams.delete('q');
+    if (url.href !== window.location.href) window.history.replaceState({}, '', url.toString());
+  } catch (_) {}
+}
+
+function homeRequestKey() {
+  return JSON.stringify([state.search, state.gender, state.maritalStatus, state.rarity, state.sortBy, state.page, state.limit]);
+}
 
 function getCookie(name) {
   const nameEQ = name + '=';
@@ -45,8 +76,8 @@ function checkLoggedInUser() {
   const sp = new URLSearchParams(window.location.search);
   const allowStay = sp.has('stay') || sp.has('home') || sp.has('noredirect');
 
-  let publicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id') || localStorage.getItem('waifu_public_id');
-  const token = getCookie('waifu_session') || localStorage.getItem('waifu_session');
+  let publicId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || readStorage('waifu_user_public_id') || readStorage('waifu_public_id');
+  const token = getCookie('waifu_session') || readStorage('waifu_session');
 
   if (publicId) {
     publicId = publicId.replace(/^=+/, '').trim();
@@ -60,8 +91,14 @@ function checkLoggedInUser() {
     }
 
     if (!allowStay) {
-      window.location.replace(`/user/${encodeURIComponent(publicId)}`);
-      return;
+      const targetUrl = new URL(`/user/${encodeURIComponent(publicId)}`, window.location.origin);
+      const qParam = (sp.get('q') || sp.get('search') || sp.get('serie') || sp.get('series') || '').trim();
+      if (qParam) {
+        targetUrl.searchParams.set('q', qParam);
+        targetUrl.hash = '#catalogo/personagens';
+      }
+      window.location.replace(targetUrl.toString());
+      return true;
     }
 
     const actions = document.querySelector('.header-actions');
@@ -126,6 +163,7 @@ function bindHomeEvents() {
     searchTimeout = setTimeout(() => {
       state.search = e.target.value.trim();
       state.page = 1;
+      syncSearchToUrl();
       loadCharacters();
     }, 300);
   });
@@ -224,6 +262,7 @@ function bindHomeEvents() {
 async function loadCharacters() {
   if (state.loading) return;
   state.loading = true;
+  const requestKey = homeRequestKey();
 
   const grid = document.getElementById('waifu-grid');
   const totalCountEl = document.getElementById('total-count');
@@ -245,6 +284,7 @@ async function loadCharacters() {
     if (state.sortBy) params.append('sort', state.sortBy);
 
     const res = await Api.get(`/characters?${params.toString()}`);
+    if (homeRequestKey() !== requestKey) return;
     const resultData = res?.data;
     let characters = resultData?.data || [];
 
@@ -290,6 +330,7 @@ async function loadCharacters() {
     `;
   } finally {
     state.loading = false;
+    if (homeRequestKey() !== requestKey) loadCharacters();
   }
 }
 
@@ -315,7 +356,7 @@ function createWaifuCard(char) {
   }
 
   card.innerHTML = `
-    <div class="card-img-wrapper">
+    <div class="card-img-wrapper" style="cursor: pointer;" title="Clique para ver detalhes de ${escapeHtml(char.name)}">
       <img decoding="async" src="${escapeHtml(imgSrc)}" loading="lazy" alt="${escapeHtml(char.name)}" onerror="this.onerror=null;this.src='/media/characters/default.jpg';">
       
       <div class="badge-rarity" style="border-color: ${rarityCfg.color}; color: ${rarityCfg.color};" title="Raridade: ${rarityCfg.label}">
@@ -338,10 +379,46 @@ function createWaifuCard(char) {
     </div>
 
     <div class="card-info">
-      <div class="card-name" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
-      <div class="card-series" title="${escapeHtml(char.series || 'Sem série')}">${escapeHtml(char.series || 'Sem série')}</div>
+      <div class="card-name" style="cursor: pointer;" title="${escapeHtml(char.name)}">${escapeHtml(char.name)}</div>
+      <div class="card-series" title="${escapeHtml(char.series || 'Sem série')}">${
+        char.series && String(char.series).trim()
+          ? `<a href="/?q=${encodeURIComponent(String(char.series).trim())}" class="series-filter-link" title="Filtrar catálogo por ${escapeHtml(String(char.series).trim())}">${escapeHtml(String(char.series).trim())}</a>`
+          : 'Sem série'
+      }</div>
     </div>
   `;
+
+  // Navegação para perfil do personagem ao clicar na imagem ou nome
+  const charUrl = `/c/${encodeURIComponent(char.id)}`;
+  const imgWrapper = card.querySelector('.card-img-wrapper');
+  const cardNameEl = card.querySelector('.card-name');
+  [imgWrapper, cardNameEl].forEach((el) => {
+    if (el) {
+      el.addEventListener('click', () => {
+        window.location.href = charUrl;
+      });
+    }
+  });
+
+  // Filtro rápido ao clicar na série dentro do catálogo público
+  const seriesLink = card.querySelector('.card-series a.series-filter-link');
+  if (seriesLink) {
+    seriesLink.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isPlainLeftClick = !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0;
+      if (isPlainLeftClick) {
+        e.preventDefault();
+        const cleanSeries = String(char.series).trim();
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) searchInput.value = cleanSeries;
+        state.search = cleanSeries;
+        state.page = 1;
+        syncSearchToUrl();
+        loadCharacters();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  }
 
   // Ação de denúncia (🔞)
   const reportBtn = card.querySelector('.btn-card-report');
@@ -388,8 +465,8 @@ async function loadRankings(searchTerm = '') {
       Api.get(`/leaderboard/harem?limit=25${searchParam}`),
     ]);
 
-    const token = getCookie('waifu_session') || localStorage.getItem('waifu_session');
-    const userPubId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || localStorage.getItem('waifu_user_public_id');
+    const token = getCookie('waifu_session') || readStorage('waifu_session');
+    const userPubId = getCookie('waifu_user_public_id') || getCookie('waifu_public_id') || readStorage('waifu_user_public_id');
     const isAuthenticated = Boolean(token && userPubId);
 
     // 1. Ranking por Zinthos
