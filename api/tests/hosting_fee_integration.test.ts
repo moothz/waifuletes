@@ -154,18 +154,25 @@ describe.skipIf(!DATABASE_URL || !REDIS_URL)('🏠 Taxa de hospedagem — integr
     const oldUpdatedAt = new Date('2026-10-01T07:00:00.000Z');
     const futureClaim = new Date('2026-11-20T07:00:00.000Z');
 
-    await prisma.user.create({
-      data: { id: retroId, name: retroId, kakera: 5_000, lastActiveAt: null, createdAt: oldUpdatedAt },
-    });
-    await prisma.$executeRaw`UPDATE users SET "updatedAt" = ${oldUpdatedAt} WHERE id = ${retroId}`;
-    await prisma.haremEntry.create({
-      data: { userId: retroId, characterId: charIds[0], claimedInGroup: 'test_group_host', claimedAt: oldUpdatedAt },
-    });
-    await prisma.haremEntry.create({
-      data: { userId: retroId, characterId: charIds[1], claimedInGroup: 'test_group_host', claimedAt: futureClaim },
-    });
+    const retroCharIds = [`test_host_retro_char_0_${SUFFIX}`, `test_host_retro_char_1_${SUFFIX}`];
 
     try {
+      for (const id of retroCharIds) {
+        await prisma.character.create({
+          data: { id, name: `Personagem Teste Retroativo ${id}`, series: 'Testes', baseRarity: 'COMMON' } as any,
+        });
+      }
+      await prisma.user.create({
+        data: { id: retroId, name: retroId, kakera: 5_000, lastActiveAt: null, createdAt: oldUpdatedAt },
+      });
+      await prisma.$executeRaw`UPDATE users SET "updatedAt" = ${oldUpdatedAt} WHERE id = ${retroId}`;
+      await prisma.haremEntry.create({
+        data: { userId: retroId, characterId: retroCharIds[0], claimedInGroup: 'test_group_host', claimedAt: oldUpdatedAt },
+      });
+      await prisma.haremEntry.create({
+        data: { userId: retroId, characterId: retroCharIds[1], claimedInGroup: 'test_group_host', claimedAt: futureClaim },
+      });
+
       const result = await (service as any).chargeUser(retroId, {
         now: retroDate,
         dateStr: '2026-11-15',
@@ -178,7 +185,7 @@ describe.skipIf(!DATABASE_URL || !REDIS_URL)('🏠 Taxa de hospedagem — integr
 
       expect(result.charged).toBe(true);
       expect(result.isInactive).toBe(true);
-      expect(result.waifusCount).toBe(1); // ignora charIds[1] (claimedAt > retroDate)
+      expect(result.waifusCount).toBe(1); // ignora retroCharIds[1] (claimedAt > retroDate)
 
       const tx = await prisma.kakeraTransaction.findFirst({
         where: { userId: retroId, reason: 'HOSTING_FEE' },
@@ -191,7 +198,9 @@ describe.skipIf(!DATABASE_URL || !REDIS_URL)('🏠 Taxa de hospedagem — integr
     } finally {
       await prisma.haremEntry.deleteMany({ where: { userId: retroId } });
       await prisma.kakeraTransaction.deleteMany({ where: { userId: retroId } });
+      await prisma.userNotification.deleteMany({ where: { userId: retroId } }).catch(() => {});
       await prisma.user.deleteMany({ where: { id: retroId } });
+      await prisma.character.deleteMany({ where: { id: { in: retroCharIds } } });
     }
   });
 });
