@@ -6565,6 +6565,26 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
     if (res.success && res.data) {
       liveBuyerInventory = res.data;
 
+      // Flags de recursos permitidos nos classificados
+      const features = liveBuyerInventory.marketFeatures || {};
+      const allowRunas = features.allowRunasOffer !== false;
+      const allowFarmItems = features.allowFarmItemsOffer !== false;
+
+      const runasTabBtn = document.querySelector('[data-offertab="offertab-runas"]');
+      const runasTabPane = document.getElementById('offertab-runas');
+      if (runasTabBtn) runasTabBtn.classList.toggle('hidden', !allowRunas);
+      if (runasTabPane && !allowRunas) {
+        runasTabPane.classList.add('hidden');
+        if (runasInput) runasInput.value = '0';
+      }
+
+      const farmItemsSection = document.getElementById('offer-farm-items-section');
+      if (farmItemsSection) farmItemsSection.classList.toggle('hidden', !allowFarmItems);
+      if (!allowFarmItems && farmList) {
+        farmList.innerHTML = '';
+        window.activeFarmItems = [];
+      }
+
       // 2. Popula Runas e Cotação
       if (runasBalanceEl) {
         runasBalanceEl.textContent = `${Number(liveBuyerInventory.runas || 0).toLocaleString('pt-BR')} ᚱ`;

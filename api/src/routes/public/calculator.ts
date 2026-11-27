@@ -36,7 +36,7 @@ export const publicCalculatorRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (_request, reply) => {
-      const CACHE_KEY = 'cache:public:calculator:constants:v1';
+      const CACHE_KEY = 'cache:public:calculator:constants:v2';
       try {
         const cached = await fastify.redis.get(CACHE_KEY);
         if (cached) {
@@ -111,6 +111,7 @@ export const publicCalculatorRoutes: FastifyPluginAsync = async (fastify) => {
           baseDailyZinthos: BASE_DAILY_ZINTHOS,
           rarityDays: RARITY_DAYS,
           marriedKeyProgressionWeights: MARRIED_KEY_PROGRESSION_WEIGHTS,
+          haremExtraKeySurchargePercent: config.COTA_HAREM_EXTRA_KEY_SURCHARGE_PERCENT,
           rarityDivorceValues: RARITY_DIVORCE_VALUES,
           rarityKeyDivorceBonus: RARITY_KEY_DIVORCE_BONUS,
           soulmateDivorceValues: SOULMATE_DIVORCE_VALUES,

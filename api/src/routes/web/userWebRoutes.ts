@@ -3572,7 +3572,16 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
           });
         }
         const invData = (await invRes.json()) as any;
-        return reply.send({ success: true, data: invData });
+        return reply.send({
+          success: true,
+          data: {
+            ...invData,
+            marketFeatures: {
+              allowRunasOffer: config.MARKET_ALLOW_RUNAS_OFFER,
+              allowFarmItemsOffer: config.MARKET_ALLOW_FARM_ITEMS_OFFER,
+            },
+          },
+        });
       } catch (err: any) {
         return reply.status(503).send({
           success: false,

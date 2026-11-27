@@ -128,6 +128,8 @@ export interface CharacterSharePricingParams {
   rankMultiplier?: number;
   isOwner?: boolean;
   currentKeys?: number;
+  haremExtraKeys?: number;
+  extraKeySurchargePercent?: number;
 }
 
 export function calculateCharacterSharePricing(params: CharacterSharePricingParams) {
@@ -138,6 +140,13 @@ export function calculateCharacterSharePricing(params: CharacterSharePricingPara
   const rankMultiplier =
     typeof params.rankMultiplier === 'number' && params.rankMultiplier > 0 ? params.rankMultiplier : 1.0;
   const currentKeys = Math.max(0, Math.floor(params.currentKeys ?? 0));
+  const haremExtraKeys = Math.max(0, Math.floor(params.haremExtraKeys ?? 0));
+  const extraKeySurchargePercent =
+    typeof params.extraKeySurchargePercent === 'number' && params.extraKeySurchargePercent >= 0
+      ? params.extraKeySurchargePercent
+      : (config.COTA_HAREM_EXTRA_KEY_SURCHARGE_PERCENT ?? 0.5);
+  const haremSurchargePercent = Number((haremExtraKeys * extraKeySurchargePercent).toFixed(4));
+  const haremSurchargeMultiplier = 1 + haremSurchargePercent / 100;
 
   // Valor bruto de divórcio Soulmate (10 chaves) deste personagem considerando seu rank e inflação
   const soulmateDivorce = calculateDivorceRefund(params.baseRarity, 10, {
@@ -147,11 +156,12 @@ export function calculateCharacterSharePricing(params: CharacterSharePricingPara
   });
 
   // Base de referência para 4 cotas: nunca inferior ao valor bruto de divórcio Soulmate ajustado pela escassez
-  // Garante que mesmo na compra inicial de 4 cotas (casamento) o preço supere o valor máximo de divórcio.
-  const referenceDynamicPrice = Math.max(
+  // e pela sobretaxa de chaves extras no harém do jogador.
+  const baseReferenceDynamicPrice = Math.max(
     params.baseDynamicPrice,
     Math.round(soulmateDivorce.rawValue * scarcityMultiplier)
   );
+  const referenceDynamicPrice = Math.round(baseReferenceDynamicPrice * haremSurchargeMultiplier);
   const baseCotaPrice = Math.ceil(referenceDynamicPrice / 4);
 
   if (!params.isOwner) {
@@ -161,6 +171,9 @@ export function calculateCharacterSharePricing(params: CharacterSharePricingPara
       baseCotaPrice,
       discountPercent: 0,
       keyProgressionWeight: 1.0,
+      haremExtraKeys,
+      haremSurchargePercent,
+      haremSurchargeMultiplier,
     };
   }
 
@@ -179,6 +192,9 @@ export function calculateCharacterSharePricing(params: CharacterSharePricingPara
     baseCotaPrice,
     discountPercent,
     keyProgressionWeight: weight,
+    haremExtraKeys,
+    haremSurchargePercent,
+    haremSurchargeMultiplier,
   };
 }
 

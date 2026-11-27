@@ -211,7 +211,7 @@
         </ul>
 
         <div class="cmd-category">Evolução de chaves e Soulmate pelo cônjuge</div>
-        <p style="font-size: 0.95rem;">Apenas quem já é casado com o personagem pode adquirir cotas nele. Cada ciclo de <strong>4 cotas adiciona +1 chave</strong>. O custo sobe progressivamente a cada chave acumulada até atingir o patamar pleno na 10ª chave (Soulmate):</p>
+        <p style="font-size: 0.95rem;">Apenas quem já é casado com o personagem pode adquirir cotas nele. Cada ciclo de <strong>4 cotas adiciona +1 chave</strong>. O custo sobe progressivamente a cada chave acumulada até atingir o patamar pleno na 10ª chave (Soulmate). Além disso, cada chave acima de 1 que você já possui no seu harém aplica uma sobretaxa de <strong>+0,5%</strong> sobre o preço das cotas (ex.: 3 personagens com 4 chaves = 9 chaves extras = +4,5%):</p>
         <div style="overflow-x: auto;">
           <table class="fee-table">
             <thead>
@@ -481,9 +481,9 @@
         <div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px; margin: 12px 0;">
           <div style="font-weight: 800; margin-bottom: 6px;">2. Preço de Cotas e Chaves</div>
           <div>$$\text{Ref}_{4\text{ cotas}} = \max\Big(\text{Base} \times I \times E,\; \big(\text{Base} + (D_0 + 10 \cdot D_c) \times K_{\text{rank}}\big) \times I \times E\Big)$$</div>
-          <div>$$\text{Preço da Chave} = \text{Ref}_{4\text{ cotas}} \times P_{\text{chave}}$$</div>
+          <div>$$\text{Preço da Chave} = \text{Ref}_{4\text{ cotas}} \times H_{\text{harém}} \times P_{\text{chave}}$$</div>
           <p style="font-size: 0.88rem; color: var(--text-muted); margin: 6px 0 0 0;">
-            Cada chave custa 4 cotas ($1\text{ cota} = \text{Preço da Chave} \div 4$).
+            Cada chave custa 4 cotas ($1\text{ cota} = \text{Preço da Chave} \div 4$). Personagens livres usam $P_{\text{chave}} = 1{,}0$.
           </p>
         </div>
 
@@ -510,6 +510,7 @@
           <li><strong>$E$ (Escassez):</strong> $(1 / (1 - \text{casados}/\text{total}))^\beta$.</li>
           <li><strong>$K_{\text{rank}}$ (Rank em cotas/divórcio):</strong> de <code>1x</code> (último) até <code id="eq-rmax">5x</code> (<code>#1</code> da raridade).</li>
           <li><strong>$P_{\text{chave}}$ (Peso da evolução):</strong> <code id="eq-weights">0,35x → 1,00x</code>.</li>
+          <li><strong>$H_{\text{harém}}$ (Sobretaxa do harém):</strong> $1 + (\text{chaves extras} \times \text{taxa})$, onde $\text{chaves extras} = \sum \max(0, \text{chaves} - 1)$ no harém do comprador (<code id="eq-harem-surcharge">+0,5%/chave extra</code>).</li>
           <li><strong>$D_0$ e $D_c$ (Base e bônus/chave do divórcio):</strong> <code>50/500</code> (Comum) até <code>1.500/75.000</code> (Lendário).</li>
           <li><strong>$M_{\text{div}}$ (Multiplicador de divórcio):</strong> ajuste exclusivo do pagamento de divórcio (<code id="eq-div-mult">ativo</code>).</li>
           <li><strong>$0{,}95$ e $T_{\text{dia}}$:</strong> taxa de 5% do divórcio e soft limit diário (<code>100% → 80% → 50% → 20% → 5%</code>).</li>
@@ -574,6 +575,12 @@
           wEl.textContent = c.marriedKeyProgressionWeights.map((w) => `${w}x`).join(' → ');
         }
 
+        const hsEl = document.getElementById('eq-harem-surcharge');
+        const hsVal = c.haremExtraKeySurchargePercent ?? 0.5;
+        if (hsEl) {
+          hsEl.textContent = `+${String(hsVal).replace('.', ',')}%/chave extra`;
+        }
+
         const daysEl = document.getElementById('eq-days-desc');
         if (daysEl && c.rarityDays) {
           daysEl.textContent = `[${c.rarityDays.COMMON}, ${c.rarityDays.UNCOMMON}, ${c.rarityDays.RARE}, ${c.rarityDays.EPIC}, ${c.rarityDays.LEGENDARY}] dias × ${fmt(c.baseDailyZinthos)} Z`;
@@ -589,6 +596,7 @@
             ['Escassez (β)', `C:${macro.scarcityBeta.COMMON} · I:${macro.scarcityBeta.UNCOMMON} · R:${macro.scarcityBeta.RARE} · E:${macro.scarcityBeta.EPIC} · L:${macro.scarcityBeta.LEGENDARY}`],
             ['Pool ativo', `${fmt(pool.totalActive)} personagens`],
             ['Teto Lendário / Semana', `${(c.legendaryChanceCap * 100).toFixed(2)}% / ${c.weeklyLegendaryHardCap} sem.`],
+            ['Sobretaxa / Chave Extra', `+${String(hsVal).replace('.', ',')}% (chaves ≥ 2 no harém)`],
           ];
           liveBox.innerHTML = cards
             .map(([k, v]) => `<div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: 6px; padding: 8px 10px;"><div style="font-size:0.78rem;color:var(--text-muted);font-weight:700;">${k}</div><div style="font-weight:900;color:var(--primary-retro);font-family:monospace;">${v}</div></div>`)

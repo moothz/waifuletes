@@ -121,9 +121,20 @@ const envSchema = z.object({
   COTA_MARRIED_PROGRESSION_WEIGHTS: z.string().default('0.35,0.40,0.50,0.55,0.65,0.75,0.85,0.95,1.00'),
   COTA_INFLATION_ALPHA: z.coerce.number().min(0).default(0.25),
   COTA_SCARCITY_BETAS: z.string().default('1.0,1.0,1.5,1.5,2.5'),
+  COTA_HAREM_EXTRA_KEY_SURCHARGE_PERCENT: z.coerce.number().min(0).default(0.5),
   RANK_MULTIPLIER_MAX: z.coerce.number().min(1).default(5.0),
   DIVORCE_PAYOUT_MULTIPLIER: z.coerce.number().min(0.1).default(1.0),
   SOULMATE_RANKING_SCORE: z.coerce.number().default(2100),
+
+  // Flags dos Classificados (Mercado)
+  MARKET_ALLOW_RUNAS_OFFER: z.preprocess(
+    (val) => val === 'true' || val === true,
+    z.boolean()
+  ).default(false),
+  MARKET_ALLOW_FARM_ITEMS_OFFER: z.preprocess(
+    (val) => val === 'true' || val === true,
+    z.boolean()
+  ).default(false),
 });
 
 export const config = envSchema.parse(process.env);

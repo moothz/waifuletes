@@ -107,7 +107,7 @@ status HTTP (ou o `statusCode` do erro, no `handler`) é < 500, e remove `http.r
 | `divorce` | `waifu.character.rarity`, `waifu.divorce.soulmate`, `waifu.divorce.daily_number`, `waifu.divorce.soft_limit_applied`, `waifu.divorce.rank_multiplier`, `waifu.divorce.rarity_position`/`rarity_total`; filho `divorce rank.lookup` (contagem da posição na raridade) | `tx.commit` |
 | `market offer.accept` | `waifu.market.external_items`, `waifu.market.compensated`, `waifu.market.zinthos` e `waifu.market.spread_fee` (taxa de 5% queimada) | `lock.acquired`, `transfer.request`, `transfer.failed`, `tx.rollback`, `tx.commit`, `compensation.started/ok/failed` |
 | `market offer.create` / `market offer.revert` | outcome | (chamada à ravena aparece como span CLIENT filho) |
-| `market invest` | `waifu.user.id`, `waifu.group.id`, `waifu.market.is_owner`, `waifu.market.shares_bought`, `waifu.market.key_earned`, `waifu.market.became_soulmate` | — |
+| `market invest` | `waifu.user.id`, `waifu.group.id`, `waifu.market.is_owner`, `waifu.market.shares_bought`, `waifu.market.harem_extra_keys`, `waifu.market.key_earned`, `waifu.market.became_soulmate` | — |
 | `suggestion submit` | `waifu.suggestion.type`, `waifu.upload.bytes` | — |
 | `suggestion approve` / `suggestion approve.batch` | `waifu.suggestion.type` / `waifu.suggestion.batch_size` | — |
 | `ai_advisor` | `gen_ai.operation.name=chat`, `gen_ai.provider.name=vllm`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens/output_tokens`, `waifu.ai.llm_calls`, `waifu.ai.tool_calls`, `waifu.ai.retry`, `waifu.ai.finish_reason` | — |

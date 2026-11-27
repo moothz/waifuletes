@@ -320,6 +320,17 @@ export class MarketInvestmentService {
       }
     }
 
+    let haremExtraKeys = 0;
+    if (userId && typeof this.prisma?.haremEntry?.findMany === 'function') {
+      const keyRows = await this.prisma.haremEntry.findMany({
+        where: { userId, keys: { gt: 1 } },
+        select: { keys: true },
+      });
+      if (Array.isArray(keyRows)) {
+        haremExtraKeys = keyRows.reduce((acc, row) => acc + Math.max(0, (row.keys ?? 1) - 1), 0);
+      }
+    }
+
     const sharePricing = calculateCharacterSharePricing({
       baseRarity: character.baseRarity,
       baseDynamicPrice: rarityInfo.dynamicPrice,
@@ -328,6 +339,7 @@ export class MarketInvestmentService {
       rankMultiplier,
       isOwner,
       currentKeys,
+      haremExtraKeys,
     });
 
     const discountPercent = sharePricing.discountPercent;
@@ -366,6 +378,8 @@ export class MarketInvestmentService {
         baseCotaPrice: sharePricing.baseCotaPrice,
         discountPercent,
         keyProgressionWeight: sharePricing.keyProgressionWeight,
+        haremExtraKeys: sharePricing.haremExtraKeys,
+        haremSurchargePercent: sharePricing.haremSurchargePercent,
         rankMultiplier,
         rarityPosition,
         canInvest,
@@ -499,6 +513,7 @@ export class MarketInvestmentService {
     setAttrs({
       'waifu.market.is_owner': isOwner,
       'waifu.market.shares_bought': actualSharesToBuy,
+      'waifu.market.harem_extra_keys': quote.pricing.haremExtraKeys ?? 0,
     });
 
     // 5. Transação Atômica no PostgreSQL

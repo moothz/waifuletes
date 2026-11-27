@@ -728,6 +728,19 @@ export class MarketService {
     const offeredBuffIds = Array.isArray(data.offeredItems?.fishingBuffIds) ? data.offeredItems.fishingBuffIds : [];
     const offeredFarmItems = Array.isArray(data.offeredItems?.farmItems) ? data.offeredItems.farmItems : [];
 
+    if (!config.MARKET_ALLOW_RUNAS_OFFER && offeredRunas > 0) {
+      throw new DomainError(
+        'RUNAS_OFFER_DISABLED',
+        'O envio de Runas em propostas nos classificados está desabilitado.'
+      );
+    }
+    if (!config.MARKET_ALLOW_FARM_ITEMS_OFFER && offeredFarmItems.length > 0) {
+      throw new DomainError(
+        'FARM_ITEMS_OFFER_DISABLED',
+        'O envio de itens da fazenda em propostas nos classificados está desabilitado.'
+      );
+    }
+
     const hasExternalItems = offeredRunas > 0 || offeredPetalitas > 0 || offeredBuffs.length > 0 || offeredBuffIds.length > 0 || offeredFarmItems.length > 0;
     if (hasExternalItems) {
       try {
