@@ -183,6 +183,8 @@ describe('📐 GET /internal/economy/params — parâmetros de balanceamento (Zi
       'roll.ROLL_SCRAP_BONUS_CAP': config.ROLL_SCRAP_BONUS_CAP,
       'roll.ROLL_RANK_MAX_DIFFICULTY': config.ROLL_RANK_MAX_DIFFICULTY,
       'roll.ROLL_RANK_REF_CUTOFF': config.ROLL_RANK_REF_CUTOFF,
+      'roll.ROLL_MARRIED_REFUND_CHANCE': config.ROLL_MARRIED_REFUND_CHANCE,
+      'roll.ROLL_SOULMATE_BONUS_ROLLS': config.ROLL_SOULMATE_BONUS_ROLLS,
       ...flat('claim.RARITY_CLAIM_COOLDOWNS', cooldown.RARITY_CLAIM_COOLDOWNS),
       'claim.COOLDOWN_CLAIM_SECONDS': config.COOLDOWN_CLAIM_SECONDS,
       'claim.CLAIM_LOCK_SECONDS': config.CLAIM_LOCK_SECONDS,
