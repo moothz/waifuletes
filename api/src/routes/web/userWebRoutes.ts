@@ -1433,8 +1433,9 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
 
             const data = rollResult.data!;
             const isMythic = Boolean(data.isMythic);
+            const marriedRollRefunded = Boolean((data as any).marriedRollRefunded);
 
-            if (isMythic && reservation.reserved && reservation.type) {
+            if ((isMythic || marriedRollRefunded) && reservation.reserved && reservation.type) {
               await refundRavenaFarmBonus(userId, reservation.type);
               farmRefunded = true;
             }

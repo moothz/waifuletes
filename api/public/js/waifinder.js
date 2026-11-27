@@ -1305,10 +1305,12 @@ const Waifinder = {
         rollBannerHtml = `<div class="waifinder-roll-status-banner is-owner">💍 Casada(o) com você agora!</div>`;
       } else if (!rollMeta.available && rollMeta.isOwner) {
         const keysInfo = rollMeta.keyProgress ? ` • 🔑 ${rollMeta.keyProgress.currentKeys}/10` : '';
-        rollBannerHtml = `<div class="waifinder-roll-status-banner is-owner">💍 Sua waifu${keysInfo} • +${rollMeta.rollReward?.totalScrap || 0} 💎</div>`;
+        const soulmateBonusTag = (rollMeta.soulmateBonusRolls || 0) > 0 ? ` • 🎟️ +${rollMeta.soulmateBonusRolls} Rolls (Soulmate)!` : '';
+        rollBannerHtml = `<div class="waifinder-roll-status-banner is-owner">💍 Sua waifu${keysInfo} • +${rollMeta.rollReward?.totalScrap || 0} 💎${soulmateBonusTag}</div>`;
       } else if (!rollMeta.available && rollMeta.owner) {
         const scrap = rollMeta.kakeraValue || rollMeta.rollReward?.totalScrap || 0;
-        rollBannerHtml = `<div class="waifinder-roll-status-banner is-married">💍 De ${Api.escapeHtml(rollMeta.owner.name)} • +${scrap} 💎</div>`;
+        const refundTag = rollMeta.marriedRollRefunded ? ' • 🎟️ Roll devolvido!' : '';
+        rollBannerHtml = `<div class="waifinder-roll-status-banner is-married">💍 De ${Api.escapeHtml(rollMeta.owner.name)} • +${scrap} 💎${refundTag}</div>`;
       } else if (rollMeta.available && rollMeta._expiresAtMs) {
         const remSecs = Math.max(0, Math.ceil((Number(rollMeta._expiresAtMs) - Date.now()) / 1000));
         if (remSecs > 0) {

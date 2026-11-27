@@ -43,6 +43,8 @@ const envSchema = z.object({
   ROLL_SCRAP_BONUS_CAP: z.coerce.number().default(150), // Teto máximo do bônus de rolls disponíveis
   ROLL_RANK_MAX_DIFFICULTY: z.coerce.number().default(7.0),
   ROLL_RANK_REF_CUTOFF: z.coerce.number().default(20000),
+  ROLL_MARRIED_REFUND_CHANCE: z.coerce.number().min(0).max(1).default(0.75), // Chance de devolução do roll ao sortear casado de outro jogador
+  ROLL_SOULMATE_BONUS_ROLLS: z.coerce.number().int().min(0).default(5), // Rolls grátis ganhos ao sortear próprio soulmate (sem gerar chave)
 
   SOULMATE_KEYS_REQUIRED: z.coerce.number().default(10),
   WISHLIST_MAX_ITEMS: z.coerce.number().default(1000).transform((val) => Math.max(val, 1000)),
