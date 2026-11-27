@@ -207,8 +207,10 @@ export class RollService {
       };
     }
 
-    // Declarado fora do try: o catch precisa saber se o roll já foi estornado (Mítico) para não estornar de novo
+    // Declarado fora do try: o catch precisa saber se o roll já foi estornado/premiado para não estornar de novo
     let mythicRollRefunded = false;
+    let marriedRollRefunded = false;
+    let soulmateBonusRolls = 0;
     try {
       // 2. Garantir cache do pool em memória
       let poolSource = 'memory';
@@ -582,6 +584,7 @@ export class RollService {
             } else {
               // Dono rolou o próprio personagem -> +1 Key até o teto (SOULMATE_KEYS_REQUIRED)
               const maxKeys = config.SOULMATE_KEYS_REQUIRED;
+              let shouldGrantSoulmateBonus = false;
 
               if (existingHaremEntry.keys >= maxKeys) {
                 keyProgress = {
@@ -590,6 +593,7 @@ export class RollService {
                   isSoulmate: true,
                   becameSoulmateNow: false,
                 };
+                shouldGrantSoulmateBonus = true;
                 setAttrs({ 'waifu.roll.key_capped': true });
               } else {
                 const updated = await this.prisma.haremEntry.updateMany({
@@ -606,12 +610,14 @@ export class RollService {
                     select: { keys: true },
                   });
                   const latestKeys = latest?.keys ?? maxKeys;
+                  const alreadySoulmate = latestKeys >= maxKeys;
                   keyProgress = {
                     currentKeys: Math.min(latestKeys, maxKeys),
                     requiredForSoulmate: maxKeys,
-                    isSoulmate: latestKeys >= maxKeys,
+                    isSoulmate: alreadySoulmate,
                     becameSoulmateNow: false,
                   };
+                  shouldGrantSoulmateBonus = alreadySoulmate;
                   setAttrs({ 'waifu.roll.key_capped': true });
                 } else {
                   const updatedHarem = await this.prisma.haremEntry.findUnique({
@@ -646,12 +652,27 @@ export class RollService {
                   };
                 }
               }
+
+              if (shouldGrantSoulmateBonus && config.ROLL_SOULMATE_BONUS_ROLLS > 0) {
+                soulmateBonusRolls = config.ROLL_SOULMATE_BONUS_ROLLS;
+                rollsState = await this.cooldownService.addRolls(userId, soulmateBonusRolls, extraMaxRolls);
+                addEvent('roll.soulmate_bonus', { 'waifu.roll.soulmate_bonus_rolls': soulmateBonusRolls });
+              }
             }
           } else {
-            // Outro usuário é dono -> cristal de kakera
+            // Outro usuário é dono -> cristal de kakera (+ chance de refund do roll)
             const crystalBase = KAKERA_CRYSTAL_BASE[chosen.baseRarity] ?? 10;
             const cappedKeys = Math.min(existingHaremEntry.keys, config.SOULMATE_KEYS_REQUIRED);
             kakeraCrystalValue = crystalBase + cappedKeys * KAKERA_CRYSTAL_KEY_BONUS;
+
+            if (!chosen.isMythic && Math.random() < config.ROLL_MARRIED_REFUND_CHANCE) {
+              marriedRollRefunded = true;
+              if (!isFreeRoll) {
+                await this.cooldownService.refundRoll(userId, extraMaxRolls);
+                rollsState = await this.cooldownService.getUserRolls(userId, extraMaxRolls);
+              }
+              addEvent('cooldown.refunded', { 'waifu.refund.reason': 'married' });
+            }
           }
         } else if (rollerShares > 0) {
           // CASAMENTO INSTANTÂNEO POR COTA!
@@ -735,6 +756,11 @@ export class RollService {
         }
       });
 
+      setAttrs({
+        'waifu.roll.married_refunded': marriedRollRefunded,
+        'waifu.roll.soulmate_bonus_rolls': soulmateBonusRolls,
+      }, rollSpan);
+
       // 8. Recompensa de Fragmentos de Zinthos por Roll
       const scrapRandom = Math.floor(Math.random() * (25 - 10 + 1)) + 10;
       const rawScrapRollBonus = Math.floor(rollsState.availableRolls * config.ROLL_SCRAP_BONUS_FACTOR);
@@ -809,6 +835,8 @@ export class RollService {
           },
           isMythic: Boolean(chosen.isMythic),
           mythicRollRefunded,
+          marriedRollRefunded,
+          soulmateBonusRolls,
           available: !isClaimed && !instantMarriage,
           isWishlist: wishMap.has(chosen.id),
           isStarWish: wishMap.get(chosen.id) ?? false,
@@ -871,8 +899,8 @@ export class RollService {
       };
     } catch (err: any) {
       // Estorna a tentativa caso haja falha não recuperável (apenas se não for free roll e se o roll
-      // ainda não tiver sido estornado pela regra do Mítico — senão o jogador ganharia um roll grátis)
-      if (!isFreeRoll && !mythicRollRefunded) {
+      // ainda não tiver sido estornado/premiado pelas regras de Mítico/Casado/Soulmate)
+      if (!isFreeRoll && !mythicRollRefunded && !marriedRollRefunded && soulmateBonusRolls === 0) {
         await this.cooldownService.refundRoll(userId, extraMaxRolls);
         addEvent('cooldown.refunded');
       }
