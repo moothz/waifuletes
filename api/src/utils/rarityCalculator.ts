@@ -172,6 +172,7 @@ export function calculateCharacterSharePricing(params: CharacterSharePricingPara
       discountPercent: 0,
       keyProgressionWeight: 1.0,
       haremExtraKeys,
+      extraKeySurchargePercent,
       haremSurchargePercent,
       haremSurchargeMultiplier,
     };
@@ -193,6 +194,7 @@ export function calculateCharacterSharePricing(params: CharacterSharePricingPara
     discountPercent,
     keyProgressionWeight: weight,
     haremExtraKeys,
+    extraKeySurchargePercent,
     haremSurchargePercent,
     haremSurchargeMultiplier,
   };

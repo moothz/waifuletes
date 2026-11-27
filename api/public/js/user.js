@@ -7518,6 +7518,19 @@ async function openInvestModal(charId) {
       userBalanceEl.textContent = `${userKakera.toLocaleString('pt-BR')} Zinthos`;
     }
 
+    const rateEl = document.getElementById('invest-modal-surcharge-rate');
+    const summaryEl = document.getElementById('invest-modal-harem-surcharge-summary');
+    const surchargeRate = Number(pricing.extraKeySurchargePercent ?? 0.5);
+    const totalKeys = Number(pricing.haremTotalKeys ?? 0);
+    const extraKeys = Number(pricing.haremExtraKeys ?? 0);
+    const surchargePct = Number(pricing.haremSurchargePercent ?? 0);
+    if (rateEl) {
+      rateEl.textContent = `+${surchargeRate.toLocaleString('pt-BR')}%`;
+    }
+    if (summaryEl) {
+      summaryEl.textContent = `${totalKeys.toLocaleString('pt-BR')} chaves no harém (${extraKeys.toLocaleString('pt-BR')} extra${extraKeys === 1 ? '' : 's'}) → +${surchargePct.toLocaleString('pt-BR')}% no preço`;
+    }
+
     // Configura o seletor de cotas disponíveis
     const select = document.getElementById('invest-modal-shares-select');
     const remainingShares = Math.max(0, 4 - userShares);

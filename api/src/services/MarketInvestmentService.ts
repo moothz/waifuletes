@@ -321,13 +321,18 @@ export class MarketInvestmentService {
     }
 
     let haremExtraKeys = 0;
+    let haremTotalKeys = 0;
     if (userId && typeof this.prisma?.haremEntry?.findMany === 'function') {
       const keyRows = await this.prisma.haremEntry.findMany({
-        where: { userId, keys: { gt: 1 } },
+        where: { userId },
         select: { keys: true },
       });
       if (Array.isArray(keyRows)) {
-        haremExtraKeys = keyRows.reduce((acc, row) => acc + Math.max(0, (row.keys ?? 1) - 1), 0);
+        for (const row of keyRows) {
+          const k = Math.max(1, row.keys ?? 1);
+          haremTotalKeys += k;
+          if (k > 1) haremExtraKeys += k - 1;
+        }
       }
     }
 
@@ -378,7 +383,9 @@ export class MarketInvestmentService {
         baseCotaPrice: sharePricing.baseCotaPrice,
         discountPercent,
         keyProgressionWeight: sharePricing.keyProgressionWeight,
+        haremTotalKeys,
         haremExtraKeys: sharePricing.haremExtraKeys,
+        extraKeySurchargePercent: sharePricing.extraKeySurchargePercent,
         haremSurchargePercent: sharePricing.haremSurchargePercent,
         rankMultiplier,
         rarityPosition,
