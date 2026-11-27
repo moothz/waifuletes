@@ -464,6 +464,62 @@
         </ul>
       </section>
 
+      <!-- Seção 6.5: Equações do Jogo & Valores Atuais -->
+      <section class="about-section" id="equacoes-jogo">
+        <h2 class="about-title"><i class="fas fa-square-root-variable" style="color: #9333ea;"></i> Equações do jogo e valores atuais</h2>
+        <p>As fórmulas abaixo regem os sorteios, o preço de cotas/chaves e os reembolsos de divórcio. Os valores atuais do servidor são carregados ao vivo:</p>
+
+        <div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px; margin: 12px 0;">
+          <div style="font-weight: 800; margin-bottom: 6px;">1. Chance no Roll</div>
+          <div>$$\text{Peso} = B \times R \times W \times C \times K_{\text{roll}}$$</div>
+          <div>$$\text{Chance (\%)} = \frac{\text{Peso}}{\text{Total do Pool}} \times 100$$</div>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin: 6px 0 0 0;">
+            Em <strong>Lendários</strong>, $R$ e $W$ somam em vez de multiplicar, e o total da raridade tem teto de <strong id="eq-leg-cap">0,80%</strong> por roll.
+          </p>
+        </div>
+
+        <div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px; margin: 12px 0;">
+          <div style="font-weight: 800; margin-bottom: 6px;">2. Preço de Cotas e Chaves</div>
+          <div>$$\text{Ref}_{4\text{ cotas}} = \max\Big(\text{Base} \times I \times E,\; \big(\text{Base} + (D_0 + 10 \cdot D_c) \times K_{\text{rank}}\big) \times I \times E\Big)$$</div>
+          <div>$$\text{Preço da Chave} = \text{Ref}_{4\text{ cotas}} \times P_{\text{chave}}$$</div>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin: 6px 0 0 0;">
+            Cada chave custa 4 cotas ($1\text{ cota} = \text{Preço da Chave} \div 4$).
+          </p>
+        </div>
+
+        <div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: var(--radius-retro); padding: 14px; margin: 12px 0;">
+          <div style="font-weight: 800; margin-bottom: 6px;">3. Valor do Divórcio</div>
+          <div>$$\text{Normal (1 a 9 chaves)} = (D_0 + \text{Chaves} \times D_c) \times K_{\text{rank}} \times I \times M_{\text{div}} \times 0{,}95 \times T_{\text{dia}}$$</div>
+          <div>$$\text{Soulmate (10+ chaves)} = \big(\text{Base} + (D_0 + \text{Chaves} \times D_c) \times K_{\text{rank}}\big) \times I \times M_{\text{div}} \times 0{,}95 \times T_{\text{dia}}$$</div>
+        </div>
+
+        <div class="cmd-category">Valores atuais no servidor</div>
+        <div id="eq-live-values" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 14px;">
+          <div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: 6px; padding: 10px;">Carregando valores atuais...</div>
+        </div>
+
+        <div class="cmd-category">Legenda das variáveis</div>
+        <ul class="cmd-list" style="font-size: 0.92rem;">
+          <li><strong>$B$ (Base no roll):</strong> Comum <code>100</code>, Incomum <code>60</code>, Raro <code>25</code>, Épico <code>8</code>, Lendário <code>2,5</code>.</li>
+          <li><strong>$R$ (Doador na raridade):</strong> <code>1x</code> (padrão) até <code>10x</code> para Raros, Épicos e Lendários.</li>
+          <li><strong>$W$ (Wishlist):</strong> <code>1x</code> (fora), <code>1,5x</code> (normal) ou até <code>20x</code> (Super Wishlist).</li>
+          <li><strong>$C$ (Cotas investidas em livre):</strong> <code>1x</code> (0), <code>4x</code> (1 cota), <code>10x</code> (2 cotas) ou <code>25x</code> (3 cotas).</li>
+          <li><strong>$K_{\text{roll}}$ (Rank no roll):</strong> de <code>1/7</code> (<code>#1</code>) até <code>1,0</code> (rank <code>20.000+</code>).</li>
+          <li><strong>$\text{Base}$ (4 cotas):</strong> <code id="eq-days-desc">Dias da raridade × 21.000 Zinthos</code>.</li>
+          <li><strong>$I$ (Inflação):</strong> $1 + \alpha \cdot \ln(\text{Zinthos circulando} / 4\text{M})$.</li>
+          <li><strong>$E$ (Escassez):</strong> $(1 / (1 - \text{casados}/\text{total}))^\beta$.</li>
+          <li><strong>$K_{\text{rank}}$ (Rank em cotas/divórcio):</strong> de <code>1x</code> (último) até <code id="eq-rmax">5x</code> (<code>#1</code> da raridade).</li>
+          <li><strong>$P_{\text{chave}}$ (Peso da evolução):</strong> <code id="eq-weights">0,35x → 1,00x</code>.</li>
+          <li><strong>$D_0$ e $D_c$ (Base e bônus/chave do divórcio):</strong> <code>50/500</code> (Comum) até <code>1.500/75.000</code> (Lendário).</li>
+          <li><strong>$M_{\text{div}}$ (Multiplicador de divórcio):</strong> ajuste exclusivo do pagamento de divórcio (<code id="eq-div-mult">ativo</code>).</li>
+          <li><strong>$0{,}95$ e $T_{\text{dia}}$:</strong> taxa de 5% do divórcio e soft limit diário (<code>100% → 80% → 50% → 20% → 5%</code>).</li>
+        </ul>
+
+        <p style="margin-top: 12px; margin-bottom: 0;">
+          <a href="/calculadora-chances" class="btn-retro btn-sm btn-gold"><i class="fas fa-calculator"></i> Abrir Calculadora de Chances</a>
+        </p>
+      </section>
+
       <!-- Seção 7: Código Aberto e Apoio -->
       <section class="about-section" style="border: 2px solid #16a34a;">
         <h2 class="about-title"><i class="fas fa-heart" style="color: #ec4899;"></i> Código aberto e apoio ao projeto</h2>
@@ -493,9 +549,53 @@
       Waifuletes • Coleção e gacha integrado à Ravena AI
     </footer>
   </div>
-  <script src="/js/api.js?v=20261121-sugestoes-fix"></script>
+  <script src="/js/api.js?v=20261127-equacoes"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, { delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}] });"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', () => Api.initTheme());
+    document.addEventListener('DOMContentLoaded', async () => {
+      Api.initTheme();
+      try {
+        const res = await fetch('/public/calculator/constants');
+        const json = await res.json();
+        if (!json.success) return;
+        const { pool, macro, constants: c } = json.data;
+        const fmt = (n) => Math.round(n).toLocaleString('pt-BR');
+
+        const capEl = document.getElementById('eq-leg-cap');
+        if (capEl) capEl.textContent = `${(c.legendaryChanceCap * 100).toFixed(2)}%`;
+
+        const rmaxEl = document.getElementById('eq-rmax');
+        if (rmaxEl) rmaxEl.textContent = `${c.rankMultiplierMax}x`;
+
+        const wEl = document.getElementById('eq-weights');
+        if (wEl && Array.isArray(c.marriedKeyProgressionWeights)) {
+          wEl.textContent = c.marriedKeyProgressionWeights.map((w) => `${w}x`).join(' → ');
+        }
+
+        const daysEl = document.getElementById('eq-days-desc');
+        if (daysEl && c.rarityDays) {
+          daysEl.textContent = `[${c.rarityDays.COMMON}, ${c.rarityDays.UNCOMMON}, ${c.rarityDays.RARE}, ${c.rarityDays.EPIC}, ${c.rarityDays.LEGENDARY}] dias × ${fmt(c.baseDailyZinthos)} Z`;
+        }
+
+        const liveBox = document.getElementById('eq-live-values');
+        if (liveBox) {
+          const leg = pool.byRarity.LEGENDARY;
+          const cards = [
+            ['Inflação atual (I)', `${macro.inflationMultiplier}x (α = ${macro.inflationAlpha})`],
+            ['Zinthos circulando (M2)', `${fmt(macro.circulatingKakera)} Z`],
+            ['Escassez Lendária (E)', `${leg.scarcityMultiplier}x (${fmt(leg.claimed)}/${fmt(leg.total)})`],
+            ['Escassez (β)', `C:${macro.scarcityBeta.COMMON} · I:${macro.scarcityBeta.UNCOMMON} · R:${macro.scarcityBeta.RARE} · E:${macro.scarcityBeta.EPIC} · L:${macro.scarcityBeta.LEGENDARY}`],
+            ['Pool ativo', `${fmt(pool.totalActive)} personagens`],
+            ['Teto Lendário / Semana', `${(c.legendaryChanceCap * 100).toFixed(2)}% / ${c.weeklyLegendaryHardCap} sem.`],
+          ];
+          liveBox.innerHTML = cards
+            .map(([k, v]) => `<div style="background: var(--bg-retro-accent); border: var(--border-retro); border-radius: 6px; padding: 8px 10px;"><div style="font-size:0.78rem;color:var(--text-muted);font-weight:700;">${k}</div><div style="font-weight:900;color:var(--primary-retro);font-family:monospace;">${v}</div></div>`)
+            .join('');
+        }
+      } catch (_) {}
+    });
   </script>
 </body>
 </html>
