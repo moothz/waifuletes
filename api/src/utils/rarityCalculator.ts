@@ -347,13 +347,15 @@ export function calculateDivorceRefund(
     }
   }
 
+  const maxKeys = config.SOULMATE_KEYS_REQUIRED ?? 10;
+  const effectiveKeys = Math.max(0, Math.min(keys, maxKeys));
   const rarityBase = RARITY_DIVORCE_VALUES[baseRarity] ?? 50;
   const baseValue = isSoulmate
     ? (SOULMATE_DIVORCE_VALUES[baseRarity] ?? 315000)
     : rarityBase;
 
   const bonusPerKey = RARITY_KEY_DIVORCE_BONUS[baseRarity] ?? 500;
-  const keysBonus = Math.max(0, keys) * bonusPerKey;
+  const keysBonus = effectiveKeys * bonusPerKey;
 
   // Para Soulmates, o reembolso base de 4 cotas (SOULMATE_DIVORCE_VALUES) não é multiplicado pelo rankMultiplier;
   // o rankMultiplier incide apenas sobre o valor de divórcio da raridade + bônus de chaves.
@@ -365,7 +367,7 @@ export function calculateDivorceRefund(
   // Trava anti-exploit: o retorno bruto do divórcio nunca pode superar 75% do custo mínimo
   // de reposição das cotas (casamento inicial + evoluções com pesos progressivos).
   if (isSoulmate) {
-    const evolutionCount = Math.max(0, Math.min(keys - 1, MARRIED_KEY_PROGRESSION_WEIGHTS.length));
+    const evolutionCount = Math.max(0, Math.min(effectiveKeys - 1, MARRIED_KEY_PROGRESSION_WEIGHTS.length));
     let replacementWeight = 1.0;
     for (let i = 0; i < evolutionCount; i++) {
       replacementWeight += MARRIED_KEY_PROGRESSION_WEIGHTS[i] ?? 1.0;
@@ -381,7 +383,7 @@ export function calculateDivorceRefund(
   const netKakera = Math.max(1, Math.floor(fullNetKakera * dailyDivorceRate));
 
   // 5% loss of keys (minimum 0)
-  const remainingKeys = Math.max(0, Math.floor(keys * (1 - DIVORCE_PENALTY_RATE)));
+  const remainingKeys = Math.max(0, Math.floor(effectiveKeys * (1 - DIVORCE_PENALTY_RATE)));
 
   return {
     baseValue,

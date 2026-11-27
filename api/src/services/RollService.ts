@@ -580,43 +580,78 @@ export class RollService {
               // Personagens Míticos possuem devoção eterna e não acumulam chaves nem viram soulmate
               keyProgress = null;
             } else {
-              // Dono rolou o próprio personagem -> +1 Key
-              const updatedHarem = await this.prisma.haremEntry.update({
-                where: { id: existingHaremEntry.id },
-                data: { keys: { increment: 1 } },
-              });
+              // Dono rolou o próprio personagem -> +1 Key até o teto (SOULMATE_KEYS_REQUIRED)
+              const maxKeys = config.SOULMATE_KEYS_REQUIRED;
 
-              const newKeys = updatedHarem.keys;
-              let becameSoulmate = false;
-
-              if (newKeys >= config.SOULMATE_KEYS_REQUIRED) {
-                await this.prisma.soulmate.upsert({
+              if (existingHaremEntry.keys >= maxKeys) {
+                keyProgress = {
+                  currentKeys: maxKeys,
+                  requiredForSoulmate: maxKeys,
+                  isSoulmate: true,
+                  becameSoulmateNow: false,
+                };
+                setAttrs({ 'waifu.roll.key_capped': true });
+              } else {
+                const updated = await this.prisma.haremEntry.updateMany({
                   where: {
-                    userId_characterId: {
-                      userId,
-                      characterId: chosen.id,
-                    },
+                    id: existingHaremEntry.id,
+                    keys: { lt: maxKeys },
                   },
-                  create: {
-                    userId,
-                    characterId: chosen.id,
-                  },
-                  update: {},
+                  data: { keys: { increment: 1 } },
                 });
-                becameSoulmate = true;
-              }
 
-              keyProgress = {
-                currentKeys: newKeys,
-                requiredForSoulmate: config.SOULMATE_KEYS_REQUIRED,
-                isSoulmate: newKeys >= config.SOULMATE_KEYS_REQUIRED,
-                becameSoulmateNow: becameSoulmate && newKeys === config.SOULMATE_KEYS_REQUIRED,
-              };
+                if (updated.count === 0) {
+                  const latest = await this.prisma.haremEntry.findUnique({
+                    where: { id: existingHaremEntry.id },
+                    select: { keys: true },
+                  });
+                  const latestKeys = latest?.keys ?? maxKeys;
+                  keyProgress = {
+                    currentKeys: Math.min(latestKeys, maxKeys),
+                    requiredForSoulmate: maxKeys,
+                    isSoulmate: latestKeys >= maxKeys,
+                    becameSoulmateNow: false,
+                  };
+                  setAttrs({ 'waifu.roll.key_capped': true });
+                } else {
+                  const updatedHarem = await this.prisma.haremEntry.findUnique({
+                    where: { id: existingHaremEntry.id },
+                    select: { keys: true },
+                  });
+                  const newKeys = updatedHarem?.keys ?? Math.min(maxKeys, existingHaremEntry.keys + 1);
+                  let becameSoulmate = false;
+
+                  if (newKeys >= maxKeys) {
+                    await this.prisma.soulmate.upsert({
+                      where: {
+                        userId_characterId: {
+                          userId,
+                          characterId: chosen.id,
+                        },
+                      },
+                      create: {
+                        userId,
+                        characterId: chosen.id,
+                      },
+                      update: {},
+                    });
+                    becameSoulmate = true;
+                  }
+
+                  keyProgress = {
+                    currentKeys: newKeys,
+                    requiredForSoulmate: maxKeys,
+                    isSoulmate: newKeys >= maxKeys,
+                    becameSoulmateNow: becameSoulmate && newKeys === maxKeys,
+                  };
+                }
+              }
             }
           } else {
             // Outro usuário é dono -> cristal de kakera
             const crystalBase = KAKERA_CRYSTAL_BASE[chosen.baseRarity] ?? 10;
-            kakeraCrystalValue = crystalBase + existingHaremEntry.keys * KAKERA_CRYSTAL_KEY_BONUS;
+            const cappedKeys = Math.min(existingHaremEntry.keys, config.SOULMATE_KEYS_REQUIRED);
+            kakeraCrystalValue = crystalBase + cappedKeys * KAKERA_CRYSTAL_KEY_BONUS;
           }
         } else if (rollerShares > 0) {
           // CASAMENTO INSTANTÂNEO POR COTA!

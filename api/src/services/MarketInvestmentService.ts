@@ -4,6 +4,7 @@ import { DomainError } from '../errors/DomainError.js';
 import { CharacterService } from './CharacterService.js';
 import { config, ravenaMarketHeaders, cotaRarityDays, cotaScarcityBetas } from '../config.js';
 import { calculateRankMultiplier, calculateCharacterSharePricing } from '../utils/rarityCalculator.js';
+import { withBusinessSpan, chatIdAttr, userIdAttr, setAttrs } from '../telemetry.js';
 
 export const BASE_DAILY_ZINTHOS = config.COTA_BASE_DAILY_ZINTHOS ?? 21000;
 
@@ -297,6 +298,7 @@ export class MarketInvestmentService {
     let isOwner = false;
     let canInvest = true;
     const currentKeys = haremEntry ? (haremEntry.keys ?? 1) : 0;
+    const maxKeys = config.SOULMATE_KEYS_REQUIRED ?? 10;
 
     if (haremEntry) {
       if (userId && haremEntry.userId === userId) {
@@ -309,7 +311,7 @@ export class MarketInvestmentService {
             },
           },
         });
-        isSoulmate = currentKeys >= 10 || Boolean(soulmateRecord);
+        isSoulmate = currentKeys >= maxKeys || Boolean(soulmateRecord);
         if (isSoulmate) {
           canInvest = false;
         }
@@ -396,8 +398,22 @@ export class MarketInvestmentService {
     shares?: number;
     groupId?: string;
   }) {
+    return withBusinessSpan(
+      'market invest',
+      { 'waifu.user.id': userIdAttr(params.userId), 'waifu.group.id': chatIdAttr(params.groupId) },
+      () => this.investImpl(params)
+    );
+  }
+
+  private async investImpl(params: {
+    userId: string;
+    characterIdOrSlug: string;
+    shares?: number;
+    groupId?: string;
+  }) {
     const rawShares = params.shares ?? 1;
     const requestedShares = Math.max(1, Math.min(4, Math.floor(rawShares)));
+    const maxKeys = config.SOULMATE_KEYS_REQUIRED ?? 10;
 
     const character = await this.characterService.findCharacter(params.characterIdOrSlug);
     if (!character) {
@@ -434,7 +450,7 @@ export class MarketInvestmentService {
         },
       });
 
-      if ((existingClaim.keys ?? 1) >= 10 || soulmateRecord) {
+      if ((existingClaim.keys ?? 1) >= maxKeys || soulmateRecord) {
         throw new DomainError(
           'ALREADY_SOULMATE',
           'Este personagem já é sua Alma Gêmea (Soulmate). Não é possível adquirir mais cotas.'
@@ -480,6 +496,11 @@ export class MarketInvestmentService {
       );
     }
 
+    setAttrs({
+      'waifu.market.is_owner': isOwner,
+      'waifu.market.shares_bought': actualSharesToBuy,
+    });
+
     // 5. Transação Atômica no PostgreSQL
     const result = await this.prisma.$transaction(async (tx) => {
       if (!isOwner) {
@@ -493,13 +514,69 @@ export class MarketInvestmentService {
             'O personagem foi adquirido por outro jogador durante a transação.'
           );
         }
+      } else {
+        // Re-verificação atômica dentro da transação para evitar corrida entre roll e compra de cotas
+        const freshClaim = await tx.haremEntry.findUnique({
+          where: { id: existingClaim!.id },
+          select: { id: true, userId: true, keys: true },
+        });
+        const freshSoulmate = await tx.soulmate.findUnique({
+          where: {
+            userId_characterId: {
+              userId: params.userId,
+              characterId: character.id,
+            },
+          },
+          select: { id: true },
+        });
+
+        if (!freshClaim || freshClaim.userId !== params.userId) {
+          throw new DomainError(
+            'CHARACTER_ALREADY_CLAIMED',
+            'O personagem foi transferido durante a transação.'
+          );
+        }
+        if ((freshClaim.keys ?? 1) >= maxKeys || freshSoulmate) {
+          throw new DomainError(
+            'ALREADY_SOULMATE',
+            'Este personagem já é sua Alma Gêmea (Soulmate). Não é possível adquirir mais cotas.'
+          );
+        }
+        if ((freshClaim.keys ?? 1) !== (existingClaim!.keys ?? 1)) {
+          throw new DomainError(
+            'CONCURRENT_KEY_UPDATE',
+            'As chaves deste personagem foram atualizadas durante a compra. Tente novamente.'
+          );
+        }
       }
 
-      // Débito do Zinthos do usuário
-      await tx.user.update({
-        where: { id: params.userId },
+      const freshInvestment = await tx.characterInvestment.findUnique({
+        where: {
+          characterId_userId: {
+            characterId: character.id,
+            userId: params.userId,
+          },
+        },
+        select: { id: true, shares: true },
+      });
+      if ((freshInvestment?.shares ?? 0) !== currentShares) {
+        throw new DomainError(
+          'CONCURRENT_INVESTMENT_CONFLICT',
+          'Suas cotas neste personagem foram atualizadas por outra requisição. Tente novamente.'
+        );
+      }
+
+      // Débito atômico do Zinthos do usuário
+      const debitedUser = await tx.user.updateMany({
+        where: { id: params.userId, kakera: { gte: totalCost } },
         data: { kakera: { decrement: totalCost } },
       });
+      if (debitedUser.count === 0) {
+        throw new DomainError(
+          'INSUFFICIENT_KAKERA',
+          'Saldo insuficiente durante a transação.'
+        );
+      }
 
       // Registro de extrato de Zinthos
       await tx.kakeraTransaction.create({
@@ -528,21 +605,41 @@ export class MarketInvestmentService {
       if (isOwner) {
         // CENÁRIO A: USUÁRIO JÁ É CASADO COM A WAIFU (EVOLUÇÃO DE CHAVES)
         if (newShares >= 4) {
-          // 4 cotas completadas = +1 chave!
-          const updatedHarem = await tx.haremEntry.update({
-            where: { id: existingClaim!.id },
+          // 4 cotas completadas = +1 chave (limitado estritamente a maxKeys)!
+          const keyUpdate = await tx.haremEntry.updateMany({
+            where: {
+              id: existingClaim!.id,
+              userId: params.userId,
+              keys: {
+                lt: maxKeys,
+                equals: existingClaim!.keys ?? 1,
+              },
+            },
             data: { keys: { increment: 1 } },
           });
 
+          if (keyUpdate.count === 0) {
+            throw new DomainError(
+              'ALREADY_SOULMATE',
+              'Este personagem já é sua Alma Gêmea (Soulmate) ou teve suas chaves alteradas. Não é possível adquirir mais cotas.'
+            );
+          }
+
+          const updatedHarem = await tx.haremEntry.findUnique({
+            where: { id: existingClaim!.id },
+            select: { keys: true },
+          });
+          const finalKeys = updatedHarem?.keys ?? Math.min(maxKeys, (existingClaim!.keys ?? 1) + 1);
+
           // Zera cotas acumuladas deste ciclo
           if (existingInvestment) {
-            await tx.characterInvestment.delete({
+            await tx.characterInvestment.deleteMany({
               where: { id: existingInvestment.id },
             });
           }
 
           let becameSoulmate = false;
-          if (updatedHarem.keys >= 10) {
+          if (finalKeys >= maxKeys) {
             await tx.soulmate.upsert({
               where: {
                 userId_characterId: {
@@ -563,7 +660,7 @@ export class MarketInvestmentService {
             acquired: false,
             isMarried: true,
             keyEarned: true,
-            currentKeys: updatedHarem.keys,
+            currentKeys: finalKeys,
             becameSoulmate,
             character: quote.character,
             sharesBought: actualSharesToBuy,
@@ -736,6 +833,11 @@ export class MarketInvestmentService {
           newBalance: user.kakera - totalCost,
         };
       }
+    });
+
+    setAttrs({
+      'waifu.market.key_earned': result.keyEarned,
+      'waifu.market.became_soulmate': Boolean((result as any).becameSoulmate),
     });
 
     if (result.acquired && character.baseRarity === 'LEGENDARY') {

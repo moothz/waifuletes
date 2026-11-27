@@ -99,7 +99,7 @@ status HTTP (ou o `statusCode` do erro, no `handler`) é < 500, e remove `http.r
 
 | Span | Atributos | Eventos |
 |---|---|---|
-| `roll` (filhos: `roll cooldown.consume`/`cooldown.check`, `roll context.load`, `roll pool.select` — filtragem + pesos + sorteio em CPU sobre o pool em memória, com `waifu.roll.candidates`/`special_candidates` —, `roll candidate.load` — inclui JIT do Hub —, `roll wishlist.group`, `roll claim.process`, `roll reward.apply` — filhos `.begin`/`.write`/`.commit` da transação via `withTxSpans` —, `roll daily_limit.check`) | `waifu.pool.size`, `waifu.pool.source` (memory/db/hub), `waifu.roll.rarity`, `waifu.roll.special`, `waifu.roll.jit_fetch`, `waifu.roll.free`, `waifu.roll.gender_filter`, `waifu.roll.excluded_count` | `cooldown.consumed`, `cooldown.blocked`, `pool.loaded`, `cooldown.refunded` |
+| `roll` (filhos: `roll cooldown.consume`/`cooldown.check`, `roll context.load`, `roll pool.select` — filtragem + pesos + sorteio em CPU sobre o pool em memória, com `waifu.roll.candidates`/`special_candidates` —, `roll candidate.load` — inclui JIT do Hub —, `roll wishlist.group`, `roll claim.process`, `roll reward.apply` — filhos `.begin`/`.write`/`.commit` da transação via `withTxSpans` —, `roll daily_limit.check`) | `waifu.pool.size`, `waifu.pool.source` (memory/db/hub), `waifu.roll.rarity`, `waifu.roll.special`, `waifu.roll.jit_fetch`, `waifu.roll.free`, `waifu.roll.gender_filter`, `waifu.roll.excluded_count`, `waifu.roll.key_capped` | `cooldown.consumed`, `cooldown.blocked`, `pool.loaded`, `cooldown.refunded` |
 | `waifinder roll` (envolve `roll` + reserva/estorno na Ravena) | `waifu.user.id`, `waifu.roll.gender_filter`, `waifu.waifinder.farm_reserved`, `waifu.waifinder.total_rolls` | — |
 | `waifinder marry` (envolve `marry`) | `waifu.user.id` | — |
 | `pool load` | `waifu.pool.size`, `waifu.pool.source` (no startup é raiz de trace próprio) | — |
@@ -107,6 +107,7 @@ status HTTP (ou o `statusCode` do erro, no `handler`) é < 500, e remove `http.r
 | `divorce` | `waifu.character.rarity`, `waifu.divorce.soulmate`, `waifu.divorce.daily_number`, `waifu.divorce.soft_limit_applied`, `waifu.divorce.rank_multiplier`, `waifu.divorce.rarity_position`/`rarity_total`; filho `divorce rank.lookup` (contagem da posição na raridade) | `tx.commit` |
 | `market offer.accept` | `waifu.market.external_items`, `waifu.market.compensated`, `waifu.market.zinthos` e `waifu.market.spread_fee` (taxa de 5% queimada) | `lock.acquired`, `transfer.request`, `transfer.failed`, `tx.rollback`, `tx.commit`, `compensation.started/ok/failed` |
 | `market offer.create` / `market offer.revert` | outcome | (chamada à ravena aparece como span CLIENT filho) |
+| `market invest` | `waifu.user.id`, `waifu.group.id`, `waifu.market.is_owner`, `waifu.market.shares_bought`, `waifu.market.key_earned`, `waifu.market.became_soulmate` | — |
 | `suggestion submit` | `waifu.suggestion.type`, `waifu.upload.bytes` | — |
 | `suggestion approve` / `suggestion approve.batch` | `waifu.suggestion.type` / `waifu.suggestion.batch_size` | — |
 | `ai_advisor` | `gen_ai.operation.name=chat`, `gen_ai.provider.name=vllm`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens/output_tokens`, `waifu.ai.llm_calls`, `waifu.ai.tool_calls`, `waifu.ai.retry`, `waifu.ai.finish_reason` | — |

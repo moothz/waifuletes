@@ -348,20 +348,66 @@ export class MarryService {
     }
 
     if (character.haremEntries.length > 0) {
-      const owner = character.haremEntries[0].user;
+      const existingEntry = character.haremEntries[0];
+      const owner = existingEntry.user;
       if (owner.id === userId) {
-        const updatedEntry = await this.prisma.haremEntry.update({
-          where: { characterId: targetCharId },
+        const maxKeys = config.SOULMATE_KEYS_REQUIRED ?? 10;
+        if ((existingEntry.keys ?? 1) >= maxKeys) {
+          return {
+            success: false,
+            error: {
+              code: 'ALREADY_SOULMATE',
+              message: `${resolvedChar.name} já atingiu o limite máximo de ${maxKeys} chaves (Soulmate).`,
+            },
+          };
+        }
+
+        const updated = await this.prisma.haremEntry.updateMany({
+          where: {
+            characterId: targetCharId,
+            userId,
+            keys: { lt: maxKeys },
+          },
           data: {
             keys: { increment: 1 },
           },
         });
 
+        if (updated.count === 0) {
+          return {
+            success: false,
+            error: {
+              code: 'ALREADY_SOULMATE',
+              message: `${resolvedChar.name} já atingiu o limite máximo de ${maxKeys} chaves (Soulmate).`,
+            },
+          };
+        }
+
+        const updatedEntry = await this.prisma.haremEntry.findUnique({
+          where: { characterId: targetCharId },
+        });
+
+        if (updatedEntry && updatedEntry.keys >= maxKeys) {
+          await this.prisma.soulmate.upsert({
+            where: {
+              userId_characterId: {
+                userId,
+                characterId: targetCharId,
+              },
+            },
+            create: {
+              userId,
+              characterId: targetCharId,
+            },
+            update: {},
+          });
+        }
+
         return {
           success: true,
           action: 'KEY_GRANTED',
           data: {
-            message: `O usuário já era casado com ${resolvedChar.name}. Foi concedida +1 chave do personagem (total: ${updatedEntry.keys} chaves)!`,
+            message: `O usuário já era casado com ${resolvedChar.name}. Foi concedida +1 chave do personagem (total: ${updatedEntry?.keys ?? maxKeys} chaves)!`,
             character: {
               id: resolvedChar.id,
               name: resolvedChar.name,
