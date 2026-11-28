@@ -571,4 +571,26 @@ describe('Waifinder Rolling Mode, Fazenda/Donate & Anti-Abuse Security', () => {
     expect(revRes.json().success).toBe(true);
     expect(revRes.json().data.photoUrl).toContain(`/api/web/marriage-photo/${ownedCharId}?t=`);
   });
+
+  it('POST /waifinder/roll deve devolver o cooldown de casamento restante por raridade (claimCooldowns)', async () => {
+    await server.redis.del(`waifinder:roll:lock:${userId}`, `cooldown:claim:${userId}`);
+    for (const r of ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY']) {
+      await server.redis.del(`cooldown:claim:${userId}:${r}`);
+    }
+    await server.redis.set(`cooldown:claim:${userId}:RARE`, '1', 'EX', 1200);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/web/user/${publicId}/waifinder/roll`,
+      payload: { token, gender: 'ALL' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const { claimCooldowns } = res.json().data;
+    expect(Object.keys(claimCooldowns).sort()).toEqual(['COMMON', 'EPIC', 'LEGENDARY', 'RARE', 'UNCOMMON']);
+    expect(claimCooldowns.RARE).toBeGreaterThan(1190);
+    expect(claimCooldowns.RARE).toBeLessThanOrEqual(1200);
+    expect(claimCooldowns.COMMON).toBe(0);
+    expect(claimCooldowns.LEGENDARY).toBe(0);
+  });
 });

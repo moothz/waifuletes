@@ -185,6 +185,7 @@ const Waifinder = {
   userData: null,
   rollsInfo: null,
   claimLockSeconds: 300,
+  claimCooldownEndsAt: {},
   rollHistory: [],
   rollHistoryIndex: -1,
   _rollCountdownTimer: null,
@@ -505,6 +506,10 @@ const Waifinder = {
 
       const btnLike = document.getElementById('btn-action-like');
       if (btnLike) btnLike.disabled = !this.canMarryCurrentRoll();
+
+      document.querySelectorAll('.waifinder-rarity-cd[data-rarity]').forEach((el) => {
+        el.textContent = this.claimCooldownText(el.getAttribute('data-rarity'));
+      });
 
       const changed = this.pruneExpiredRollHistory();
       if (changed) {
@@ -1006,6 +1011,7 @@ const Waifinder = {
       if (rollData.rolls) {
         this.updateRollsDisplay(rollData.rolls);
       }
+      Object.entries(rollData.claimCooldowns || {}).forEach(([rarity, secs]) => this.setClaimCooldown(rarity, secs));
 
       this.renderRolledCard(rollData);
       this.updateModeUI();
@@ -1102,6 +1108,9 @@ const Waifinder = {
           this.activeRoll._expiresAtMs = Date.now();
           this.saveRollHistory();
           this.renderRolledCard(this.activeRoll);
+        } else if (err.code === 'CLAIM_COOLDOWN_ACTIVE') {
+          this.setClaimCooldown(err.rarity, err.remainingSeconds);
+          this.renderRolledCard(this.activeRoll);
         }
         this.updateModeUI();
         this.showToast(err.message || 'Não foi possível casar com este personagem.', '⚠️');
@@ -1116,6 +1125,9 @@ const Waifinder = {
       this.activeRoll.owner = { name: this.userData?.name || 'Você' };
       this.activeRoll.character.claimCount = (Number(this.activeRoll.character.claimCount) || 0) + 1;
       this.saveRollHistory();
+      if (data.data?.rarityCooldown) {
+        this.setClaimCooldown(data.data.rarityCooldown.rarity, data.data.rarityCooldown.cooldownSeconds);
+      }
 
       this.renderRolledCard(this.activeRoll);
       this.updateModeUI();
@@ -1127,6 +1139,18 @@ const Waifinder = {
     } finally {
       this.isMarrying = false;
     }
+  },
+
+  setClaimCooldown(rarity, seconds) {
+    if (!rarity) return;
+    this.claimCooldownEndsAt[String(rarity).toUpperCase()] = Date.now() + Math.max(0, Number(seconds) || 0) * 1000;
+  },
+
+  claimCooldownText(rarity) {
+    const endsAt = this.claimCooldownEndsAt[rarity];
+    if (endsAt === undefined) return '';
+    const remSecs = Math.ceil((endsAt - Date.now()) / 1000);
+    return remSecs > 0 ? this.formatDurationShort(remSecs).replace(' ', '') : 'Sem cd!';
   },
 
   formatDurationShort(seconds) {
@@ -1350,6 +1374,7 @@ const Waifinder = {
     }
 
     const showTopActions = this.mode === 'ROLLING' && layerIndex === 0;
+    const claimCdText = showTopActions && rollMeta && !isMythic ? this.claimCooldownText(char.baseRarity) : '';
     const isInWishlist = Boolean(char.isWishlisted || rollMeta?.isWishlist);
     const isLiked = Boolean(char.isLikedToday);
 
@@ -1363,7 +1388,7 @@ const Waifinder = {
         <div class="waifinder-card-gradient"></div>
 
         <div class="waifinder-badges-top">
-          <span class="waifinder-rarity-badge" style="background:${rarity.bg};">${rarity.label}</span>
+          <span class="waifinder-rarity-badge" style="background:${rarity.bg};">${rarity.label}${claimCdText ? ` - <span class="waifinder-rarity-cd" data-rarity="${char.baseRarity}">${claimCdText}</span>` : ''}</span>
           ${showTopActions ? `
             <div class="waifinder-badges-top-actions">
               ${!isMythic ? `

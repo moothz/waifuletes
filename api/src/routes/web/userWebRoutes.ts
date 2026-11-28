@@ -1467,8 +1467,16 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
             }
 
             const isMarriedNonMythic = !data.available && !data.isMythic;
-            const [likeTtl, marriedStatusFlags] = await Promise.all([
+            const [likeTtl, claimCooldowns, marriedStatusFlags] = await Promise.all([
               fastify.redis.ttl(`cooldown:like:${userId}:${data.character.id}`),
+              cooldownService
+                .getAllClaimCooldowns(userId)
+                .then((state) =>
+                  Object.fromEntries(
+                    Object.entries(state.byRarity).map(([rarity, cd]) => [rarity, cd.remainingSeconds])
+                  ) as Record<Rarity, number>
+                )
+                .catch(() => null),
               isMarriedNonMythic
                 ? (async () => {
                     if (data.isOwner) {
@@ -1513,6 +1521,7 @@ export const userWebRoutes: FastifyPluginAsync = async (fastify) => {
                 ...data,
                 ...marriedStatusFlags,
                 claimLockSeconds: config.CLAIM_LOCK_SECONDS,
+                claimCooldowns,
                 character: {
                   ...data.character,
                   isWishlisted: data.isWishlist,
