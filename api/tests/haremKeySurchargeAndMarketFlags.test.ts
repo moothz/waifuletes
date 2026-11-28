@@ -89,34 +89,36 @@ describe('Sobretaxa por chaves extras no harém e flags dos classificados', () =
     config.MARKET_ALLOW_RUNAS_OFFER = false;
     config.MARKET_ALLOW_FARM_ITEMS_OFFER = false;
 
-    const mockPrisma: any = {
-      marketListing: {
-        findUnique: vi.fn().mockResolvedValue({
-          id: 'listing-1',
-          userId: 'seller-1',
-          status: 'ACTIVE',
-          character: { id: 'c1', name: 'Waifu' },
-        }),
-      },
-      marketOffer: {
-        findFirst: vi.fn().mockResolvedValue(null),
-      },
-    };
-    const svc = new MarketService(mockPrisma, {} as any);
+    try {
+      const mockPrisma: any = {
+        marketListing: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'listing-1',
+            userId: 'seller-1',
+            status: 'ACTIVE',
+            character: { id: 'c1', name: 'Waifu' },
+          }),
+        },
+        marketOffer: {
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
+      };
+      const svc = new MarketService(mockPrisma, {} as any);
 
-    await expect(
-      svc.createOffer('buyer-1', 'listing-1', {
-        offeredItems: { runas: 100 },
-      })
-    ).rejects.toMatchObject({ code: 'RUNAS_OFFER_DISABLED' });
+      await expect(
+        svc.createOffer('buyer-1', 'listing-1', {
+          offeredItems: { runas: 100 },
+        })
+      ).rejects.toMatchObject({ code: 'RUNAS_OFFER_DISABLED' });
 
-    await expect(
-      svc.createOffer('buyer-1', 'listing-1', {
-        offeredItems: { farmItems: [{ itemId: '01_nightshade', amount: 1 }] },
-      })
-    ).rejects.toMatchObject({ code: 'FARM_ITEMS_OFFER_DISABLED' });
-
-    config.MARKET_ALLOW_RUNAS_OFFER = prevRunas;
-    config.MARKET_ALLOW_FARM_ITEMS_OFFER = prevFarm;
+      await expect(
+        svc.createOffer('buyer-1', 'listing-1', {
+          offeredItems: { farmItems: [{ itemId: '01_nightshade', amount: 1 }] },
+        })
+      ).rejects.toMatchObject({ code: 'FARM_ITEMS_OFFER_DISABLED' });
+    } finally {
+      config.MARKET_ALLOW_RUNAS_OFFER = prevRunas;
+      config.MARKET_ALLOW_FARM_ITEMS_OFFER = prevFarm;
+    }
   });
 });
