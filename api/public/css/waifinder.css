@@ -411,6 +411,10 @@ body.dark-mode .waifinder-user-progress-bar {
   letter-spacing: 0.5px;
 }
 
+.waifinder-rarity-cd {
+  text-transform: none;
+}
+
 /* Badge Inferior da Foto: Personagem na Wishlist */
 .waifinder-badges-bottom {
   position: absolute;
