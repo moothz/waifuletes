@@ -1,9 +1,20 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { MarketService } from '../src/services/MarketService.js';
 import { DomainError } from '../src/errors/DomainError.js';
+import { config } from '../src/config.js';
 import { OfferStatus, ListingStatus } from '@prisma/client';
 
 describe('🤝 Classificados v2 — Runas, Buffs, Fazenda & Robustez de Troca', () => {
+  const prevFlags = { runas: config.MARKET_ALLOW_RUNAS_OFFER, farm: config.MARKET_ALLOW_FARM_ITEMS_OFFER };
+  beforeAll(() => {
+    config.MARKET_ALLOW_RUNAS_OFFER = true;
+    config.MARKET_ALLOW_FARM_ITEMS_OFFER = true;
+  });
+  afterAll(() => {
+    config.MARKET_ALLOW_RUNAS_OFFER = prevFlags.runas;
+    config.MARKET_ALLOW_FARM_ITEMS_OFFER = prevFlags.farm;
+  });
+
   it('createOffer deve validar com sucesso quando ofertante possui saldo suficiente de Runas e Petalitas', async () => {
     const mockPrisma: any = {
       marketListing: {
