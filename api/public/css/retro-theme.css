@@ -3461,3 +3461,45 @@ body.dark-mode .sell-keys-warning-title {
   opacity: 0.85;
 }
 
+/* Garante que abas ocultas por flags permaneçam ocultas também no mobile */
+.retro-tab.hidden {
+  display: none !important;
+}
+
+/* Layout responsivo da lista de Buffs de Pesca nos classificados */
+.offer-buff-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: var(--border-retro);
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  font-size: 12px;
+}
+
+.offer-buff-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.offer-buff-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.offer-buff-qty-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.offer-buff-all-btn {
+  width: 100%;
+  text-align: center;
+}
+

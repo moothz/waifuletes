@@ -6572,7 +6572,10 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
 
       const runasTabBtn = document.querySelector('[data-offertab="offertab-runas"]');
       const runasTabPane = document.getElementById('offertab-runas');
-      if (runasTabBtn) runasTabBtn.classList.toggle('hidden', !allowRunas);
+      if (runasTabBtn) {
+        runasTabBtn.classList.toggle('hidden', !allowRunas);
+        runasTabBtn.style.display = allowRunas ? '' : 'none';
+      }
       if (runasTabPane && !allowRunas) {
         runasTabPane.classList.add('hidden');
         if (runasInput) runasInput.value = '0';
@@ -6614,19 +6617,31 @@ async function openOfferModal(listingId, characterName, imageUrl, interest) {
         window.activeBuffGroups = [];
       } else {
         window.activeBuffGroups = buffGroupList;
+        const FISHING_BUFF_EMOJIS = {
+          'Bolso de Pesca': '👖',
+          'Calça de Pesca': '👖',
+          'Mochilão': '🎒',
+          'Pochete de Iscas': '👜',
+          'Caixa de Iscas': '🧰',
+          'Viveiro Portátil': '⛲'
+        };
         buffsList.innerHTML = buffGroupList.map((bg, idx) => {
           const count = bg.items.length;
+          const emoji = FISHING_BUFF_EMOJIS[bg.name] || (bg.type === 'inventory_slot' ? '🎒' : '🧰');
           return `
-            <div style="display: flex; align-items: center; justify-content: space-between; border: var(--border-retro); padding: 8px 12px; border-radius: 4px; background: var(--bg-card); font-size: 12px;">
-              <div>
-                ⚡ <strong>${escapeHtml(bg.name)}</strong>
-                <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(bg.description)} <span style="font-weight:700; color: #38bdf8;">(Estoque: ${count})</span></div>
+            <div class="offer-buff-row">
+              <div class="offer-buff-info">
+                <div>${emoji} <strong>${escapeHtml(bg.name)}</strong></div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(bg.description)}</div>
+                <div style="font-size: 11px; font-weight: 700; color: #38bdf8; margin-top: 2px;">(Estoque: ${count})</div>
               </div>
-              <div class="retro-qty-control" style="display: flex; gap: 4px; align-items: center;">
-                <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, -1, ${count})">-</button>
-                <input type="number" min="0" max="${count}" id="buff-group-qty-${idx}" value="0" style="width: 55px; text-align: center;" oninput="onInputOfferBuffGroupQty(${idx}, ${count})">
-                <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, 1, ${count})">+</button>
-                <button type="button" class="btn-retro btn-sm btn-gold" onclick="setOfferBuffGroupAll(${idx}, ${count})" title="Oferecer tudo">Tudo</button>
+              <div class="retro-qty-control offer-buff-controls">
+                <div class="offer-buff-qty-row">
+                  <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, -1, ${count})">-</button>
+                  <input type="number" min="0" max="${count}" id="buff-group-qty-${idx}" value="0" style="width: 48px; text-align: center;" oninput="onInputOfferBuffGroupQty(${idx}, ${count})">
+                  <button type="button" class="btn-retro btn-sm" onclick="adjustOfferBuffGroupQty(${idx}, 1, ${count})">+</button>
+                </div>
+                <button type="button" class="btn-retro btn-sm btn-gold offer-buff-all-btn" onclick="setOfferBuffGroupAll(${idx}, ${count})" title="Oferecer tudo">Tudo</button>
               </div>
             </div>
           `;
